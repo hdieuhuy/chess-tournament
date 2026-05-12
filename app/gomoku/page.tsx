@@ -59,7 +59,16 @@ function GomokuGame() {
       setPlayerName(savedName);
       setInputName(savedName);
 
-      if (roomParam) {
+      if (!roomParam) {
+        setShowNameModal(false);
+        setHasInitialized(true);
+        const newRoomId = Math.random().toString(36).substring(2, 10);
+        setRoomId(newRoomId);
+        setHostName(savedName);
+        setPlayer1Name(savedName);
+        localStorage.setItem(`joinedRoom_${newRoomId}`, "player");
+        router.replace(`${pathname}?room=${newRoomId}`);
+      } else {
         const joinedRole = localStorage.getItem(`joinedRoom_${roomParam}`);
         if (joinedRole) {
           setRequestedRole(joinedRole as "player" | "spectator");
@@ -666,7 +675,7 @@ function GomokuGame() {
       <div className="grid w-full max-w-[1600px] flex-1 grid-cols-1 place-items-center gap-8 xl:grid-cols-[1fr_auto_1fr]">
         {/* Cột trái: Thông tin hiển thị & Các nút chức năng */}
         <div className="mb-8 flex w-full max-w-md flex-col items-center text-center xl:mb-0 xl:items-start xl:justify-self-start xl:pl-8 xl:text-left">
-          <h1 className="mb-2 text-3xl font-bold tracking-tight text-zinc-900">
+          <h1 className="mb-2 text-3xl font-light tracking-tight text-zinc-900 font-[family-name:var(--font-playfair)]">
             Cờ Caro (Gomoku)
           </h1>
 

@@ -81,7 +81,16 @@ function GoGame() {
       setPlayerName(savedName);
       setInputName(savedName);
 
-      if (roomParam) {
+      if (!roomParam) {
+        setShowNameModal(false);
+        setHasInitialized(true);
+        const newRoomId = Math.random().toString(36).substring(2, 10);
+        setRoomId(newRoomId);
+        setHostName(savedName);
+        setPlayer1Name(savedName);
+        localStorage.setItem(`joinedRoom_${newRoomId}`, "player");
+        router.replace(`${pathname}?room=${newRoomId}`);
+      } else {
         const joinedRole = localStorage.getItem(`joinedRoom_${roomParam}`);
         if (joinedRole) {
           setRequestedRole(joinedRole as "player" | "spectator");
