@@ -6,6 +6,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Modal } from "@/components/Modal";
+import confetti from "canvas-confetti";
 
 const BOARD_SIZE = 25;
 
@@ -34,6 +35,30 @@ function GomokuGame() {
   const [linkCopied, setLinkCopied] = useState<boolean>(false);
   const [gameStartTime, setGameStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
+
+  const [hasInitialized, setHasInitialized] = useState<boolean>(false);
+  const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
+
+  useEffect(() => {
+    const savedName = localStorage.getItem("playerName");
+    if (savedName) {
+      setPlayerName(savedName);
+      setInputName(savedName);
+      setShowNameModal(false);
+      setHasInitialized(true);
+
+      if (!roomParam) {
+        const newRoomId = Math.random().toString(36).substring(2, 10);
+        setRoomId(newRoomId);
+        setIsPlayer1(true);
+        router.replace(`${pathname}?room=${newRoomId}`);
+      } else {
+        setIsPlayer1(false);
+      }
+    }
+    setIsCheckingStorage(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!roomId || !playerName) return;
@@ -116,20 +141,63 @@ function GomokuGame() {
     };
   }, [gameStartTime, winner]);
 
+  // Hiệu ứng pháo hoa chúc mừng khi có người chiến thắng
+  useEffect(() => {
+    if (winner) {
+      const duration = 3000;
+      const end = Date.now() + duration;
+
+      const frame = () => {
+        confetti({
+          particleCount: 5,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 },
+          zIndex: 9999,
+        });
+        confetti({
+          particleCount: 5,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 },
+          zIndex: 9999,
+        });
+
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      };
+      frame();
+    }
+  }, [winner]);
+
   const handleJoinRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputName.trim()) return;
 
-    setPlayerName(inputName.trim());
+    const newName = inputName.trim();
+    setPlayerName(newName);
+    localStorage.setItem("playerName", newName);
     setShowNameModal(false);
 
-    if (!roomId) {
-      const newRoomId = Math.random().toString(36).substring(2, 10);
-      setRoomId(newRoomId);
-      setIsPlayer1(true);
-      router.replace(`${pathname}?room=${newRoomId}`);
+    if (!hasInitialized) {
+      setHasInitialized(true);
+      if (!roomId) {
+        const newRoomId = Math.random().toString(36).substring(2, 10);
+        setRoomId(newRoomId);
+        setIsPlayer1(true);
+        router.replace(`${pathname}?room=${newRoomId}`);
+      } else {
+        setIsPlayer1(false);
+      }
     } else {
-      setIsPlayer1(false);
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "player-sync",
+          payload: { playerName: newName },
+        });
+      }
     }
   };
 
@@ -285,16 +353,44 @@ function GomokuGame() {
     return `${m}:${s}`;
   };
 
+  if (isCheckingStorage) {
+    return (
+      <div className="flex min-h-screen items-center justify-center font-medium text-zinc-500">
+        Đang tải...
+      </div>
+    );
+  }
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12">
+      {/* Avatar Icon */}
+      {hasInitialized && (
+        <div className="fixed left-4 top-4 z-50">
+          <button
+            onClick={() => setShowNameModal(true)}
+            className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-zinc-900 text-xl font-bold text-white shadow-lg transition-transform hover:scale-105 hover:bg-zinc-800"
+            title="Chỉnh sửa tên"
+          >
+            {playerName ? playerName.charAt(0).toUpperCase() : "👤"}
+          </button>
+        </div>
+      )}
+
       <Modal
         isOpen={showNameModal}
-        title={roomParam ? "Tham gia phòng chơi" : "Tạo phòng chơi mới"}
+        title={
+          hasInitialized
+            ? "Chỉnh sửa tên"
+            : roomParam
+              ? "Tham gia phòng chơi"
+              : "Tạo phòng chơi mới"
+        }
       >
         <form onSubmit={handleJoinRoom} className="flex flex-col space-y-4">
           <p className="text-center text-sm text-zinc-500">
-            Vui lòng nhập tên của bạn để{" "}
-            {roomParam ? "tham gia cùng đối thủ" : "bắt đầu và mời bạn bè"}.
+            {hasInitialized
+              ? "Cập nhật tên hiển thị của bạn."
+              : `Vui lòng nhập tên của bạn để ${roomParam ? "tham gia cùng đối thủ" : "bắt đầu và mời bạn bè"}.`}
           </p>
           <input
             type="text"
@@ -309,7 +405,11 @@ function GomokuGame() {
             type="submit"
             className="w-full cursor-pointer rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
           >
-            {roomParam ? "Vào chơi ngay" : "Tạo phòng & Lấy link"}
+            {hasInitialized
+              ? "Cập nhật"
+              : roomParam
+                ? "Vào chơi ngay"
+                : "Tạo phòng & Lấy link"}
           </button>
         </form>
       </Modal>

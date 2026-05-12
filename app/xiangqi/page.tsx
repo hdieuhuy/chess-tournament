@@ -6,6 +6,7 @@ import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Modal } from "@/components/Modal";
+import confetti from "canvas-confetti";
 
 const INITIAL_BOARD: (string | null)[][] = [
   ["r", "n", "b", "a", "k", "a", "b", "n", "r"],
@@ -259,6 +260,30 @@ function XiangqiGame() {
   const [gameStartTime, setGameStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
 
+  const [hasInitialized, setHasInitialized] = useState<boolean>(false);
+  const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
+
+  useEffect(() => {
+    const savedName = localStorage.getItem("playerName");
+    if (savedName) {
+      setPlayerName(savedName);
+      setInputName(savedName);
+      setShowNameModal(false);
+      setHasInitialized(true);
+
+      if (!roomParam) {
+        const newRoomId = Math.random().toString(36).substring(2, 10);
+        setRoomId(newRoomId);
+        setIsPlayer1(true);
+        router.replace(`${pathname}?room=${newRoomId}`);
+      } else {
+        setIsPlayer1(false);
+      }
+    }
+    setIsCheckingStorage(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!roomId || !playerName) return;
     const roomChannel = supabase.channel(`xiangqi-room-${roomId}`);
@@ -328,19 +353,63 @@ function XiangqiGame() {
     };
   }, [gameStartTime, winner]);
 
+  // Hiệu ứng pháo hoa chúc mừng khi có người chiến thắng
+  useEffect(() => {
+    if (winner) {
+      const duration = 3000;
+      const end = Date.now() + duration;
+
+      const frame = () => {
+        confetti({
+          particleCount: 5,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 },
+          zIndex: 9999,
+        });
+        confetti({
+          particleCount: 5,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 },
+          zIndex: 9999,
+        });
+
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      };
+      frame();
+    }
+  }, [winner]);
+
   const handleJoinRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputName.trim()) return;
-    setPlayerName(inputName.trim());
+
+    const newName = inputName.trim();
+    setPlayerName(newName);
+    localStorage.setItem("playerName", newName);
     setShowNameModal(false);
 
-    if (!roomId) {
-      const newRoomId = Math.random().toString(36).substring(2, 10);
-      setRoomId(newRoomId);
-      setIsPlayer1(true); // Chủ phòng được ưu tiên cầm quân Đỏ
-      router.replace(`${pathname}?room=${newRoomId}`);
+    if (!hasInitialized) {
+      setHasInitialized(true);
+      if (!roomId) {
+        const newRoomId = Math.random().toString(36).substring(2, 10);
+        setRoomId(newRoomId);
+        setIsPlayer1(true); // Chủ phòng được ưu tiên cầm quân Đỏ
+        router.replace(`${pathname}?room=${newRoomId}`);
+      } else {
+        setIsPlayer1(false);
+      }
     } else {
-      setIsPlayer1(false);
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "player-sync",
+          payload: { playerName: newName },
+        });
+      }
     }
   };
 
@@ -466,15 +535,44 @@ function XiangqiGame() {
   const isRedInCheck = isKingInCheck(board, true);
   const isBlackInCheck = isKingInCheck(board, false);
 
+  if (isCheckingStorage) {
+    return (
+      <div className="flex min-h-screen items-center justify-center font-medium text-zinc-500">
+        Đang tải...
+      </div>
+    );
+  }
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12">
+      {/* Avatar Icon */}
+      {hasInitialized && (
+        <div className="fixed left-4 top-4 z-50">
+          <button
+            onClick={() => setShowNameModal(true)}
+            className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-zinc-900 text-xl font-bold text-white shadow-lg transition-transform hover:scale-105 hover:bg-zinc-800"
+            title="Chỉnh sửa tên"
+          >
+            {playerName ? playerName.charAt(0).toUpperCase() : "👤"}
+          </button>
+        </div>
+      )}
+
       <Modal
         isOpen={showNameModal}
-        title={roomParam ? "Tham gia phòng chơi" : "Tạo phòng chơi mới"}
+        title={
+          hasInitialized
+            ? "Chỉnh sửa tên"
+            : roomParam
+              ? "Tham gia phòng chơi"
+              : "Tạo phòng chơi mới"
+        }
       >
         <form onSubmit={handleJoinRoom} className="flex flex-col space-y-4">
           <p className="text-center text-sm text-zinc-500">
-            Vui lòng nhập tên của bạn để bắt đầu trận cờ tướng.
+            {hasInitialized
+              ? "Cập nhật tên hiển thị của bạn."
+              : `Vui lòng nhập tên của bạn để ${roomParam ? "bắt đầu trận cờ tướng" : "tạo phòng"}.`}
           </p>
           <input
             type="text"
@@ -489,7 +587,11 @@ function XiangqiGame() {
             type="submit"
             className="w-full cursor-pointer rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
           >
-            {roomParam ? "Vào chơi ngay" : "Tạo phòng & Lấy link"}
+            {hasInitialized
+              ? "Cập nhật"
+              : roomParam
+                ? "Vào chơi ngay"
+                : "Tạo phòng & Lấy link"}
           </button>
         </form>
       </Modal>
@@ -571,7 +673,7 @@ function XiangqiGame() {
           </div>
         </div>
 
-        <div className="flex w-full flex-col items-center overflow-x-auto pb-8">
+        <div className="flex w-full flex-col items-center pb-8">
           {(isRedInCheck || isBlackInCheck) && !winner && (
             <h2 className="mb-4 animate-bounce text-2xl font-bold text-red-600 drop-shadow-md">
               ⚠️ CHIẾU TƯỚNG!
@@ -580,7 +682,7 @@ function XiangqiGame() {
           <div
             className={`bg-[#E6C697] p-2 sm:p-6 rounded shadow-2xl border-4 border-[#8B5A2B] transition-opacity ${!opponentName || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
           >
-            <div className="relative aspect-[9/10] w-[95vw] sm:w-[800px] lg:w-[1080px] xl:w-[1350px]">
+            <div className="relative aspect-[9/10] w-[95vw] md:h-[85vh] md:w-auto">
               {/* Vẽ bàn cờ bằng SVG lưới sắc nét */}
               <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
                 {Array.from({ length: 10 }).map((_, r) => (
@@ -670,7 +772,7 @@ function XiangqiGame() {
                   dominantBaseline="middle"
                   textAnchor="middle"
                   fill="#5C4033"
-                  className="text-3xl sm:text-5xl lg:text-6xl xl:text-[80px] font-[family-name:var(--font-playfair)] tracking-[0.5em]"
+                  className="text-xl sm:text-2xl md:text-3xl font-[family-name:var(--font-playfair)] tracking-[0.5em]"
                 >
                   楚河
                 </text>
@@ -680,7 +782,7 @@ function XiangqiGame() {
                   dominantBaseline="middle"
                   textAnchor="middle"
                   fill="#5C4033"
-                  className="text-3xl sm:text-5xl lg:text-6xl xl:text-[80px] font-[family-name:var(--font-playfair)] tracking-[0.5em]"
+                  className="text-xl sm:text-2xl md:text-3xl font-[family-name:var(--font-playfair)] tracking-[0.5em]"
                 >
                   漢界
                 </text>
@@ -688,64 +790,71 @@ function XiangqiGame() {
 
               {/* Khung giao diện chứa các quân cờ */}
               <div className="relative z-10 grid grid-cols-9 grid-rows-10 w-full h-full">
-                {board.map((row, r) =>
-                  row.map((piece, c) => {
-                    const isSelected =
-                      selectedPos?.[0] === r && selectedPos?.[1] === c;
-                    const isLastMove =
-                      (lastMove?.from[0] === r && lastMove?.from[1] === c) ||
-                      (lastMove?.to[0] === r && lastMove?.to[1] === c);
-                    const canMoveTo =
-                      selectedPos &&
-                      !piece &&
-                      isValidMove(
-                        board,
-                        selectedPos[0],
-                        selectedPos[1],
-                        r,
-                        c,
-                        isRedTurn ? "r" : "b",
-                      );
-                    const canCapture =
-                      selectedPos &&
-                      piece &&
-                      isValidMove(
-                        board,
-                        selectedPos[0],
-                        selectedPos[1],
-                        r,
-                        c,
-                        isRedTurn ? "r" : "b",
-                      );
+                {(isPlayer1 ? board : [...board].reverse()).map(
+                  (row, mappedR) => {
+                    const r = isPlayer1 ? mappedR : 9 - mappedR;
+                    return (isPlayer1 ? row : [...row].reverse()).map(
+                      (piece, mappedC) => {
+                        const c = isPlayer1 ? mappedC : 8 - mappedC;
+                        const isSelected =
+                          selectedPos?.[0] === r && selectedPos?.[1] === c;
+                        const isLastMove =
+                          (lastMove?.from[0] === r &&
+                            lastMove?.from[1] === c) ||
+                          (lastMove?.to[0] === r && lastMove?.to[1] === c);
+                        const canMoveTo =
+                          selectedPos &&
+                          !piece &&
+                          isValidMove(
+                            board,
+                            selectedPos[0],
+                            selectedPos[1],
+                            r,
+                            c,
+                            isRedTurn ? "r" : "b",
+                          );
+                        const canCapture =
+                          selectedPos &&
+                          piece &&
+                          isValidMove(
+                            board,
+                            selectedPos[0],
+                            selectedPos[1],
+                            r,
+                            c,
+                            isRedTurn ? "r" : "b",
+                          );
 
-                    return (
-                      <div
-                        key={`${r}-${c}`}
-                        className="relative w-full h-full flex items-center justify-center cursor-pointer"
-                        onClick={() => handleCellClick(r, c)}
-                      >
-                        {piece && (
+                        return (
                           <div
-                            className={`
+                            key={`${r}-${c}`}
+                            className="relative w-full h-full flex items-center justify-center cursor-pointer"
+                            onClick={() => handleCellClick(r, c)}
+                          >
+                            {piece && (
+                              <div
+                                className={`
                             relative z-20 flex items-center justify-center 
                             w-[85%] h-[85%] rounded-full bg-[#FFE6B3] 
                             border-2 ${isLastMove ? "border-blue-400" : "border-[#8B5A2B]"} 
                             shadow-[1px_2px_4px_rgba(0,0,0,0.5)] 
-                            font-bold text-3xl sm:text-5xl lg:text-7xl xl:text-[80px] leading-none font-[family-name:var(--font-playfair)]
+                            font-bold text-2xl sm:text-3xl md:text-4xl leading-none font-[family-name:var(--font-playfair)]
                             ${piecesMap[piece].color}
                             ${isSelected ? "ring-4 ring-blue-500 bg-blue-100" : ""}
                             ${canCapture ? "ring-4 ring-red-500/70" : ""}
                           `}
-                          >
-                            {piecesMap[piece].text}
+                              >
+                                {piecesMap[piece].text}
+                              </div>
+                            )}
+                            {!piece && canMoveTo && (
+                              <div className="w-3 h-3 bg-red-500/60 rounded-full z-20" />
+                            )}
                           </div>
-                        )}
-                        {!piece && canMoveTo && (
-                          <div className="w-3 h-3 bg-red-500/60 rounded-full z-20" />
-                        )}
-                      </div>
+                        );
+                      },
                     );
-                  }),
+                  },
                 )}
               </div>
             </div>
