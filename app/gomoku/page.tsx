@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, Suspense } from "react";
+import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -29,39 +29,104 @@ function GomokuGame() {
   const [roomId, setRoomId] = useState<string | null>(roomParam);
   const [playerName, setPlayerName] = useState<string>("");
   const [inputName, setInputName] = useState<string>("");
-  const [opponentName, setOpponentName] = useState<string | null>(null);
-  const [isPlayer1, setIsPlayer1] = useState<boolean>(false);
+
+  const [hostName, setHostName] = useState<string | null>(null);
+  const [player1Name, setPlayer1Name] = useState<string | null>(null);
+  const [player2Name, setPlayer2Name] = useState<string | null>(null);
+  const [spectators, setSpectators] = useState<string[]>([]);
+
   const [showNameModal, setShowNameModal] = useState<boolean>(true);
   const [linkCopied, setLinkCopied] = useState<boolean>(false);
   const [gameStartTime, setGameStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [gameStarted, setGameStarted] = useState<boolean>(false);
+  const [readyPlayers, setReadyPlayers] = useState<string[]>([]);
 
   const [hasInitialized, setHasInitialized] = useState<boolean>(false);
   const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
+
+  const [requestedRole, setRequestedRole] = useState<"player" | "spectator">(
+    "player",
+  );
+
+  const isPlayer1 = playerName === player1Name;
+  const isPlayer2 = playerName === player2Name;
+  const isSpectator = spectators.includes(playerName);
 
   useEffect(() => {
     const savedName = localStorage.getItem("playerName");
     if (savedName) {
       setPlayerName(savedName);
       setInputName(savedName);
-      setShowNameModal(false);
-      setHasInitialized(true);
 
       if (!roomParam) {
+        setShowNameModal(false);
+        setHasInitialized(true);
         const newRoomId = Math.random().toString(36).substring(2, 10);
         setRoomId(newRoomId);
-        setIsPlayer1(true);
+        setHostName(savedName);
+        setPlayer1Name(savedName);
+        localStorage.setItem(`joinedRoom_${newRoomId}`, "player");
         router.replace(`${pathname}?room=${newRoomId}`);
       } else {
-        setIsPlayer1(false);
+        const joinedRole = localStorage.getItem(`joinedRoom_${roomParam}`);
+        if (joinedRole) {
+          setRequestedRole(joinedRole as "player" | "spectator");
+          setShowNameModal(false);
+          setHasInitialized(true);
+        }
       }
     }
     setIsCheckingStorage(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const stateRef = useRef({
+    hostName,
+    player1Name,
+    player2Name,
+    spectators,
+    board,
+    isBlackNext,
+    winner,
+    winningCells,
+    lastMove,
+    gameStartTime,
+    gameStarted,
+    readyPlayers,
+  });
   useEffect(() => {
-    if (!roomId || !playerName) return;
+    stateRef.current = {
+      hostName,
+      player1Name,
+      player2Name,
+      spectators,
+      board,
+      isBlackNext,
+      winner,
+      winningCells,
+      lastMove,
+      gameStartTime,
+      gameStarted,
+      readyPlayers,
+    };
+  }, [
+    hostName,
+    player1Name,
+    player2Name,
+    spectators,
+    board,
+    isBlackNext,
+    winner,
+    winningCells,
+    lastMove,
+    gameStartTime,
+    gameStarted,
+    readyPlayers,
+  ]);
+
+  useEffect(() => {
+    if (!roomId || !playerName || !hasInitialized) return;
 
     const roomChannel = supabase.channel(`gomoku-room-${roomId}`);
 
@@ -91,32 +156,132 @@ function GomokuGame() {
         setLastMove(null);
         setGameStartTime(null);
         setElapsedTime(0);
+        setGameStarted(false);
+        setReadyPlayers([]);
+      })
+      .on("broadcast", { event: "player-ready" }, (payload) => {
+        const { playerName: readyPlayer } = payload.payload;
+        setReadyPlayers((prev) =>
+          prev.includes(readyPlayer) ? prev : [...prev, readyPlayer],
+        );
+      })
+      .on("broadcast", { event: "game-start" }, (payload) => {
+        setGameStarted(true);
+        setGameStartTime(payload.payload.gameStartTime);
       })
       .on("broadcast", { event: "swap-roles" }, () => {
-        setIsPlayer1((prev) => !prev);
+        const state = stateRef.current;
+        setPlayer1Name(state.player2Name);
+        setPlayer2Name(state.player1Name);
       })
-      .on("broadcast", { event: "player-join" }, (payload) => {
-        const { playerName: newPlayer } = payload.payload;
-        setOpponentName(newPlayer);
+      .on("broadcast", { event: "request-join" }, (payload) => {
+        const { playerName: newPlayer, requestedRole: role } = payload.payload;
+        const state = stateRef.current;
 
-        // Phản hồi lại tên của mình cho người vừa tham gia
-        roomChannel.send({
-          type: "broadcast",
-          event: "player-sync",
-          payload: { playerName },
-        });
+        if (state.hostName === playerName) {
+          let newP2 = state.player2Name;
+          const newSpecs = [...state.spectators];
+
+          const isAlreadyPlayer =
+            newPlayer === state.player1Name || newPlayer === newP2;
+          const isAlreadySpec = newSpecs.includes(newPlayer);
+
+          if (!isAlreadyPlayer && !isAlreadySpec) {
+            if (role === "player") {
+              if (!newP2) {
+                newP2 = newPlayer;
+                setPlayer2Name(newP2);
+                stateRef.current.player2Name = newP2;
+              } else {
+                roomChannel.send({
+                  type: "broadcast",
+                  event: "join-rejected",
+                  payload: {
+                    playerName: newPlayer,
+                    reason:
+                      "Phòng đã đủ 2 người chơi, vui lòng tham gia với tư cách Người xem!",
+                  },
+                });
+                return;
+              }
+            } else {
+              if (newSpecs.length < 5) {
+                newSpecs.push(newPlayer);
+                setSpectators(newSpecs);
+                stateRef.current.spectators = newSpecs;
+              } else {
+                roomChannel.send({
+                  type: "broadcast",
+                  event: "join-rejected",
+                  payload: {
+                    playerName: newPlayer,
+                    reason: "Phòng đã đầy người xem!",
+                  },
+                });
+                return;
+              }
+            }
+          }
+
+          roomChannel.send({
+            type: "broadcast",
+            event: "room-sync",
+            payload: {
+              hostName: state.hostName,
+              player1Name: state.player1Name,
+              player2Name: newP2,
+              spectators: newSpecs,
+              board: state.board,
+              isBlackNext: state.isBlackNext,
+              winner: state.winner,
+              winningCells: state.winningCells,
+              lastMove: state.lastMove,
+              gameStartTime: state.gameStartTime,
+              gameStarted: state.gameStarted,
+              readyPlayers: [], // Reset readiness when a new player joins
+            },
+          });
+        }
       })
-      .on("broadcast", { event: "player-sync" }, (payload) => {
-        const { playerName: existingPlayer } = payload.payload;
-        setOpponentName(existingPlayer);
+      .on("broadcast", { event: "room-sync" }, (payload) => {
+        const data = payload.payload;
+        setHostName(data.hostName);
+        setPlayer1Name(data.player1Name);
+        setPlayer2Name(data.player2Name);
+        setSpectators(data.spectators);
+        setBoard(data.board);
+        setIsBlackNext(data.isBlackNext);
+        setWinner(data.winner);
+        if (data.winningCells) setWinningCells(data.winningCells);
+        setLastMove(data.lastMove);
+        if (data.gameStartTime) setGameStartTime(data.gameStartTime);
+        if (data.gameStarted) setGameStarted(data.gameStarted);
+        if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
+      })
+      .on("broadcast", { event: "update-name" }, (payload) => {
+        const { oldName, newName } = payload.payload;
+        setHostName((prev) => (prev === oldName ? newName : prev));
+        setPlayer1Name((prev) => (prev === oldName ? newName : prev));
+        setPlayer2Name((prev) => (prev === oldName ? newName : prev));
+        setSpectators((prev) => prev.map((s) => (s === oldName ? newName : s)));
+        setReadyPlayers((prev) =>
+          prev.map((p) => (p === oldName ? newName : p)),
+        );
+      })
+      .on("broadcast", { event: "join-rejected" }, (payload) => {
+        if (payload.payload.playerName === playerName) {
+          alert(payload.payload.reason || "Không thể tham gia phòng!");
+          setHasInitialized(false);
+          setShowNameModal(true);
+          if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
+        }
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          // Thông báo mình đã tham gia phòng
           roomChannel.send({
             type: "broadcast",
-            event: "player-join",
-            payload: { playerName },
+            event: "request-join",
+            payload: { playerName, requestedRole },
           });
         }
       });
@@ -126,7 +291,36 @@ function GomokuGame() {
     return () => {
       supabase.removeChannel(roomChannel);
     };
-  }, [roomId, playerName]);
+  }, [roomId, playerName, hasInitialized, requestedRole]);
+
+  useEffect(() => {
+    if (gameStarted || !player1Name || !player2Name || !channel) return;
+
+    const p1Ready = readyPlayers.includes(player1Name);
+    const p2Ready = readyPlayers.includes(player2Name);
+
+    if (p1Ready && p2Ready) {
+      // Only host should initiate the start time to prevent desync
+      if (playerName === hostName) {
+        const startTime = Date.now();
+        setGameStarted(true);
+        setGameStartTime(startTime);
+        channel.send({
+          type: "broadcast",
+          event: "game-start",
+          payload: { gameStartTime: startTime },
+        });
+      }
+    }
+  }, [
+    readyPlayers,
+    player1Name,
+    player2Name,
+    gameStarted,
+    playerName,
+    hostName,
+    channel,
+  ]);
 
   // Effect để cập nhật đồng hồ
   useEffect(() => {
@@ -178,6 +372,11 @@ function GomokuGame() {
     const newName = inputName.trim();
     setPlayerName(newName);
     localStorage.setItem("playerName", newName);
+
+    if (roomId) {
+      localStorage.setItem(`joinedRoom_${roomId}`, requestedRole);
+    }
+
     setShowNameModal(false);
 
     if (!hasInitialized) {
@@ -185,18 +384,24 @@ function GomokuGame() {
       if (!roomId) {
         const newRoomId = Math.random().toString(36).substring(2, 10);
         setRoomId(newRoomId);
-        setIsPlayer1(true);
+        setHostName(newName);
+        setPlayer1Name(newName);
+        localStorage.setItem(`joinedRoom_${newRoomId}`, "player");
         router.replace(`${pathname}?room=${newRoomId}`);
-      } else {
-        setIsPlayer1(false);
       }
     } else {
       if (channel) {
         channel.send({
           type: "broadcast",
-          event: "player-sync",
-          payload: { playerName: newName },
+          event: "update-name",
+          payload: { oldName: playerName, newName: newName },
         });
+      }
+      if (hostName === playerName) setHostName(newName);
+      if (player1Name === playerName) setPlayer1Name(newName);
+      if (player2Name === playerName) setPlayer2Name(newName);
+      if (spectators.includes(playerName)) {
+        setSpectators(spectators.map((s) => (s === playerName ? newName : s)));
       }
     }
   };
@@ -259,7 +464,8 @@ function GomokuGame() {
         }
       }
 
-      if (count >= 5 && blocks < 2) {
+      // Luật Overline: Phải có đúng 5 quân liên tiếp mới thắng (6 quân trở lên không tính)
+      if (count === 5 && blocks < 2) {
         return currentWinningCells;
       }
     }
@@ -268,9 +474,9 @@ function GomokuGame() {
 
   const handleCellClick = useCallback(
     (row: number, col: number) => {
-      if (board[row][col] || winner || !opponentName) return;
+      if (board[row][col] || winner || !gameStarted || isSpectator) return;
 
-      const myColor = isPlayer1 ? "B" : "W";
+      const myColor = isPlayer1 ? "B" : isPlayer2 ? "W" : null;
       const currentTurnColor = isBlackNext ? "B" : "W";
 
       if (myColor !== currentTurnColor) return;
@@ -283,14 +489,12 @@ function GomokuGame() {
       const nextTurn = !isBlackNext;
       const newWinner = winCells ? currentPlayer : null;
       const newWinningCells = winCells ? winCells : [];
-      const startTime = gameStartTime || Date.now();
 
       setBoard(newBoard);
       setIsBlackNext(nextTurn);
       setWinner(newWinner);
       setWinningCells(newWinningCells);
       setLastMove([row, col]);
-      if (!gameStartTime) setGameStartTime(startTime);
 
       if (channel) {
         channel.send({
@@ -302,7 +506,7 @@ function GomokuGame() {
             winner: newWinner,
             winningCells: newWinningCells,
             lastMove: [row, col],
-            gameStartTime: startTime,
+            gameStartTime: gameStartTime,
           },
         });
       }
@@ -312,9 +516,11 @@ function GomokuGame() {
       isBlackNext,
       winner,
       channel,
-      opponentName,
       isPlayer1,
+      isPlayer2,
       gameStartTime,
+      isSpectator,
+      gameStarted,
     ],
   );
 
@@ -326,6 +532,8 @@ function GomokuGame() {
     setLastMove(null);
     setGameStartTime(null);
     setElapsedTime(0);
+    setGameStarted(false);
+    setReadyPlayers([]);
     if (channel) {
       channel.send({ type: "broadcast", event: "reset-game" });
     }
@@ -333,15 +541,28 @@ function GomokuGame() {
 
   // Logic hiển thị nút Đổi phe (Swap)
   const moveCount = board.flat().filter(Boolean).length;
-  const myColor = isPlayer1 ? "B" : "W";
+  const myColor = isPlayer1 ? "B" : isPlayer2 ? "W" : null;
   const currentTurnColor = isBlackNext ? "B" : "W";
   const canSwap =
-    moveCount === 3 && myColor === "W" && currentTurnColor === "W" && !winner;
+    moveCount === 3 && isPlayer2 && currentTurnColor === "W" && !winner;
 
   const handleSwap = () => {
-    setIsPlayer1(!isPlayer1);
+    setPlayer1Name(player2Name);
+    setPlayer2Name(player1Name);
     if (channel) {
       channel.send({ type: "broadcast", event: "swap-roles" });
+    }
+  };
+
+  const handleStartClick = () => {
+    if (!playerName || readyPlayers.includes(playerName)) return;
+    setReadyPlayers((prev) => [...prev, playerName]);
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "player-ready",
+        payload: { playerName },
+      });
     }
   };
 
@@ -401,6 +622,43 @@ function GomokuGame() {
             required
             autoFocus
           />
+
+          {!hasInitialized && roomParam && (
+            <div className="flex flex-col space-y-2">
+              <label className="text-sm font-medium text-zinc-700">
+                Bạn muốn tham gia với tư cách:
+              </label>
+              <div className="flex gap-4">
+                <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="player"
+                    checked={requestedRole === "player"}
+                    onChange={(e) =>
+                      setRequestedRole(e.target.value as "player" | "spectator")
+                    }
+                    className="accent-zinc-900"
+                  />
+                  <span>Người chơi</span>
+                </label>
+                <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="spectator"
+                    checked={requestedRole === "spectator"}
+                    onChange={(e) =>
+                      setRequestedRole(e.target.value as "player" | "spectator")
+                    }
+                    className="accent-zinc-900"
+                  />
+                  <span>Người xem</span>
+                </label>
+              </div>
+            </div>
+          )}
+
           <button
             type="submit"
             className="w-full cursor-pointer rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
@@ -408,7 +666,7 @@ function GomokuGame() {
             {hasInitialized
               ? "Cập nhật"
               : roomParam
-                ? "Vào chơi ngay"
+                ? "Vào phòng"
                 : "Tạo phòng & Lấy link"}
           </button>
         </form>
@@ -423,15 +681,15 @@ function GomokuGame() {
 
           {!showNameModal && (
             <>
-              {opponentName ? (
+              {player2Name ? (
                 <p className="text-sm text-zinc-500">
                   Trận đấu:{" "}
                   <span className="font-semibold text-zinc-800">
-                    {isPlayer1 ? playerName : opponentName} (X)
+                    {player1Name} (X)
                   </span>{" "}
                   vs{" "}
                   <span className="font-semibold text-zinc-800">
-                    {!isPlayer1 ? playerName : opponentName} (O)
+                    {player2Name} (O)
                   </span>
                 </p>
               ) : (
@@ -459,19 +717,43 @@ function GomokuGame() {
                 </div>
               )}
 
-              {opponentName && (
-                <div className="mt-6 flex flex-col items-center space-y-3 xl:items-start">
-                  <div className="inline-block rounded-full border border-zinc-100 bg-white px-6 py-3 shadow-sm">
-                    <p className="text-sm font-medium text-zinc-800">
-                      {winner
-                        ? `🎉 Người chiến thắng: ${winner === "B" ? (isPlayer1 ? playerName : opponentName) : !isPlayer1 ? playerName : opponentName}!`
-                        : `Lượt đi: ${isBlackNext ? (isPlayer1 ? "Bạn (X)" : opponentName + " (X)") : !isPlayer1 ? "Bạn (O)" : opponentName + " (O)"}`}
-                    </p>
-                  </div>
+              {player2Name && (
+                <div className="mt-6 flex w-full flex-col items-center space-y-3 xl:items-start">
+                  {gameStarted ? (
+                    <>
+                      <div className="inline-block rounded-full border border-zinc-100 bg-white px-6 py-3 shadow-sm">
+                        <p className="text-sm font-medium text-zinc-800">
+                          {winner
+                            ? `🎉 Người chiến thắng: ${winner === "B" ? player1Name : player2Name}!`
+                            : `Lượt đi: ${isBlackNext ? player1Name + " (X)" : player2Name + " (O)"}`}
+                        </p>
+                      </div>
 
-                  <div className="text-3xl font-mono font-medium tracking-wider text-zinc-800">
-                    {formatTime(elapsedTime)}
-                  </div>
+                      <div className="text-3xl font-mono font-medium tracking-wider text-zinc-800">
+                        {formatTime(elapsedTime)}
+                      </div>
+                    </>
+                  ) : (
+                    !isSpectator && (
+                      <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
+                        <h3 className="text-base font-semibold text-zinc-800">
+                          Trận đấu sắp bắt đầu!
+                        </h3>
+                        <p className="text-sm text-zinc-500">
+                          {readyPlayers.length}/2 người chơi đã sẵn sàng.
+                        </p>
+                        <button
+                          onClick={handleStartClick}
+                          disabled={readyPlayers.includes(playerName || "")}
+                          className="mt-2 w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                        >
+                          {readyPlayers.includes(playerName || "")
+                            ? "Đã sẵn sàng, chờ đối thủ..."
+                            : "Sẵn sàng bắt đầu"}
+                        </button>
+                      </div>
+                    )
+                  )}
                 </div>
               )}
             </>
@@ -488,7 +770,7 @@ function GomokuGame() {
             )}
             <button
               onClick={resetGame}
-              disabled={!opponentName}
+              disabled={!player2Name || isSpectator}
               className="cursor-pointer rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Chơi lại
@@ -504,7 +786,7 @@ function GomokuGame() {
 
         {/* Cột giữa: Khu vực bàn cờ caro */}
         <div
-          className={`bg-white p-2 sm:p-4 rounded-sm shadow-xl transition-opacity ${!opponentName || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
+          className={`bg-white p-2 sm:p-4 rounded-sm shadow-xl transition-opacity ${!gameStarted || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
         >
           <div
             className="grid gap-0 border border-zinc-800"
@@ -544,8 +826,30 @@ function GomokuGame() {
           </div>
         </div>
 
-        {/* Cột phải: Khung trống để đảm bảo lưới Flex/Grid được căn chỉnh đối xứng */}
-        <div className="hidden w-full xl:block"></div>
+        {/* Cột phải: Thông tin người xem */}
+        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8">
+          <div className="bg-white rounded-xl border border-zinc-200 p-6 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0">
+            <h3 className="text-lg font-medium text-zinc-900 mb-4 border-b border-zinc-100 pb-3">
+              Người xem ({spectators.length}/5)
+            </h3>
+            {spectators.length === 0 ? (
+              <p className="text-sm text-zinc-500 italic">Chưa có người xem</p>
+            ) : (
+              <ul className="space-y-3">
+                {spectators.map((spec, idx) => (
+                  <li key={idx} className="flex items-center space-x-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-sm font-bold text-zinc-700">
+                      {spec.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm font-medium text-zinc-800">
+                      {spec}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
     </main>
   );

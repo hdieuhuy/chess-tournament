@@ -9,41 +9,34 @@ import { Modal } from "@/components/Modal";
 import confetti from "canvas-confetti";
 
 const INITIAL_BOARD: (string | null)[][] = [
-  ["r", "n", "b", "a", "k", "a", "b", "n", "r"],
-  [null, null, null, null, null, null, null, null, null],
-  [null, "c", null, null, null, null, null, "c", null],
-  ["p", null, "p", null, "p", null, "p", null, "p"],
-  [null, null, null, null, null, null, null, null, null],
-  [null, null, null, null, null, null, null, null, null],
-  ["P", null, "P", null, "P", null, "P", null, "P"],
-  [null, "C", null, null, null, null, null, "C", null],
-  [null, null, null, null, null, null, null, null, null],
-  ["R", "N", "B", "A", "K", "A", "B", "N", "R"],
+  ["r", "n", "b", "q", "k", "b", "n", "r"],
+  ["p", "p", "p", "p", "p", "p", "p", "p"],
+  [null, null, null, null, null, null, null, null],
+  [null, null, null, null, null, null, null, null],
+  [null, null, null, null, null, null, null, null],
+  [null, null, null, null, null, null, null, null],
+  ["P", "P", "P", "P", "P", "P", "P", "P"],
+  ["R", "N", "B", "Q", "K", "B", "N", "R"],
 ];
 
-const piecesMap: Record<string, { text: string; color: string }> = {
-  R: { text: "車", color: "text-red-600" },
-  N: { text: "馬", color: "text-red-600" },
-  B: { text: "相", color: "text-red-600" },
-  A: { text: "仕", color: "text-red-600" },
-  K: { text: "帥", color: "text-red-600" },
-  C: { text: "炮", color: "text-red-600" },
-  P: { text: "兵", color: "text-red-600" },
-  r: { text: "車", color: "text-zinc-900" },
-  n: { text: "馬", color: "text-zinc-900" },
-  b: { text: "象", color: "text-zinc-900" },
-  a: { text: "士", color: "text-zinc-900" },
-  k: { text: "將", color: "text-zinc-900" },
-  c: { text: "砲", color: "text-zinc-900" },
-  p: { text: "卒", color: "text-zinc-900" },
+// Sử dụng hình ảnh SVG tiêu chuẩn quốc tế từ Wikimedia Commons cho giao diện thân thiện, dễ nhận diện hơn
+const PIECE_IMAGES: Record<string, string> = {
+  K: "https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg",
+  Q: "https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg",
+  R: "https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg",
+  B: "https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg",
+  N: "https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg",
+  P: "https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg",
+  k: "https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg",
+  q: "https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg",
+  r: "https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg",
+  b: "https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg",
+  n: "https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg",
+  p: "https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg",
 };
 
-// Hàm tiện ích: tính tọa độ điểm giao trên bàn cờ cho SVG
-const X = (c: number) => `${(c + 0.5) * (100 / 9)}%`;
-const Y = (r: number) => `${(r + 0.5) * (100 / 10)}%`;
-
-// Đếm số quân cản giữa 2 vị trí (trên cùng đường thẳng)
-const getPiecesBetween = (
+// Kiểm tra quân cản đường chéo
+const getPiecesBetweenDiag = (
   board: (string | null)[][],
   r1: number,
   c1: number,
@@ -51,121 +44,124 @@ const getPiecesBetween = (
   c2: number,
 ) => {
   let count = 0;
-  if (r1 === r2) {
-    const min = Math.min(c1, c2);
-    const max = Math.max(c1, c2);
-    for (let c = min + 1; c < max; c++) if (board[r1][c]) count++;
-  } else if (c1 === c2) {
-    const min = Math.min(r1, r2);
-    const max = Math.max(r1, r2);
-    for (let r = min + 1; r < max; r++) if (board[r][c1]) count++;
+  const dr = Math.sign(r2 - r1);
+  const dc = Math.sign(c2 - c1);
+  let r = r1 + dr;
+  let c = c1 + dc;
+  while (r !== r2 && c !== c2) {
+    if (board[r][c]) count++;
+    r += dr;
+    c += dc;
   }
   return count;
 };
 
-// Kiểm tra một nước đi có hợp lệ cơ bản (không tính an toàn tướng)
-const canPieceMoveBasic = (
+// Kiểm tra nước đi hợp lệ cơ bản của một quân (chưa xét chiếu tướng hay nhập thành)
+const canMoveBasic = (
   board: (string | null)[][],
   fr: number,
   fc: number,
   tr: number,
   tc: number,
+  epTarget: [number, number] | null,
+  isWhiteTurn: boolean,
 ) => {
   const piece = board[fr][fc];
   if (!piece) return false;
-
-  const isRed = piece === piece.toUpperCase();
+  const isW = piece === piece.toUpperCase();
+  if (isW !== isWhiteTurn) return false;
   const target = board[tr][tc];
-  if (target) {
-    const targetIsRed = target === target.toUpperCase();
-    if (isRed === targetIsRed) return false; // Không ăn quân mình
-  }
 
-  const pType = piece.toLowerCase();
+  // Không thể ăn quân cùng màu
+  if (target && (target === target.toUpperCase()) === isW) return false;
+
+  const type = piece.toLowerCase();
   const dr = tr - fr;
   const dc = tc - fc;
   const adr = Math.abs(dr);
   const adc = Math.abs(dc);
 
-  if (pType === "k") {
-    if (adr + adc !== 1) return false;
-    if (tc < 3 || tc > 5) return false;
-    if (isRed && tr < 7) return false;
-    if (!isRed && tr > 2) return false;
-  } else if (pType === "a") {
-    if (adr !== 1 || adc !== 1) return false;
-    if (tc < 3 || tc > 5) return false;
-    if (isRed && tr < 7) return false;
-    if (!isRed && tr > 2) return false;
-  } else if (pType === "b") {
-    if (adr !== 2 || adc !== 2) return false;
-    if (isRed && tr < 5) return false; // Không qua sông
-    if (!isRed && tr > 4) return false;
-    if (board[fr + dr / 2][fc + dc / 2]) return false; // Cản mắt tượng
-  } else if (pType === "n") {
-    if (!((adr === 2 && adc === 1) || (adr === 1 && adc === 2))) return false;
-    if (adr === 2 && board[fr + dr / 2][fc]) return false; // Cản chân mã
-    if (adc === 2 && board[fr][fc + dc / 2]) return false;
-  } else if (pType === "r") {
-    if (adr !== 0 && adc !== 0) return false;
-    if (getPiecesBetween(board, fr, fc, tr, tc) > 0) return false;
-  } else if (pType === "c") {
-    if (adr !== 0 && adc !== 0) return false;
-    const count = getPiecesBetween(board, fr, fc, tr, tc);
-    if (target) {
-      if (count !== 1) return false; // Ăn cần đúng 1 ngòi
-    } else {
-      if (count > 0) return false; // Đi không được vướng
+  if (type === "p") {
+    const dir = isW ? -1 : 1;
+    const startRow = isW ? 6 : 1;
+    // Tiến thẳng
+    if (dc === 0) {
+      if (dr === dir && !target) return true;
+      if (dr === 2 * dir && fr === startRow && !target && !board[fr + dir][fc])
+        return true;
     }
-  } else if (pType === "p") {
-    if (isRed) {
-      if (dr > 0) return false; // Không đi lùi
-      if (fr >= 5) {
-        if (dr !== -1 || dc !== 0) return false; // Chưa qua sông
-      } else {
-        if (dr === -1 && dc === 0) return true;
-        if (dr === 0 && adc === 1) return true; // Sang ngang
-        return false;
-      }
-    } else {
-      if (dr < 0) return false;
-      if (fr <= 4) {
-        if (dr !== 1 || dc !== 0) return false;
-      } else {
-        if (dr === 1 && dc === 0) return true;
-        if (dr === 0 && adc === 1) return true;
-        return false;
-      }
+    // Ăn chéo (bao gồm cả ăn qua đường - en passant)
+    else if (adc === 1 && dr === dir) {
+      if (target) return true;
+      if (epTarget && epTarget[0] === tr && epTarget[1] === tc) return true;
     }
+    return false;
   }
-  return true;
+  if (type === "n") {
+    return (adr === 2 && adc === 1) || (adr === 1 && adc === 2);
+  }
+  if (type === "b") {
+    if (adr !== adc) return false;
+    return getPiecesBetweenDiag(board, fr, fc, tr, tc) === 0;
+  }
+  if (type === "r") {
+    if (adr !== 0 && adc !== 0) return false;
+    if (adr === 0) {
+      const min = Math.min(fc, tc);
+      const max = Math.max(fc, tc);
+      for (let c = min + 1; c < max; c++) if (board[fr][c]) return false;
+    } else {
+      const min = Math.min(fr, tr);
+      const max = Math.max(fr, tr);
+      for (let r = min + 1; r < max; r++) if (board[r][fc]) return false;
+    }
+    return true;
+  }
+  if (type === "q") {
+    if (adr === adc) return getPiecesBetweenDiag(board, fr, fc, tr, tc) === 0;
+    if (adr === 0) {
+      const min = Math.min(fc, tc);
+      const max = Math.max(fc, tc);
+      for (let c = min + 1; c < max; c++) if (board[fr][c]) return false;
+      return true;
+    }
+    if (adc === 0) {
+      const min = Math.min(fr, tr);
+      const max = Math.max(fr, tr);
+      for (let r = min + 1; r < max; r++) if (board[r][fc]) return false;
+      return true;
+    }
+    return false;
+  }
+  if (type === "k") {
+    if (adr <= 1 && adc <= 1) return true;
+    return false;
+  }
+  return false;
 };
 
-// Kiểm tra xem tướng có đang bị chiếu không
-const isKingInCheck = (board: (string | null)[][], isRed: boolean) => {
-  let kr = -1;
-  let kc = -1;
-  const kChar = isRed ? "K" : "k";
-  for (let r = 0; r < 10; r++) {
-    for (let c = 0; c < 9; c++) {
-      if (board[r][c] === kChar) {
-        kr = r;
-        kc = c;
-        break;
-      }
-    }
-    if (kr !== -1) break;
-  }
-  if (kr === -1) return false;
-
-  for (let r = 0; r < 10; r++) {
-    for (let c = 0; c < 9; c++) {
-      const p = board[r][c];
+// Kiểm tra xem một ô có bị tấn công bởi phe đối thủ không
+const isAttacked = (
+  board: (string | null)[][],
+  r: number,
+  c: number,
+  byWhite: boolean,
+  epTarget: [number, number] | null,
+) => {
+  for (let ir = 0; ir < 8; ir++) {
+    for (let ic = 0; ic < 8; ic++) {
+      const p = board[ir][ic];
       if (p) {
-        const pIsRed = p === p.toUpperCase();
-        if (pIsRed !== isRed) {
-          if (canPieceMoveBasic(board, r, c, kr, kc)) {
-            return true;
+        const pIsW = p === p.toUpperCase();
+        if (pIsW === byWhite) {
+          if (p.toLowerCase() === "p") {
+            const dir = pIsW ? -1 : 1;
+            if (r - ir === dir && Math.abs(c - ic) === 1) return true;
+          } else if (p.toLowerCase() === "k") {
+            if (Math.abs(r - ir) <= 1 && Math.abs(c - ic) <= 1) return true;
+          } else {
+            if (canMoveBasic(board, ir, ic, r, c, epTarget, byWhite))
+              return true;
           }
         }
       }
@@ -174,61 +170,95 @@ const isKingInCheck = (board: (string | null)[][], isRed: boolean) => {
   return false;
 };
 
-// Kiểm tra đầy đủ một nước đi, bao gồm cả "lộ mặt tướng" và "bảo vệ tướng"
-const isValidMove = (
+// Tìm vị trí của vua
+const findKing = (board: (string | null)[][], isW: boolean) => {
+  const kChar = isW ? "K" : "k";
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      if (board[r][c] === kChar) return [r, c];
+    }
+  }
+  return null;
+};
+
+// Kiểm tra một nước đi có hợp lệ hoàn toàn (bao gồm an toàn tướng và nhập thành)
+const isLegalMove = (
   board: (string | null)[][],
   fr: number,
   fc: number,
   tr: number,
   tc: number,
-  currentTurn: "r" | "b",
+  epTarget: [number, number] | null,
+  isWhiteTurn: boolean,
+  castlingRights: { wK: boolean; wQ: boolean; bK: boolean; bQ: boolean },
 ) => {
   const piece = board[fr][fc];
   if (!piece) return false;
 
-  const isRed = piece === piece.toUpperCase();
-  if ((isRed && currentTurn === "b") || (!isRed && currentTurn === "r"))
+  // Luật Nhập thành (Castling)
+  if (piece.toLowerCase() === "k" && Math.abs(tc - fc) === 2 && tr === fr) {
+    if (isWhiteTurn) {
+      if (fr !== 7 || fc !== 4) return false;
+      if (tc === 6) {
+        // Kingside
+        if (!castlingRights.wK) return false;
+        if (board[7][5] || board[7][6]) return false;
+        if (isAttacked(board, 7, 4, false, epTarget)) return false;
+        if (isAttacked(board, 7, 5, false, epTarget)) return false;
+        if (isAttacked(board, 7, 6, false, epTarget)) return false;
+        return true;
+      } else if (tc === 2) {
+        // Queenside
+        if (!castlingRights.wQ) return false;
+        if (board[7][1] || board[7][2] || board[7][3]) return false;
+        if (isAttacked(board, 7, 4, false, epTarget)) return false;
+        if (isAttacked(board, 7, 3, false, epTarget)) return false;
+        if (isAttacked(board, 7, 2, false, epTarget)) return false;
+        return true;
+      }
+    } else {
+      if (fr !== 0 || fc !== 4) return false;
+      if (tc === 6) {
+        // Kingside
+        if (!castlingRights.bK) return false;
+        if (board[0][5] || board[0][6]) return false;
+        if (isAttacked(board, 0, 4, true, epTarget)) return false;
+        if (isAttacked(board, 0, 5, true, epTarget)) return false;
+        if (isAttacked(board, 0, 6, true, epTarget)) return false;
+        return true;
+      } else if (tc === 2) {
+        // Queenside
+        if (!castlingRights.bQ) return false;
+        if (board[0][1] || board[0][2] || board[0][3]) return false;
+        if (isAttacked(board, 0, 4, true, epTarget)) return false;
+        if (isAttacked(board, 0, 3, true, epTarget)) return false;
+        if (isAttacked(board, 0, 2, true, epTarget)) return false;
+        return true;
+      }
+    }
     return false;
+  }
 
-  if (!canPieceMoveBasic(board, fr, fc, tr, tc)) return false;
+  if (!canMoveBasic(board, fr, fc, tr, tc, epTarget, isWhiteTurn)) return false;
 
-  // 1. Thử đi để kiểm tra xem tướng của mình có bị uy hiếp hay lộ mặt không
-  const tempBoard = board.map((r) => [...r]);
+  // Giả lập nước đi
+  const tempBoard = board.map((row) => [...row]);
   tempBoard[tr][tc] = piece;
   tempBoard[fr][fc] = null;
 
-  let kPos: [number, number] | null = null;
-  let KPos: [number, number] | null = null;
-  for (let r = 0; r < 10; r++) {
-    for (let c = 0; c < 9; c++) {
-      if (tempBoard[r][c] === "k") kPos = [r, c];
-      if (tempBoard[r][c] === "K") KPos = [r, c];
-    }
+  // Xóa Tốt bị ăn khi dùng luật Bắt Tốt Qua Đường (En Passant)
+  if (
+    piece.toLowerCase() === "p" &&
+    Math.abs(tc - fc) === 1 &&
+    !board[tr][tc]
+  ) {
+    tempBoard[fr][tc] = null;
   }
 
-  // Kiểm tra "lộ mặt tướng"
-  if (kPos && KPos && kPos[1] === KPos[1]) {
-    if (getPiecesBetween(tempBoard, kPos[0], kPos[1], KPos[0], KPos[1]) === 0) {
-      return false; // Lỗi 2 tướng nhìn thấy nhau
-    }
-  }
-
-  // 2. Kiểm tra xem nước đi này có khiến tướng mình bị chiếu bí bởi đối thủ không
-  const myKPos = isRed ? KPos : kPos;
-  if (myKPos) {
-    for (let r = 0; r < 10; r++) {
-      for (let c = 0; c < 9; c++) {
-        const p = tempBoard[r][c];
-        if (p) {
-          const pIsRed = p === p.toUpperCase();
-          if (pIsRed !== isRed) {
-            if (canPieceMoveBasic(tempBoard, r, c, myKPos[0], myKPos[1])) {
-              return false; // Nước cờ tự sát (bị chiếu)
-            }
-          }
-        }
-      }
-    }
+  // Tìm vua và đảm bảo tướng không bị chiếu sau khi đi
+  const kPos = findKing(tempBoard, isWhiteTurn);
+  if (kPos && isAttacked(tempBoard, kPos[0], kPos[1], !isWhiteTurn, epTarget)) {
+    return false;
   }
 
   return true;
@@ -236,14 +266,23 @@ const isValidMove = (
 
 const INITIAL_TIME = 600; // 10 phút tính bằng giây
 
-function XiangqiGame() {
+function ChessGame() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
   const roomParam = searchParams.get("room");
 
   const [board, setBoard] = useState<(string | null)[][]>(INITIAL_BOARD);
-  const [isRedTurn, setIsRedTurn] = useState<boolean>(true);
+  const [isWhiteTurn, setIsWhiteTurn] = useState<boolean>(true);
+  const [castlingRights, setCastlingRights] = useState({
+    wK: true,
+    wQ: true,
+    bK: true,
+    bQ: true,
+  });
+  const [enPassantTarget, setEnPassantTarget] = useState<
+    [number, number] | null
+  >(null);
   const [winner, setWinner] = useState<string | null>(null);
   const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null);
   const [lastMove, setLastMove] = useState<{
@@ -313,14 +352,17 @@ function XiangqiGame() {
     player2Name,
     spectators,
     board,
-    isRedTurn,
+    isWhiteTurn,
     winner,
+    castlingRights,
+    enPassantTarget,
     lastMove,
     gameStarted,
     readyPlayers,
     player1Time,
     player2Time,
   });
+
   useEffect(() => {
     stateRef.current = {
       hostName,
@@ -328,8 +370,10 @@ function XiangqiGame() {
       player2Name,
       spectators,
       board,
-      isRedTurn,
+      isWhiteTurn,
       winner,
+      castlingRights,
+      enPassantTarget,
       lastMove,
       gameStarted,
       readyPlayers,
@@ -342,8 +386,10 @@ function XiangqiGame() {
     player2Name,
     spectators,
     board,
-    isRedTurn,
+    isWhiteTurn,
     winner,
+    castlingRights,
+    enPassantTarget,
     lastMove,
     gameStarted,
     readyPlayers,
@@ -353,23 +399,26 @@ function XiangqiGame() {
 
   useEffect(() => {
     if (!roomId || !playerName || !hasInitialized) return;
-    const roomChannel = supabase.channel(`xiangqi-room-${roomId}`);
+    const roomChannel = supabase.channel(`chess-room-${roomId}`);
 
     roomChannel
       .on("broadcast", { event: "sync-move" }, (payload) => {
-        const { board, isRedTurn, winner, lastMove, player1Time, player2Time } =
-          payload.payload;
-        setBoard(board);
-        setIsRedTurn(isRedTurn);
-        setWinner(winner);
-        setLastMove(lastMove);
-        setPlayer1Time(player1Time);
-        setPlayer2Time(player2Time);
+        const data = payload.payload;
+        setBoard(data.board);
+        setIsWhiteTurn(data.isWhiteTurn);
+        setWinner(data.winner);
+        setCastlingRights(data.castlingRights);
+        setEnPassantTarget(data.enPassantTarget);
+        setLastMove(data.lastMove);
+        setPlayer1Time(data.player1Time);
+        setPlayer2Time(data.player2Time);
       })
       .on("broadcast", { event: "reset-game" }, () => {
         setBoard(INITIAL_BOARD);
-        setIsRedTurn(true);
+        setIsWhiteTurn(true);
         setWinner(null);
+        setCastlingRights({ wK: true, wQ: true, bK: true, bQ: true });
+        setEnPassantTarget(null);
         setSelectedPos(null);
         setLastMove(null);
         setPlayer1Time(INITIAL_TIME);
@@ -385,7 +434,7 @@ function XiangqiGame() {
       })
       .on("broadcast", { event: "game-start" }, (payload) => {
         setGameStarted(true);
-        // Reset timers on game start for all clients
+        // Reset timers for all clients
         setPlayer1Time(INITIAL_TIME);
         setPlayer2Time(INITIAL_TIME);
       })
@@ -447,8 +496,10 @@ function XiangqiGame() {
               player2Name: newP2,
               spectators: newSpecs,
               board: state.board,
-              isRedTurn: state.isRedTurn,
+              isWhiteTurn: state.isWhiteTurn,
               winner: state.winner,
+              castlingRights: state.castlingRights,
+              enPassantTarget: state.enPassantTarget,
               lastMove: state.lastMove,
               gameStarted: state.gameStarted,
               readyPlayers: [],
@@ -465,8 +516,10 @@ function XiangqiGame() {
         setPlayer2Name(data.player2Name);
         setSpectators(data.spectators);
         setBoard(data.board);
-        setIsRedTurn(data.isRedTurn);
+        setIsWhiteTurn(data.isWhiteTurn);
         setWinner(data.winner);
+        setCastlingRights(data.castlingRights);
+        setEnPassantTarget(data.enPassantTarget);
         setLastMove(data.lastMove);
         if (data.gameStarted) setGameStarted(data.gameStarted);
         if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
@@ -541,15 +594,15 @@ function XiangqiGame() {
     if (!gameStarted || winner) return;
 
     const timer = setInterval(() => {
-      if (isRedTurn) {
+      if (isWhiteTurn) {
         setPlayer1Time((t) => {
           if (t <= 1) {
-            setWinner("b"); // Black wins on time
+            setWinner("B"); // Black wins on time
             if (channel && playerName === hostName) {
               channel.send({
                 type: "broadcast",
                 event: "sync-move",
-                payload: { ...stateRef.current, winner: "b", player1Time: 0 },
+                payload: { ...stateRef.current, winner: "B", player1Time: 0 },
               });
             }
             clearInterval(timer);
@@ -560,12 +613,12 @@ function XiangqiGame() {
       } else {
         setPlayer2Time((t) => {
           if (t <= 1) {
-            setWinner("r"); // Red wins on time
+            setWinner("W"); // White wins on time
             if (channel && playerName === hostName) {
               channel.send({
                 type: "broadcast",
                 event: "sync-move",
-                payload: { ...stateRef.current, winner: "r", player2Time: 0 },
+                payload: { ...stateRef.current, winner: "W", player2Time: 0 },
               });
             }
             clearInterval(timer);
@@ -577,14 +630,12 @@ function XiangqiGame() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [gameStarted, winner, isRedTurn, channel, playerName, hostName]);
+  }, [gameStarted, winner, isWhiteTurn, channel, playerName, hostName]);
 
-  // Hiệu ứng pháo hoa chúc mừng khi có người chiến thắng
   useEffect(() => {
-    if (winner) {
+    if (winner && winner !== "Draw") {
       const duration = 3000;
       const end = Date.now() + duration;
-
       const frame = () => {
         confetti({
           particleCount: 5,
@@ -600,10 +651,7 @@ function XiangqiGame() {
           origin: { x: 1 },
           zIndex: 9999,
         });
-
-        if (Date.now() < end) {
-          requestAnimationFrame(frame);
-        }
+        if (Date.now() < end) requestAnimationFrame(frame);
       };
       frame();
     }
@@ -616,11 +664,7 @@ function XiangqiGame() {
     const newName = inputName.trim();
     setPlayerName(newName);
     localStorage.setItem("playerName", newName);
-
-    if (roomId) {
-      localStorage.setItem(`joinedRoom_${roomId}`, requestedRole);
-    }
-
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, requestedRole);
     setShowNameModal(false);
 
     if (!hasInitialized) {
@@ -654,17 +698,17 @@ function XiangqiGame() {
     (r: number, c: number) => {
       if (winner || !gameStarted || isSpectator) return;
 
-      const myColor = isPlayer1 ? "r" : isPlayer2 ? "b" : null;
-      const currentTurn = isRedTurn ? "r" : "b";
+      const myColor = isPlayer1 ? "W" : isPlayer2 ? "B" : null;
+      const currentTurn = isWhiteTurn ? "W" : "B";
       if (myColor !== currentTurn) return;
 
       const piece = board[r][c];
-      const isRedPiece = piece ? piece === piece.toUpperCase() : null;
+      const isWhitePiece = piece ? piece === piece.toUpperCase() : null;
 
-      // Bấm vào quân của mình để thay đổi lựa chọn
       if (
         piece &&
-        ((myColor === "r" && isRedPiece) || (myColor === "b" && !isRedPiece))
+        ((myColor === "W" && isWhitePiece) ||
+          (myColor === "B" && !isWhitePiece))
       ) {
         setSelectedPos([r, c]);
         return;
@@ -672,47 +716,126 @@ function XiangqiGame() {
 
       if (selectedPos) {
         const [fr, fc] = selectedPos;
-        if (isValidMove(board, fr, fc, r, c, currentTurn)) {
+        if (
+          isLegalMove(
+            board,
+            fr,
+            fc,
+            r,
+            c,
+            enPassantTarget,
+            isWhiteTurn,
+            castlingRights,
+          )
+        ) {
           const newBoard = board.map((row) => [...row]);
-          newBoard[r][c] = newBoard[fr][fc];
+          const p = board[fr][fc] as string;
+          newBoard[r][c] = p;
           newBoard[fr][fc] = null;
 
-          let newWinner = null;
-          if (board[r][c] === "k") newWinner = "r";
-          if (board[r][c] === "K") newWinner = "b";
+          let newEpTarget: [number, number] | null = null;
+          const newCastlingRights = { ...castlingRights };
 
-          const nextTurn = !isRedTurn;
+          // En Passant
+          if (
+            p.toLowerCase() === "p" &&
+            Math.abs(c - fc) === 1 &&
+            !board[r][c]
+          ) {
+            newBoard[fr][c] = null;
+          }
+          if (p.toLowerCase() === "p" && Math.abs(r - fr) === 2) {
+            newEpTarget = [(r + fr) / 2, fc];
+          }
 
-          // Scan kiểm tra đối thủ còn nước đi hợp lệ nào không (Chiếu bí / Bí nước)
-          if (!newWinner) {
-            let opponentHasValidMove = false;
-            const oppColor = nextTurn ? "r" : "b";
-            for (let tr = 0; tr < 10 && !opponentHasValidMove; tr++) {
-              for (let tc = 0; tc < 9 && !opponentHasValidMove; tc++) {
-                const p = newBoard[tr][tc];
-                if (
-                  p &&
-                  ((oppColor === "r" && p === p.toUpperCase()) ||
-                    (oppColor === "b" && p === p.toLowerCase()))
-                ) {
-                  for (let t_r = 0; t_r < 10 && !opponentHasValidMove; t_r++) {
-                    for (let t_c = 0; t_c < 9 && !opponentHasValidMove; t_c++) {
-                      if (isValidMove(newBoard, tr, tc, t_r, t_c, oppColor)) {
-                        opponentHasValidMove = true;
-                      }
+          // Castling logic (Di chuyển xe)
+          if (p.toLowerCase() === "k" && Math.abs(c - fc) === 2) {
+            if (c === 6) {
+              newBoard[r][5] = newBoard[r][7];
+              newBoard[r][7] = null;
+            } else if (c === 2) {
+              newBoard[r][3] = newBoard[r][0];
+              newBoard[r][0] = null;
+            }
+          }
+
+          // Cập nhật Castling Rights
+          if (p === "K") {
+            newCastlingRights.wK = false;
+            newCastlingRights.wQ = false;
+          }
+          if (p === "k") {
+            newCastlingRights.bK = false;
+            newCastlingRights.bQ = false;
+          }
+          if (p === "R" && fr === 7 && fc === 0) newCastlingRights.wQ = false;
+          if (p === "R" && fr === 7 && fc === 7) newCastlingRights.wK = false;
+          if (p === "r" && fr === 0 && fc === 0) newCastlingRights.bQ = false;
+          if (p === "r" && fr === 0 && fc === 7) newCastlingRights.bK = false;
+
+          if (board[r][c] === "R" && r === 7 && c === 0)
+            newCastlingRights.wQ = false;
+          if (board[r][c] === "R" && r === 7 && c === 7)
+            newCastlingRights.wK = false;
+          if (board[r][c] === "r" && r === 0 && c === 0)
+            newCastlingRights.bQ = false;
+          if (board[r][c] === "r" && r === 0 && c === 7)
+            newCastlingRights.bK = false;
+
+          // Tự động phong cấp thành Hậu (Queen)
+          if (p === "P" && r === 0) newBoard[r][c] = "Q";
+          if (p === "p" && r === 7) newBoard[r][c] = "q";
+
+          const nextTurn = !isWhiteTurn;
+
+          // Kiểm tra xem đối thủ có bị chiếu bí hoặc bí nước (hòa) không
+          let opponentHasValidMove = false;
+          for (let tr = 0; tr < 8 && !opponentHasValidMove; tr++) {
+            for (let tc = 0; tc < 8 && !opponentHasValidMove; tc++) {
+              const op = newBoard[tr][tc];
+              if (op && (op === op.toUpperCase()) === nextTurn) {
+                for (let t_r = 0; t_r < 8 && !opponentHasValidMove; t_r++) {
+                  for (let t_c = 0; t_c < 8 && !opponentHasValidMove; t_c++) {
+                    if (
+                      isLegalMove(
+                        newBoard,
+                        tr,
+                        tc,
+                        t_r,
+                        t_c,
+                        newEpTarget,
+                        nextTurn,
+                        newCastlingRights,
+                      )
+                    ) {
+                      opponentHasValidMove = true;
                     }
                   }
                 }
               }
             }
-            if (!opponentHasValidMove) {
-              newWinner = currentTurn; // Đối thủ bí nước hoặc chiếu hết, mình thắng
-            }
+          }
+
+          let newWinner = null;
+          if (!opponentHasValidMove) {
+            const oppKingPos = findKing(newBoard, nextTurn);
+            const inCheck =
+              oppKingPos &&
+              isAttacked(
+                newBoard,
+                oppKingPos[0],
+                oppKingPos[1],
+                !nextTurn,
+                newEpTarget,
+              );
+            newWinner = inCheck ? (isWhiteTurn ? "W" : "B") : "Draw";
           }
 
           setBoard(newBoard);
-          setIsRedTurn(nextTurn);
+          setIsWhiteTurn(nextTurn);
           setWinner(newWinner);
+          setCastlingRights(newCastlingRights);
+          setEnPassantTarget(newEpTarget);
           setSelectedPos(null);
           setLastMove({ from: [fr, fc], to: [r, c] });
 
@@ -722,8 +845,10 @@ function XiangqiGame() {
               event: "sync-move",
               payload: {
                 board: newBoard,
-                isRedTurn: nextTurn,
+                isWhiteTurn: nextTurn,
                 winner: newWinner,
+                castlingRights: newCastlingRights,
+                enPassantTarget: newEpTarget,
                 lastMove: { from: [fr, fc], to: [r, c] },
                 player1Time: player1Time,
                 player2Time: player2Time,
@@ -737,7 +862,7 @@ function XiangqiGame() {
     },
     [
       board,
-      isRedTurn,
+      isWhiteTurn,
       winner,
       channel,
       player1Name,
@@ -745,14 +870,18 @@ function XiangqiGame() {
       playerName,
       selectedPos,
       isSpectator,
+      castlingRights,
+      enPassantTarget,
       gameStarted,
     ],
   );
 
   const resetGame = () => {
     setBoard(INITIAL_BOARD);
-    setIsRedTurn(true);
+    setIsWhiteTurn(true);
     setWinner(null);
+    setCastlingRights({ wK: true, wQ: true, bK: true, bQ: true });
+    setEnPassantTarget(null);
     setSelectedPos(null);
     setLastMove(null);
     setGameStarted(false);
@@ -784,8 +913,14 @@ function XiangqiGame() {
     return `${m}:${s}`;
   };
 
-  const isRedInCheck = isKingInCheck(board, true);
-  const isBlackInCheck = isKingInCheck(board, false);
+  const wKPos = findKing(board, true);
+  const bKPos = findKing(board, false);
+  const isWhiteInCheck = wKPos
+    ? isAttacked(board, wKPos[0], wKPos[1], false, enPassantTarget)
+    : false;
+  const isBlackInCheck = bKPos
+    ? isAttacked(board, bKPos[0], bKPos[1], true, enPassantTarget)
+    : false;
 
   if (isCheckingStorage) {
     return (
@@ -797,7 +932,6 @@ function XiangqiGame() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12">
-      {/* Avatar Icon */}
       {hasInitialized && (
         <div className="fixed left-4 top-4 z-50">
           <button
@@ -824,7 +958,7 @@ function XiangqiGame() {
           <p className="text-center text-sm text-zinc-500">
             {hasInitialized
               ? "Cập nhật tên hiển thị của bạn."
-              : `Vui lòng nhập tên của bạn để ${roomParam ? "bắt đầu trận cờ tướng" : "tạo phòng"}.`}
+              : `Vui lòng nhập tên của bạn để ${roomParam ? "bắt đầu trận cờ vua" : "tạo phòng"}.`}
           </p>
           <input
             type="text"
@@ -888,15 +1022,15 @@ function XiangqiGame() {
       <div className="grid w-full max-w-full flex-1 grid-cols-1 place-items-center gap-8 px-2 md:px-8 xl:grid-cols-[300px_auto_300px]">
         <div className="mb-8 flex w-full max-w-md flex-col items-center text-center xl:mb-0 xl:items-start xl:justify-self-start xl:pl-8 xl:text-left">
           <h1 className="mb-2 text-3xl font-light tracking-tight text-zinc-900 font-[family-name:var(--font-playfair)]">
-            Cờ Tướng (Xiangqi)
+            Cờ Vua (Chess)
           </h1>
 
           {!showNameModal && (
             <>
               {player2Name ? (
                 <p className="text-sm text-zinc-500">
-                  <span className="font-semibold text-red-600">
-                    {player1Name} (Đỏ)
+                  <span className="font-semibold text-zinc-800">
+                    {player1Name} (Trắng)
                   </span>{" "}
                   vs{" "}
                   <span className="font-semibold text-zinc-800">
@@ -933,11 +1067,11 @@ function XiangqiGame() {
                   {gameStarted ? (
                     <div className="w-full space-y-4 text-left xl:text-left text-center">
                       <div
-                        className={`rounded-lg border-2 p-3 transition-colors ${isRedTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
+                        className={`rounded-lg border-2 p-3 transition-colors ${isWhiteTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
                       >
                         <div className="flex justify-between items-baseline">
-                          <span className="font-semibold text-red-600">
-                            {player1Name} (Đỏ)
+                          <span className="font-semibold text-zinc-800">
+                            {player1Name} (Trắng)
                           </span>
                           <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
                             {formatTime(player1Time)}
@@ -945,7 +1079,7 @@ function XiangqiGame() {
                         </div>
                       </div>
                       <div
-                        className={`rounded-lg border-2 p-3 transition-colors ${!isRedTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
+                        className={`rounded-lg border-2 p-3 transition-colors ${!isWhiteTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
                       >
                         <div className="flex justify-between items-baseline">
                           <span className="font-semibold text-zinc-800">
@@ -958,9 +1092,11 @@ function XiangqiGame() {
                       </div>
                       <div className="pt-2 text-center xl:text-left">
                         <p className="text-sm font-medium text-zinc-800">
-                          {winner
-                            ? `🎉 Chiến thắng: ${winner === "r" ? player1Name : player2Name}!`
-                            : `Lượt đi: ${isRedTurn ? "Đỏ" : "Đen"}`}
+                          {winner === "Draw"
+                            ? "🤝 Hòa cờ!"
+                            : winner
+                              ? `🎉 Chiến thắng: ${winner === "W" ? player1Name : player2Name}!`
+                              : `Lượt đi: ${isWhiteTurn ? "Trắng" : "Đen"}`}
                         </p>
                       </div>
                     </div>
@@ -1008,183 +1144,121 @@ function XiangqiGame() {
         </div>
 
         <div className="flex w-full flex-col items-center pb-8">
-          {(isRedInCheck || isBlackInCheck) && !winner && (
+          {(isWhiteInCheck || isBlackInCheck) && !winner && (
             <h2 className="mb-4 animate-bounce text-2xl font-bold text-red-600 drop-shadow-md">
               ⚠️ CHIẾU TƯỚNG!
             </h2>
           )}
           <div
-            className={`bg-[#E6C697] p-2 sm:p-6 rounded shadow-2xl border-4 border-[#8B5A2B] transition-opacity ${!gameStarted || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
+            className={`transition-opacity ${!gameStarted || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
           >
-            <div className="relative aspect-[9/10] w-[95vw] md:h-[85vh] md:w-auto">
-              {/* Vẽ bàn cờ bằng SVG lưới sắc nét */}
-              <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-                {Array.from({ length: 10 }).map((_, r) => (
-                  <line
-                    key={`h${r}`}
-                    x1={X(0)}
-                    y1={Y(r)}
-                    x2={X(8)}
-                    y2={Y(r)}
-                    stroke="#5C4033"
-                    strokeWidth="2"
-                  />
+            <div className="relative pl-5 pb-5 sm:pl-6 sm:pb-6">
+              {/* Tọa độ hàng dọc (1-8) */}
+              <div className="absolute top-0 bottom-5 sm:bottom-6 left-0 flex w-5 sm:w-6 flex-col text-xs sm:text-sm font-bold text-zinc-500 select-none">
+                {(isPlayer2
+                  ? [1, 2, 3, 4, 5, 6, 7, 8]
+                  : [8, 7, 6, 5, 4, 3, 2, 1]
+                ).map((n) => (
+                  <div
+                    key={n}
+                    className="flex flex-1 items-center justify-center"
+                  >
+                    {n}
+                  </div>
                 ))}
-                {Array.from({ length: 9 }).map((_, c) => (
-                  <g key={`v${c}`}>
-                    <line
-                      x1={X(c)}
-                      y1={Y(0)}
-                      x2={X(c)}
-                      y2={Y(4)}
-                      stroke="#5C4033"
-                      strokeWidth="2"
-                    />
-                    <line
-                      x1={X(c)}
-                      y1={Y(5)}
-                      x2={X(c)}
-                      y2={Y(9)}
-                      stroke="#5C4033"
-                      strokeWidth="2"
-                    />
-                  </g>
+              </div>
+
+              {/* Tọa độ hàng ngang (A-H) */}
+              <div className="absolute bottom-0 left-5 sm:left-6 right-0 flex h-5 sm:h-6 text-xs sm:text-sm font-bold text-zinc-500 select-none">
+                {(isPlayer2
+                  ? ["H", "G", "F", "E", "D", "C", "B", "A"]
+                  : ["A", "B", "C", "D", "E", "F", "G", "H"]
+                ).map((l) => (
+                  <div
+                    key={l}
+                    className="flex flex-1 items-center justify-center"
+                  >
+                    {l}
+                  </div>
                 ))}
-                <line
-                  x1={X(0)}
-                  y1={Y(4)}
-                  x2={X(0)}
-                  y2={Y(5)}
-                  stroke="#5C4033"
-                  strokeWidth="2"
-                />
-                <line
-                  x1={X(8)}
-                  y1={Y(4)}
-                  x2={X(8)}
-                  y2={Y(5)}
-                  stroke="#5C4033"
-                  strokeWidth="2"
-                />
+              </div>
 
-                <line
-                  x1={X(3)}
-                  y1={Y(0)}
-                  x2={X(5)}
-                  y2={Y(2)}
-                  stroke="#5C4033"
-                  strokeWidth="2"
-                />
-                <line
-                  x1={X(5)}
-                  y1={Y(0)}
-                  x2={X(3)}
-                  y2={Y(2)}
-                  stroke="#5C4033"
-                  strokeWidth="2"
-                />
-                <line
-                  x1={X(3)}
-                  y1={Y(7)}
-                  x2={X(5)}
-                  y2={Y(9)}
-                  stroke="#5C4033"
-                  strokeWidth="2"
-                />
-                <line
-                  x1={X(5)}
-                  y1={Y(7)}
-                  x2={X(3)}
-                  y2={Y(9)}
-                  stroke="#5C4033"
-                  strokeWidth="2"
-                />
-
-                <text
-                  x="25%"
-                  y="50%"
-                  dominantBaseline="middle"
-                  textAnchor="middle"
-                  fill="#5C4033"
-                  className="text-xl sm:text-2xl md:text-3xl font-[family-name:var(--font-playfair)] tracking-[0.5em]"
-                >
-                  楚河
-                </text>
-                <text
-                  x="75%"
-                  y="50%"
-                  dominantBaseline="middle"
-                  textAnchor="middle"
-                  fill="#5C4033"
-                  className="text-xl sm:text-2xl md:text-3xl font-[family-name:var(--font-playfair)] tracking-[0.5em]"
-                >
-                  漢界
-                </text>
-              </svg>
-
-              {/* Khung giao diện chứa các quân cờ */}
-              <div className="relative z-10 grid grid-cols-9 grid-rows-10 w-full h-full">
+              <div className="grid grid-cols-8 grid-rows-8 w-[88vw] md:w-[70vh] md:max-w-[720px] aspect-square border-4 border-[#8B5A2B] shadow-2xl">
                 {(() => {
                   const shouldFlip = isPlayer2;
                   return (shouldFlip ? [...board].reverse() : board).map(
                     (row, mappedR) => {
-                      const r = shouldFlip ? 9 - mappedR : mappedR;
+                      const r = shouldFlip ? 7 - mappedR : mappedR;
                       return (shouldFlip ? [...row].reverse() : row).map(
                         (piece, mappedC) => {
-                          const c = shouldFlip ? 8 - mappedC : mappedC;
+                          const c = shouldFlip ? 7 - mappedC : mappedC;
+
+                          const isLight = (r + c) % 2 === 0;
+                          const bgClass = isLight
+                            ? "bg-[#F0D9B5]"
+                            : "bg-[#B58863]";
+
                           const isSelected =
                             selectedPos?.[0] === r && selectedPos?.[1] === c;
                           const isLastMove =
                             (lastMove?.from[0] === r &&
                               lastMove?.from[1] === c) ||
                             (lastMove?.to[0] === r && lastMove?.to[1] === c);
-                          const canMoveTo =
+                          const isValidTarget =
                             selectedPos &&
                             !piece &&
-                            isValidMove(
+                            isLegalMove(
                               board,
                               selectedPos[0],
                               selectedPos[1],
                               r,
                               c,
-                              isRedTurn ? "r" : "b",
+                              enPassantTarget,
+                              isWhiteTurn,
+                              castlingRights,
                             );
                           const canCapture =
                             selectedPos &&
                             piece &&
-                            isValidMove(
+                            isLegalMove(
                               board,
                               selectedPos[0],
                               selectedPos[1],
                               r,
                               c,
-                              isRedTurn ? "r" : "b",
+                              enPassantTarget,
+                              isWhiteTurn,
+                              castlingRights,
                             );
 
                           return (
                             <div
                               key={`${r}-${c}`}
-                              className="relative w-full h-full flex items-center justify-center cursor-pointer"
+                              className={`relative w-full h-full flex items-center justify-center cursor-pointer ${bgClass}`}
                               onClick={() => handleCellClick(r, c)}
                             >
-                              {piece && (
-                                <div
-                                  className={`
-                            relative z-20 flex items-center justify-center 
-                            w-[85%] h-[85%] rounded-full bg-[#FFE6B3] 
-                            border-2 ${isLastMove ? "border-blue-400" : "border-[#8B5A2B]"} 
-                            shadow-[1px_2px_4px_rgba(0,0,0,0.5)] 
-                            font-bold text-2xl sm:text-3xl md:text-4xl leading-none font-[family-name:var(--font-playfair)]
-                            ${piecesMap[piece].color}
-                            ${isSelected ? "ring-4 ring-blue-500 bg-blue-100" : ""}
-                            ${canCapture ? "ring-4 ring-red-500/70" : ""}
-                          `}
-                                >
-                                  {piecesMap[piece].text}
-                                </div>
+                              {/* Highlight moves */}
+                              {isSelected && (
+                                <div className="absolute inset-0 bg-blue-400/50 z-10" />
                               )}
-                              {!piece && canMoveTo && (
-                                <div className="w-3 h-3 bg-red-500/60 rounded-full z-20" />
+                              {isLastMove && !isSelected && (
+                                <div className="absolute inset-0 bg-yellow-400/40 z-10" />
+                              )}
+                              {isValidTarget && (
+                                <div className="w-[30%] h-[30%] bg-black/20 rounded-full z-20" />
+                              )}
+                              {canCapture && (
+                                <div className="absolute inset-0 border-[6px] border-black/20 rounded-full z-20 scale-90" />
+                              )}
+
+                              {/* Piece */}
+                              {piece && (
+                                <img
+                                  src={PIECE_IMAGES[piece]}
+                                  alt={piece}
+                                  draggable={false}
+                                  className="relative z-30 w-[80%] h-[80%] select-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]"
+                                />
                               )}
                             </div>
                           );
@@ -1227,16 +1301,16 @@ function XiangqiGame() {
   );
 }
 
-export default function XiangqiPage() {
+export default function ChessPage() {
   return (
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center font-medium text-zinc-500">
-          Đang tải bàn cờ Tướng...
+          Đang tải bàn cờ Vua...
         </div>
       }
     >
-      <XiangqiGame />
+      <ChessGame />
     </Suspense>
   );
 }
