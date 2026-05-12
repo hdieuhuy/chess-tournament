@@ -17,11 +17,11 @@ export default function LandingPage() {
         </p>
 
         {/* Danh sách Game */}
-        <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
+        <div className="mt-12 flex flex-wrap justify-center gap-6">
           {/* Cờ Caro */}
           <Link
             href="/gomoku"
-            className="group flex flex-col items-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
+            className="w-full sm:w-[calc(50%-12px)] md:w-[calc(33.333%-16px)] group flex flex-col items-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
           >
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-50 text-2xl transition-colors group-hover:bg-zinc-100">
               <span className="font-bold text-green-600">X</span>
@@ -34,7 +34,7 @@ export default function LandingPage() {
           {/* Cờ Vua */}
           <Link
             href="/chess"
-            className="group flex flex-col items-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
+            className="w-full sm:w-[calc(50%-12px)] md:w-[calc(33.333%-16px)] group flex flex-col items-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
           >
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-50 text-3xl transition-colors group-hover:bg-zinc-100">
               ♚
@@ -46,7 +46,7 @@ export default function LandingPage() {
           {/* Cờ Tướng */}
           <Link
             href="/xiangqi"
-            className="group flex flex-col items-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
+            className="w-full sm:w-[calc(50%-12px)] md:w-[calc(33.333%-16px)] group flex flex-col items-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
           >
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-50 text-3xl font-bold text-red-600 transition-colors group-hover:bg-zinc-100">
               帥
@@ -55,10 +55,21 @@ export default function LandingPage() {
             <p className="mt-2 text-sm text-zinc-500">Xiangqi</p>
           </Link>
 
+          {/* Cờ Vây */}
+          <Link
+            href="/go"
+            className="w-full sm:w-[calc(50%-12px)] md:w-[calc(33.333%-16px)] group flex flex-col items-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
+          >
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-50 text-3xl transition-colors group-hover:bg-zinc-100">
+              ⚫⚪
+            </div>
+            <h3 className="text-lg font-medium text-zinc-900">Cờ Vây</h3>
+            <p className="mt-2 text-sm text-zinc-500">Go</p>
+          </Link>
           {/* Bắn Thuyền */}
           <Link
             href="/battleship"
-            className="group flex flex-col items-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
+            className="w-full sm:w-[calc(50%-12px)] md:w-[calc(33.333%-16px)] group flex flex-col items-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
           >
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-50 text-3xl transition-colors group-hover:bg-zinc-100">
               🚢
