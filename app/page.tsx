@@ -54,6 +54,18 @@ export default function LandingPage() {
             <h3 className="text-lg font-medium text-zinc-900">Cờ Tướng</h3>
             <p className="mt-2 text-sm text-zinc-500">Xiangqi</p>
           </Link>
+
+          {/* Bắn Thuyền */}
+          <Link
+            href="/battleship"
+            className="group flex flex-col items-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md"
+          >
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-50 text-3xl transition-colors group-hover:bg-zinc-100">
+              🚢
+            </div>
+            <h3 className="text-lg font-medium text-zinc-900">Bắn Thuyền</h3>
+            <p className="mt-2 text-sm text-zinc-500">Battleship</p>
+          </Link>
         </div>
       </div>
     </main>
