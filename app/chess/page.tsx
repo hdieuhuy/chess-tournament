@@ -1021,7 +1021,7 @@ function ChessGame() {
 
       <div className="grid w-full max-w-full flex-1 grid-cols-1 place-items-center gap-8 px-2 md:px-8 xl:grid-cols-[300px_auto_300px]">
         <div className="mb-8 flex w-full max-w-md flex-col items-center text-center xl:mb-0 xl:items-start xl:justify-self-start xl:pl-8 xl:text-left">
-          <h1 className="mb-2 text-3xl font-light tracking-tight text-zinc-900 font-[family-name:var(--font-playfair)]">
+          <h1 className="mb-2 text-3xl font-light tracking-tight text-zinc-900">
             Cờ Vua (Chess)
           </h1>
 
