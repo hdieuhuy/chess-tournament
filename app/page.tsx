@@ -98,7 +98,7 @@ export default function LandingPage() {
           © {new Date().getFullYear()} BoardGame Portal. All rights reserved.
         </p>
         <p className="mt-1">
-          Được xây dựng với{" "}
+          Được xây dựng bởi{" "}
           <span className="font-medium text-zinc-800">Diệu Huy ( CoeS )</span>.
         </p>
       </footer>
