@@ -878,7 +878,7 @@ function XiangqiGame() {
 
       <div className="grid w-full max-w-full flex-1 grid-cols-1 place-items-center gap-8 px-2 md:px-8 xl:grid-cols-[300px_auto_300px]">
         <div className="mb-8 flex w-full max-w-md flex-col items-center text-center xl:mb-0 xl:items-start xl:justify-self-start xl:pl-8 xl:text-left">
-          <h1 className="mb-2 text-3xl font-light tracking-tight text-zinc-900 font-[family-name:var(--font-playfair)]">
+          <h1 className="mb-2 text-3xl font-light tracking-tight text-zinc-900 font-[family-name:var(--font-fira-sans)]">
             Cờ Tướng (Xiangqi)
           </h1>
 
@@ -1097,7 +1097,7 @@ function XiangqiGame() {
                   dominantBaseline="middle"
                   textAnchor="middle"
                   fill="#5C4033"
-                  className="text-xl sm:text-2xl md:text-3xl font-[family-name:var(--font-playfair)] tracking-[0.5em]"
+                  className="text-xl sm:text-2xl md:text-3xl font-[family-name:var(--font-fira-sans)] tracking-[0.5em]"
                 >
                   楚河
                 </text>
@@ -1107,7 +1107,7 @@ function XiangqiGame() {
                   dominantBaseline="middle"
                   textAnchor="middle"
                   fill="#5C4033"
-                  className="text-xl sm:text-2xl md:text-3xl font-[family-name:var(--font-playfair)] tracking-[0.5em]"
+                  className="text-xl sm:text-2xl md:text-3xl font-[family-name:var(--font-fira-sans)] tracking-[0.5em]"
                 >
                   漢界
                 </text>
@@ -1165,7 +1165,7 @@ function XiangqiGame() {
                             w-[85%] h-[85%] rounded-full bg-[#FFE6B3] 
                             border-2 ${isLastMove ? "border-blue-400" : "border-[#8B5A2B]"} 
                             shadow-[1px_2px_4px_rgba(0,0,0,0.5)] 
-                            font-bold text-2xl sm:text-3xl md:text-4xl leading-none font-[family-name:var(--font-playfair)]
+                            font-bold text-2xl sm:text-3xl md:text-4xl leading-none font-[family-name:var(--font-fira-sans)]
                             ${piecesMap[piece].color}
                             ${isSelected ? "ring-4 ring-blue-500 bg-blue-100" : ""}
                             ${canCapture ? "ring-4 ring-red-500/70" : ""}

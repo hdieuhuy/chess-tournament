@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Modal } from "@/components/Modal";
 
 const GAMES = [
@@ -121,7 +122,17 @@ export default function HomePage() {
 
       <div className="w-full max-w-5xl flex flex-col items-center space-y-12">
         <div className="text-center space-y-4 mt-8">
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-zinc-900 font-[family-name:var(--font-playfair)]">
+          <div className="flex justify-center mb-2">
+            <Image
+              src="/logo.png"
+              alt="BoardGame Portal Logo"
+              width={100}
+              height={100}
+              className="object-contain"
+              priority
+            />
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-zinc-900 font-[family-name:var(--font-fira-sans)]">
             BoardGame Portal
           </h1>
           <p className="text-zinc-500 text-base md:text-lg max-w-2xl mx-auto">

@@ -97,7 +97,7 @@ function WerewolfGame() {
       <div className="w-full max-w-[1400px] flex flex-col lg:grid lg:grid-cols-2 lg:gap-6 space-y-6 lg:space-y-0 items-start">
         {/* Cột trái: Thông tin hiển thị & Các nút chức năng */}
         <div className="flex flex-col space-y-6 w-full">
-          <h1 className="text-3xl font-light tracking-tight text-zinc-900 font-[family-name:var(--font-playfair)] text-left">
+          <h1 className="text-3xl font-light tracking-tight text-zinc-900 font-[family-name:var(--font-fira-sans)] text-left">
             Ma Sói (Werewolf)
           </h1>
           {!state.showNameModal && (
