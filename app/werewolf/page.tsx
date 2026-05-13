@@ -1011,11 +1011,15 @@ function WerewolfGame() {
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
-    if (phase === "night" && hostName === playerName && gameStarted) {
+    if (phase === "night" && gameStarted) {
       if (nightTimeLeft > 0) {
         timerRef.current = setTimeout(() => {
           setNightTimeLeft((prev) => prev - 1);
-          if (channel && (nightTimeLeft - 1) % 5 === 0) {
+          if (
+            hostName === playerName &&
+            channel &&
+            (nightTimeLeft - 1) % 5 === 0
+          ) {
             channel.send({
               type: "broadcast",
               event: "sync-time",
@@ -1023,7 +1027,7 @@ function WerewolfGame() {
             });
           }
         }, 1000);
-      } else if (nightTimeLeft === 0) {
+      } else if (nightTimeLeft === 0 && hostName === playerName) {
         advanceNightPhase();
       }
     }
@@ -1042,11 +1046,15 @@ function WerewolfGame() {
 
   const dayTimerRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
-    if (phase === "day" && hostName === playerName && gameStarted && dayPhase) {
+    if (phase === "day" && gameStarted && dayPhase) {
       if (dayTimeLeft > 0) {
         dayTimerRef.current = setTimeout(() => {
           setDayTimeLeft((prev) => prev - 1);
-          if (channel && (dayTimeLeft - 1) % 5 === 0) {
+          if (
+            hostName === playerName &&
+            channel &&
+            (dayTimeLeft - 1) % 5 === 0
+          ) {
             channel.send({
               type: "broadcast",
               event: "sync-day-time",
@@ -1054,7 +1062,7 @@ function WerewolfGame() {
             });
           }
         }, 1000);
-      } else if (dayTimeLeft === 0) {
+      } else if (dayTimeLeft === 0 && hostName === playerName) {
         advanceDayPhase();
       }
     }
@@ -2432,7 +2440,7 @@ function WerewolfGame() {
                             >
                               {p}
                               {votesForP.length > 0 && (
-                                <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs text-white">
+                                <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-purple-500 text-xs text-white">
                                   {votesForP.length}
                                 </span>
                               )}
@@ -2477,7 +2485,7 @@ function WerewolfGame() {
 
                 {dayPhase === "defense" && (
                   <div className="w-full text-center">
-                    <p className="mb-2 text-lg font-bold text-red-600">
+                    <p className="mb-2 text-lg font-bold text-purple-600">
                       {accusedPlayer} đang bị đưa lên giàn treo cổ!
                     </p>
                     <p className="mb-4 text-sm text-amber-800">
@@ -2500,7 +2508,7 @@ function WerewolfGame() {
 
                 {dayPhase === "execution" && (
                   <div className="w-full">
-                    <p className="mb-2 text-center text-lg font-bold text-red-600">
+                    <p className="mb-2 text-center text-lg font-bold text-purple-600">
                       Quyết định số phận của {accusedPlayer}:
                     </p>
                     <div className="text-2xl text-center font-mono font-bold text-amber-900 mb-4">
@@ -2523,7 +2531,7 @@ function WerewolfGame() {
                                 payload: { playerName, vote: "kill" },
                               });
                           }}
-                          className={`w-full py-3 cursor-pointer rounded-lg font-bold transition-colors ${executionVotes[playerName] === "kill" ? "bg-red-600 text-white" : "bg-white border border-red-200 text-red-700 hover:bg-red-50"}`}
+                          className={`w-full py-3 cursor-pointer rounded-lg font-bold transition-colors ${executionVotes[playerName] === "kill" ? "bg-purple-500 text-white" : "bg-white border border-purple-200 text-purple-700 hover:bg-purple-50"}`}
                         >
                           Treo cổ 💀
                         </button>
