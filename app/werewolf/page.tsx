@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
 import { useState, useEffect, useRef, Suspense, useCallback } from "react";
@@ -29,6 +31,13 @@ type ActionLog = {
   content: string;
 };
 
+type ChatMessage = {
+  id: string;
+  playerName: string;
+  message: string;
+  timestamp: number;
+};
+
 const RoleIcon = ({ id, className }: { id?: string; className?: string }) => {
   switch (id) {
     case "werewolf":
@@ -45,6 +54,25 @@ const RoleIcon = ({ id, className }: { id?: string; className?: string }) => {
       return <GiMusket className={className} />;
     default:
       return null;
+  }
+};
+
+const getRoleColor = (id?: string) => {
+  switch (id) {
+    case "werewolf":
+      return "text-red-600";
+    case "villager":
+      return "text-emerald-600";
+    case "seer":
+      return "text-purple-600";
+    case "bodyguard":
+      return "text-blue-600";
+    case "witch":
+      return "text-fuchsia-600";
+    case "hunter":
+      return "text-orange-600";
+    default:
+      return "text-zinc-500";
   }
 };
 
@@ -120,7 +148,6 @@ function WerewolfGame() {
     poison: string | null;
   }>({ heal: false, poison: null });
 
-  const [witchStep, setWitchStep] = useState<"heal" | "poison">("heal");
   const [deadThisNight, setDeadThisNight] = useState<string[]>([]);
 
   const [nightSelection, setNightSelection] = useState<string | null>(null);
@@ -130,6 +157,10 @@ function WerewolfGame() {
     isWolf: boolean;
   } | null>(null);
   const [actionLogs, setActionLogs] = useState<ActionLog[]>([]);
+  const [activeLogTab, setActiveLogTab] = useState<"night" | "day">("night");
+
+  const [wolfChat, setWolfChat] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState<string>("");
 
   const [hasInitialized, setHasInitialized] = useState<boolean>(false);
   const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
@@ -186,6 +217,7 @@ function WerewolfGame() {
     nightTimeLeft,
     confirmedPlayers,
     actionLogs,
+    wolfChat,
   });
   useEffect(() => {
     stateRef.current = {
@@ -209,6 +241,7 @@ function WerewolfGame() {
       nightTimeLeft,
       confirmedPlayers,
       actionLogs,
+      wolfChat,
     };
   }, [
     hostName,
@@ -231,6 +264,7 @@ function WerewolfGame() {
     nightTimeLeft,
     confirmedPlayers,
     actionLogs,
+    wolfChat,
   ]);
 
   useEffect(() => {
@@ -286,6 +320,7 @@ function WerewolfGame() {
               nightTimeLeft: state.nightTimeLeft,
               confirmedPlayers: state.confirmedPlayers,
               actionLogs: state.actionLogs,
+              wolfChat: state.wolfChat,
             },
           });
         }
@@ -314,6 +349,7 @@ function WerewolfGame() {
           setNightTimeLeft(data.nightTimeLeft);
         if (data.confirmedPlayers) setConfirmedPlayers(data.confirmedPlayers);
         if (data.actionLogs) setActionLogs(data.actionLogs);
+        if (data.wolfChat) setWolfChat(data.wolfChat);
       })
       .on("broadcast", { event: "game-start" }, (payload) => {
         const data = payload.payload;
@@ -333,11 +369,11 @@ function WerewolfGame() {
         setNightSelection(null);
         setActionConfirmed(false);
         setSeerResult(null);
-        setWitchStep("heal");
         setNightPhase(null);
         setNightTimeLeft(0);
         setConfirmedPlayers([]);
         setActionLogs([]);
+        setWolfChat([]);
       })
       .on("broadcast", { event: "reset-game" }, () => {
         setGameStarted(false);
@@ -354,12 +390,12 @@ function WerewolfGame() {
         setWolfVictim(null);
         setHunterTarget(null);
         setWitchAction({ heal: false, poison: null });
-        setWitchStep("heal");
         setDeadThisNight([]);
         setNightPhase(null);
         setNightTimeLeft(0);
         setConfirmedPlayers([]);
         setActionLogs([]);
+        setWolfChat([]);
       })
       .on("broadcast", { event: "add-log" }, (payload) => {
         setActionLogs((prev) => [...prev, payload.payload.log]);
@@ -392,7 +428,6 @@ function WerewolfGame() {
         setWolfVotes({});
         setWolfVictim(null);
         setWitchAction({ heal: false, poison: null });
-        setWitchStep("heal");
       })
       .on("broadcast", { event: "night-phase-change" }, (payload) => {
         setNightPhase(payload.payload.nightPhase);
@@ -401,7 +436,6 @@ function WerewolfGame() {
         setNightSelection(null);
         setActionConfirmed(false);
         setSeerResult(null);
-        setWitchStep("heal");
       })
       .on("broadcast", { event: "sync-time" }, (payload) => {
         setNightTimeLeft(payload.payload.nightTimeLeft);
@@ -422,6 +456,9 @@ function WerewolfGame() {
         const { role, target } = payload.payload;
         if (role === "bodyguard") setLastProtected(target);
         if (role === "hunter") setHunterTarget(target);
+      })
+      .on("broadcast", { event: "wolf-chat" }, (payload) => {
+        setWolfChat((prev) => [payload.payload.message, ...prev]);
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -534,7 +571,6 @@ function WerewolfGame() {
     setWolfVotes({});
     setWolfVictim(null);
     setWitchAction({ heal: false, poison: null });
-    setWitchStep("heal");
 
     if (channel) {
       channel.send({
@@ -564,13 +600,14 @@ function WerewolfGame() {
     );
 
     if (nextNightPhase) {
+      const timeLimit =
+        nextNightPhase === "hunter" && state.dayCount > 1 ? 15 : 120;
       setNightPhase(nextNightPhase);
-      setNightTimeLeft(120);
+      setNightTimeLeft(timeLimit);
       setConfirmedPlayers([]);
       setNightSelection(null);
       setActionConfirmed(false);
       setSeerResult(null);
-      setWitchStep("heal");
 
       if (channel) {
         channel.send({
@@ -578,7 +615,7 @@ function WerewolfGame() {
           event: "night-phase-change",
           payload: {
             nightPhase: nextNightPhase,
-            nightTimeLeft: 120,
+            nightTimeLeft: timeLimit,
             confirmedPlayers: [],
           },
         });
@@ -753,12 +790,12 @@ function WerewolfGame() {
       setWolfVictim(null);
       setHunterTarget(null);
       setWitchAction({ heal: false, poison: null });
-      setWitchStep("heal");
       setDeadThisNight([]);
       setNightPhase(null);
       setNightTimeLeft(0);
       setConfirmedPlayers([]);
       setActionLogs([]);
+      setWolfChat([]);
 
       channel.send({
         type: "broadcast",
@@ -779,6 +816,7 @@ function WerewolfGame() {
           nightTimeLeft: 0,
           confirmedPlayers: [],
           actionLogs: [],
+          wolfChat: [],
         },
       });
     }
@@ -800,12 +838,12 @@ function WerewolfGame() {
       setWolfVictim(null);
       setHunterTarget(null);
       setWitchAction({ heal: false, poison: null });
-      setWitchStep("heal");
       setDeadThisNight([]);
       setNightPhase(null);
       setNightTimeLeft(0);
       setConfirmedPlayers([]);
       setActionLogs([]);
+      setWolfChat([]);
 
       channel.send({
         type: "broadcast",
@@ -826,10 +864,12 @@ function WerewolfGame() {
         );
 
         if (firstNightPhase) {
+          const timeLimit =
+            firstNightPhase === "hunter" && nextDay > 1 ? 15 : 120;
           setPhase("night");
           setDayCount(nextDay);
           setNightPhase(firstNightPhase);
-          setNightTimeLeft(120);
+          setNightTimeLeft(timeLimit);
           setConfirmedPlayers([]);
           setNightSelection(null);
           setActionConfirmed(false);
@@ -837,7 +877,6 @@ function WerewolfGame() {
           setWolfVotes({});
           setWolfVictim(null);
           setWitchAction({ heal: false, poison: null });
-          setWitchStep("heal");
 
           channel.send({
             type: "broadcast",
@@ -846,7 +885,7 @@ function WerewolfGame() {
               phase: "night",
               dayCount: nextDay,
               nightPhase: firstNightPhase,
-              nightTimeLeft: 120,
+              nightTimeLeft: timeLimit,
               confirmedPlayers: [],
             },
           });
@@ -857,27 +896,40 @@ function WerewolfGame() {
     }
   };
 
-  const confirmNightAction = () => {
-    if (!nightSelection) return;
+  const confirmNightAction = (overrideTarget?: any) => {
+    let target = nightSelection;
+    if (overrideTarget === null || typeof overrideTarget === "string") {
+      target = overrideTarget;
+    }
+
+    if (!target && playerRoles[playerName]?.id !== "hunter") return;
+
     setActionConfirmed(true);
+    setConfirmedPlayers((prev) => [...new Set([...prev, playerName])]);
 
     const myRole = playerRoles[playerName];
     if (!myRole) return;
 
-    if (myRole?.id === "seer") {
-      const isWolf = playerRoles[nightSelection]?.id === "werewolf";
-      setSeerResult({ name: nightSelection, isWolf });
+    if (myRole?.id === "seer" && target) {
+      const isWolf = playerRoles[target]?.id === "werewolf";
+      setSeerResult({ name: target, isWolf });
+    }
+    if (myRole?.id === "bodyguard") {
+      setLastProtected(target as string | null);
+    }
+    if (myRole?.id === "hunter") {
+      setHunterTarget(target as string | null);
     }
 
     if (channel) {
       let content = "";
       if (myRole?.id === "seer") {
-        const isWolf = playerRoles[nightSelection]?.id === "werewolf";
-        content = `Bạn đã soi ${nightSelection} ${isWolf ? "LÀ SÓI" : "KHÔNG PHẢI là sói"}`;
+        const isWolf = playerRoles[target as string]?.id === "werewolf";
+        content = `Bạn đã soi ${target} ${isWolf ? "LÀ SÓI" : "KHÔNG PHẢI là sói"}`;
       } else if (myRole?.id === "bodyguard") {
-        content = `Bạn đã bảo vệ ${nightSelection}`;
+        content = `Bạn đã bảo vệ ${target}`;
       } else if (myRole?.id === "hunter") {
-        content = `Bạn đã ghim mục tiêu ${nightSelection}`;
+        content = `Bạn đã ghim mục tiêu ${target || "Không có ai"}`;
       }
 
       if (content) {
@@ -899,7 +951,7 @@ function WerewolfGame() {
       channel.send({
         type: "broadcast",
         event: "night-action",
-        payload: { role: myRole?.id, target: nightSelection, playerName },
+        payload: { role: myRole?.id, target: target, playerName },
       });
       channel.send({
         type: "broadcast",
@@ -909,17 +961,16 @@ function WerewolfGame() {
     }
   };
 
-  const confirmWitchAction = (poisonTarget: string | null) => {
+  const confirmWitchAction = () => {
     setActionConfirmed(true);
-    const finalAction = { ...witchAction, poison: poisonTarget };
-    setWitchAction(finalAction);
+    setConfirmedPlayers((prev) => [...new Set([...prev, playerName])]);
 
     let content = "";
-    if (finalAction.heal)
+    if (witchAction.heal)
       content += `Bạn đã dùng bình cứu lên ${wolfVictim === "none" ? "Không ai" : wolfVictim}. `;
-    if (finalAction.poison)
-      content += `Bạn đã ném bình độc vào ${finalAction.poison}.`;
-    if (!finalAction.heal && !finalAction.poison)
+    if (witchAction.poison)
+      content += `Bạn đã ném bình độc vào ${witchAction.poison}.`;
+    if (!witchAction.heal && !witchAction.poison)
       content += "Bạn đã không dùng bình nào.";
 
     const newLog: ActionLog = {
@@ -940,7 +991,7 @@ function WerewolfGame() {
       channel.send({
         type: "broadcast",
         event: "witch-action",
-        payload: { action: finalAction, playerName },
+        payload: { action: witchAction, playerName },
       });
       channel.send({
         type: "broadcast",
@@ -986,6 +1037,11 @@ function WerewolfGame() {
     logsByNight[log.dayCount].push(log);
   });
 
+  useEffect(() => {
+    if (phase === "night") setActiveLogTab("night");
+    if (phase === "day" || phase === "role_reveal") setActiveLogTab("day");
+  }, [phase]);
+
   if (isCheckingStorage) {
     return (
       <div className="flex min-h-screen items-center justify-center font-medium text-zinc-500">
@@ -995,7 +1051,11 @@ function WerewolfGame() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center bg-zinc-50 px-4 py-12 md:justify-center">
+    <main
+      className={`flex min-h-screen flex-col items-center px-4 py-12 md:justify-center transition-colors duration-1000 ${
+        phase === "night" && gameStarted ? "bg-slate-900" : "bg-zinc-50"
+      }`}
+    >
       {hasInitialized && (
         <div className="fixed left-4 top-4 z-50">
           <button
@@ -1071,12 +1131,24 @@ function WerewolfGame() {
       >
         {/* Left Column: Title & Actions */}
         <div className="flex flex-col items-center text-center md:items-start md:text-left">
-          <h1 className="mb-2 text-4xl font-light tracking-tight text-zinc-900">
+          <h1
+            className={`mb-2 text-4xl font-light tracking-tight transition-colors duration-1000 ${
+              phase === "night" && gameStarted
+                ? "text-zinc-100"
+                : "text-zinc-900"
+            }`}
+          >
             Ma Sói <span className="font-semibold">(Werewolf)</span>
           </h1>
-          <p className="mb-6 text-sm leading-relaxed text-zinc-500">
-            Trò chơi ẩn vai trò, suy luận và lừa gạt. Cần tối thiểu 5 người chơi
-            để bắt đầu cuộc chiến giữa Dân Làng và Ma Sói.
+          <p
+            className={`mb-6 text-sm leading-relaxed transition-colors duration-1000 ${
+              phase === "night" && gameStarted
+                ? "text-slate-400"
+                : "text-zinc-500"
+            }`}
+          >
+            Trò chơi ẩn vai trò, suy luận và lừa gạt. Hãy để bắt đầu cuộc chiến
+            giữa Dân Làng và Ma Sói.
           </p>
 
           {!showNameModal && (
@@ -1202,7 +1274,7 @@ function WerewolfGame() {
                       <div className="flex items-center space-x-2">
                         <RoleIcon
                           id={role.id}
-                          className="text-xl text-indigo-900"
+                          className={`text-xl ${getRoleColor(role.id)}`}
                         />
                         <span className="text-sm font-medium text-zinc-700">
                           {role.name}
@@ -1306,7 +1378,9 @@ function WerewolfGame() {
                         {p}
                       </span>
                       {gameStarted && role && canSeeRole && (
-                        <span className="mt-1 flex items-center justify-center space-x-1 text-xs font-bold text-zinc-500">
+                        <span
+                          className={`mt-1 flex items-center justify-center space-x-1 text-xs font-bold ${getRoleColor(role.id)}`}
+                        >
                           <RoleIcon id={role.id} className="text-sm" />
                           <span>{role.name}</span>
                         </span>
@@ -1508,6 +1582,9 @@ function WerewolfGame() {
                             <button
                               onClick={() => {
                                 setActionConfirmed(true);
+                                setConfirmedPlayers((prev) => [
+                                  ...new Set([...prev, playerName]),
+                                ]);
 
                                 const newLog: ActionLog = {
                                   id: Math.random()
@@ -1535,10 +1612,28 @@ function WerewolfGame() {
                                   });
                                 }
                               }}
-                              disabled={!wolfVotes[playerName]}
+                              disabled={
+                                !wolfVotes[playerName] ||
+                                alivePlayers
+                                  .filter(
+                                    (w) => playerRoles[w]?.id === "werewolf",
+                                  )
+                                  .some(
+                                    (w) =>
+                                      wolfVotes[w] !== wolfVotes[playerName],
+                                  )
+                              }
                               className="w-full rounded-lg bg-red-700 px-4 py-3 text-sm font-bold text-white hover:bg-red-800 disabled:opacity-50"
                             >
-                              Xác nhận vote
+                              {alivePlayers
+                                .filter(
+                                  (w) => playerRoles[w]?.id === "werewolf",
+                                )
+                                .some(
+                                  (w) => wolfVotes[w] !== wolfVotes[playerName],
+                                )
+                                ? "Chờ đồng bọn thống nhất"
+                                : "Xác nhận vote"}
                             </button>
                           </>
                         )}
@@ -1611,108 +1706,106 @@ function WerewolfGame() {
                               Bạn đã hoàn tất hành động đêm nay!
                             </p>
                           </div>
-                        ) : witchStep === "heal" ? (
-                          <>
-                            <p className="text-xs text-indigo-800">
-                              Đêm nay,{" "}
-                              <span className="font-bold text-red-600">
-                                {wolfVictim === "none"
-                                  ? "không có ai"
-                                  : wolfVictim || "ai đó"}
-                              </span>{" "}
-                              bị Sói cắn.
-                            </p>
-                            <p className="text-xs text-indigo-800">
-                              Bạn còn {witchPotions.heal} bình máu. Bạn có muốn
-                              dùng để cứu không?
-                            </p>
-                            <div className="grid grid-cols-2 gap-2">
-                              <button
-                                onClick={() =>
-                                  setWitchAction((prev) => ({
-                                    ...prev,
-                                    heal: true,
-                                  }))
-                                }
-                                disabled={
-                                  witchPotions.heal <= 0 ||
-                                  !wolfVictim ||
-                                  wolfVictim === "none"
-                                }
-                                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                                  witchAction.heal
-                                    ? "border-green-600 bg-green-600 text-white"
-                                    : "border-green-200 bg-white text-green-900 hover:bg-green-100"
-                                }`}
-                              >
-                                Cứu
-                              </button>
-                              <button
-                                onClick={() =>
-                                  setWitchAction((prev) => ({
-                                    ...prev,
-                                    heal: false,
-                                  }))
-                                }
-                                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                                  !witchAction.heal
-                                    ? "border-zinc-600 bg-zinc-600 text-white"
-                                    : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-100"
-                                }`}
-                              >
-                                Bỏ qua
-                              </button>
-                            </div>
-                            <button
-                              onClick={() => setWitchStep("poison")}
-                              className="w-full rounded-lg bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800"
-                            >
-                              Tiếp theo (Bình độc)
-                            </button>
-                          </>
                         ) : (
                           <>
-                            <p className="text-xs text-indigo-800">
-                              Bạn còn {witchPotions.poison} bình độc. Bạn có
-                              muốn đầu độc ai không?
-                            </p>
-                            <div className="grid grid-cols-2 gap-2">
-                              {alivePlayers
-                                .filter((p) => p !== playerName)
-                                .map((p) => (
+                            <div className="rounded-lg bg-indigo-100 p-3 text-center">
+                              <p className="text-sm font-medium text-indigo-900">
+                                Đêm nay, Sói đã cắn:{" "}
+                                <span className="font-bold text-red-600">
+                                  {wolfVictim === "none" || !wolfVictim
+                                    ? "Không ai"
+                                    : wolfVictim}
+                                </span>
+                              </p>
+                            </div>
+
+                            <div className="flex flex-col space-y-3">
+                              {/* BÌNH MÁU */}
+                              <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                                <div className="mb-2 flex items-center justify-between">
+                                  <span className="text-sm font-bold text-green-800">
+                                    🧪 Bình Máu (còn {witchPotions.heal})
+                                  </span>
                                   <button
-                                    key={p}
-                                    onClick={() => setNightSelection(p)}
-                                    disabled={witchPotions.poison <= 0}
-                                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                                      nightSelection === p
-                                        ? "border-purple-600 bg-purple-600 text-white"
-                                        : "border-purple-200 bg-white text-purple-900 hover:bg-purple-100"
+                                    onClick={() =>
+                                      setWitchAction((prev) => ({
+                                        ...prev,
+                                        heal: !prev.heal,
+                                      }))
+                                    }
+                                    disabled={
+                                      witchPotions.heal <= 0 ||
+                                      !wolfVictim ||
+                                      wolfVictim === "none"
+                                    }
+                                    className={`cursor-pointer rounded-md px-3 py-1 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                                      witchAction.heal
+                                        ? "border border-green-600 bg-green-600 text-white"
+                                        : "border border-green-300 bg-white text-green-700 hover:bg-green-100"
                                     }`}
                                   >
-                                    {p}
+                                    {witchAction.heal
+                                      ? "Đang sử dụng"
+                                      : "Sử dụng"}
                                   </button>
-                                ))}
-                              <button
-                                onClick={() => setNightSelection("none")}
-                                className={`col-span-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                                  nightSelection === "none" || !nightSelection
-                                    ? "border-zinc-600 bg-zinc-600 text-white"
-                                    : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-100"
-                                }`}
-                              >
-                                Không dùng
-                              </button>
+                                </div>
+                                <p className="text-xs text-green-700">
+                                  Dùng để cứu người bị Sói cắn.
+                                </p>
+                              </div>
+
+                              {/* BÌNH ĐỘC */}
+                              <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
+                                <div className="mb-2 flex items-center justify-between">
+                                  <span className="text-sm font-bold text-purple-800">
+                                    ☠️ Bình Độc (còn {witchPotions.poison})
+                                  </span>
+                                  {witchAction.poison && (
+                                    <button
+                                      onClick={() =>
+                                        setWitchAction((prev) => ({
+                                          ...prev,
+                                          poison: null,
+                                        }))
+                                      }
+                                      className="cursor-pointer rounded-md border border-purple-300 bg-white px-3 py-1 text-xs font-bold text-purple-700 hover:bg-purple-100"
+                                    >
+                                      Hủy dùng
+                                    </button>
+                                  )}
+                                </div>
+                                <p className="mb-2 text-xs text-purple-700">
+                                  Dùng để giết 1 người bất kỳ.
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {alivePlayers
+                                    .filter((p) => p !== playerName)
+                                    .map((p) => (
+                                      <button
+                                        key={p}
+                                        onClick={() =>
+                                          setWitchAction((prev) => ({
+                                            ...prev,
+                                            poison: p,
+                                          }))
+                                        }
+                                        disabled={witchPotions.poison <= 0}
+                                        className={`cursor-pointer rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                                          witchAction.poison === p
+                                            ? "border-purple-600 bg-purple-600 text-white"
+                                            : "border-purple-200 bg-white text-purple-900 hover:bg-purple-100"
+                                        }`}
+                                      >
+                                        {p}
+                                      </button>
+                                    ))}
+                                </div>
+                              </div>
                             </div>
+
                             <button
-                              onClick={() =>
-                                confirmWitchAction(
-                                  nightSelection === "none"
-                                    ? null
-                                    : nightSelection,
-                                )
-                              }
-                              className="w-full rounded-lg bg-purple-700 px-4 py-3 text-sm font-bold text-white hover:bg-purple-800"
+                              onClick={confirmWitchAction}
+                              className="w-full cursor-pointer rounded-lg bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800"
                             >
                               Xác nhận hành động
                             </button>
@@ -1730,7 +1823,7 @@ function WerewolfGame() {
                               <GiMusket className="mr-1 inline text-orange-700" />
                               Bạn đã ghim:
                               <span className="ml-1 font-bold">
-                                {hunterTarget}
+                                {hunterTarget || "Không có ai"}
                               </span>
                             </p>
                           </div>
@@ -1740,6 +1833,12 @@ function WerewolfGame() {
                               Chọn 1 người để ghim. Nếu đêm nay bạn chết, người
                               này sẽ chết theo.
                             </p>
+
+                            {dayCount > 1 && (
+                              <p className="text-sm font-bold text-orange-700">
+                                Mục tiêu đang ghim: {hunterTarget || "Chưa có"}
+                              </p>
+                            )}
 
                             <div className="grid grid-cols-2 gap-2">
                               {alivePlayers
@@ -1759,13 +1858,25 @@ function WerewolfGame() {
                                 ))}
                             </div>
 
-                            <button
-                              onClick={confirmNightAction}
-                              disabled={!nightSelection}
-                              className="w-full rounded-lg bg-orange-700 px-4 py-3 text-sm font-bold text-white hover:bg-orange-800 disabled:opacity-50"
-                            >
-                              Xác nhận ghim
-                            </button>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={confirmNightAction}
+                                disabled={!nightSelection}
+                                className="w-full rounded-lg bg-orange-700 px-4 py-3 text-sm font-bold text-white hover:bg-orange-800 disabled:opacity-50"
+                              >
+                                Xác nhận ghim mới
+                              </button>
+                              {dayCount > 1 && (
+                                <button
+                                  onClick={() =>
+                                    confirmNightAction(hunterTarget)
+                                  }
+                                  className="w-full rounded-lg bg-zinc-600 px-4 py-3 text-sm font-bold text-white hover:bg-zinc-700"
+                                >
+                                  Bỏ qua
+                                </button>
+                              )}
+                            </div>
                           </>
                         )}
                       </div>
@@ -1776,15 +1887,31 @@ function WerewolfGame() {
             )}
 
             {/* Action Log Area */}
-            <div className="flex h-[200px] flex-col rounded-xl border border-zinc-200 bg-white shadow-sm">
-              <div className="flex items-center justify-between rounded-t-xl border-b border-zinc-100 bg-zinc-50 p-3">
-                <h3 className="flex items-center text-sm font-bold text-zinc-800">
-                  📜 Nhật ký hành động
-                </h3>
+            <div className="flex h-[300px] flex-col rounded-xl border border-zinc-200 bg-white shadow-sm">
+              <div className="flex flex-col rounded-t-xl border-b border-zinc-100 bg-zinc-50">
+                <div className="p-3">
+                  <h3 className="flex items-center text-sm font-bold text-zinc-800">
+                    📜 Nhật ký hành động
+                  </h3>
+                </div>
+                <div className="flex">
+                  <button
+                    onClick={() => setActiveLogTab("night")}
+                    className={`flex-1 border-b-2 py-2 text-sm font-bold text-center transition-colors ${activeLogTab === "night" ? "border-indigo-600 bg-indigo-50/50 text-indigo-700" : "border-transparent text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"}`}
+                  >
+                    <FaMoon className="mb-1 mr-2 inline" /> Ban Đêm
+                  </button>
+                  <button
+                    onClick={() => setActiveLogTab("day")}
+                    className={`flex-1 border-b-2 py-2 text-sm font-bold text-center transition-colors ${activeLogTab === "day" ? "border-amber-500 bg-amber-50/50 text-amber-600" : "border-transparent text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"}`}
+                  >
+                    <FaSun className="mb-1 mr-2 inline" /> Ban Ngày
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 space-y-2 overflow-y-auto rounded-b-xl bg-white p-4">
-                {actionLogs.length === 0 && (
+                {actionLogs.length === 0 && activeLogTab === "day" && (
                   <div className="text-center">
                     <span className="rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-medium text-zinc-500">
                       Hệ thống: Trò chơi bắt đầu! Hãy kiểm tra thẻ bài của bạn.
@@ -1793,52 +1920,159 @@ function WerewolfGame() {
                 )}
 
                 {Object.entries(logsByNight).map(
-                  ([dayStr, logs]: [string, ActionLog[]]) => (
-                    <div key={dayStr} className="mb-4 space-y-2">
-                      <h4 className="border-b border-zinc-100 pb-1 text-sm font-bold text-zinc-800">
-                        Đêm {dayStr}:
-                      </h4>
+                  ([dayStr, logs]: [string, ActionLog[]]) => {
+                    const nightLogs = logs.filter((l) => l.roleId !== "system");
+                    const dayLogs = logs.filter((l) => l.roleId === "system");
 
-                      {logs.map((log: ActionLog) => (
-                        <div key={log.id} className="text-sm text-zinc-600">
-                          {log.roleId === "system" ? (
-                            <div className="my-2 text-center">
-                              <span className="rounded-full bg-zinc-100 px-3 py-1 text-[11px] font-medium text-zinc-500">
-                                {log.content}
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="ml-2">
-                              {log.roleId === "werewolf" &&
-                              log.playerName !== playerName ? (
-                                <span className="block text-xs font-semibold text-red-600">
-                                  ({playerRoles[log.playerName]?.name} -{" "}
-                                  {log.playerName})
-                                </span>
-                              ) : (
-                                <span className="block text-xs font-semibold text-indigo-600">
-                                  (
-                                  {
-                                    defaultRoles.find(
-                                      (r) => r.id === log.roleId,
-                                    )?.name
-                                  }
-                                  )
-                                </span>
-                              )}
+                    if (activeLogTab === "night" && nightLogs.length === 0)
+                      return null;
+                    if (activeLogTab === "day" && dayLogs.length === 0)
+                      return null;
 
-                              <p className="ml-2 text-xs font-medium">
-                                - {log.content}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ),
+                    return (
+                      <div key={dayStr} className="mb-6 space-y-4">
+                        {/* ĐÊM */}
+                        {activeLogTab === "night" && nightLogs.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="flex items-center border-b border-zinc-100 pb-1 text-sm font-bold text-indigo-900">
+                              <FaMoon className="mr-2 text-indigo-600" />
+                              Đêm {dayStr}
+                            </h4>
+                            {nightLogs.map((log: ActionLog) => (
+                              <div
+                                key={log.id}
+                                className="ml-2 text-sm text-zinc-600"
+                              >
+                                {log.roleId === "werewolf" &&
+                                log.playerName !== playerName ? (
+                                  <span className="block text-xs font-semibold text-red-600">
+                                    ({playerRoles[log.playerName]?.name} -{" "}
+                                    {log.playerName})
+                                  </span>
+                                ) : (
+                                  <span className="block text-xs font-semibold text-indigo-600">
+                                    (
+                                    {
+                                      defaultRoles.find(
+                                        (r) => r.id === log.roleId,
+                                      )?.name
+                                    }
+                                    )
+                                  </span>
+                                )}
+                                <p className="ml-2 text-xs font-medium">
+                                  - {log.content}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* NGÀY */}
+                        {activeLogTab === "day" && dayLogs.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="flex items-center border-b border-zinc-100 pb-1 text-sm font-bold text-amber-600">
+                              <FaSun className="mr-2 text-amber-500" />
+                              Ngày {dayStr}
+                            </h4>
+                            {dayLogs.map((log: ActionLog) => (
+                              <div key={log.id} className="my-2 text-center">
+                                <span className="inline-block rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-700">
+                                  {log.content}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  },
                 )}
               </div>
             </div>
+
+            {/* Wolf Chat Area */}
+            {playerRoles[playerName]?.id === "werewolf" && (
+              <div className="flex h-[250px] flex-col rounded-xl border border-red-200 bg-red-50 shadow-sm">
+                <div className="flex items-center rounded-t-xl border-b border-red-200 bg-red-100 p-3">
+                  <GiWolfHead className="mr-2 text-red-700" />
+                  <h3 className="text-sm font-bold text-red-900">
+                    Kênh chat nội bộ Sói
+                  </h3>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse gap-2">
+                  {wolfChat.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${msg.playerName === playerName ? "items-end" : "items-start"}`}
+                    >
+                      <span className="mb-0.5 text-[10px] font-bold text-red-600/70">
+                        {msg.playerName}
+                      </span>
+                      <div
+                        className={`rounded-lg px-3 py-1.5 text-sm ${
+                          msg.playerName === playerName
+                            ? "bg-red-600 text-white"
+                            : "bg-white text-red-900 border border-red-200"
+                        }`}
+                      >
+                        {msg.message}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-b-xl border-t border-red-200 bg-white p-2">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (
+                        !chatInput.trim() ||
+                        !alivePlayers.includes(playerName)
+                      )
+                        return;
+                      const newMsg: ChatMessage = {
+                        id: Math.random().toString(36).substring(2, 9),
+                        playerName,
+                        message: chatInput.trim(),
+                        timestamp: Date.now(),
+                      };
+                      setWolfChat((prev) => [newMsg, ...prev]);
+                      setChatInput("");
+                      if (channel) {
+                        channel.send({
+                          type: "broadcast",
+                          event: "wolf-chat",
+                          payload: { message: newMsg },
+                        });
+                      }
+                    }}
+                    className="flex gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder={
+                        alivePlayers.includes(playerName)
+                          ? "Nhắn tin cho đồng bọn..."
+                          : "Bạn đã chết, không thể chat."
+                      }
+                      disabled={!alivePlayers.includes(playerName)}
+                      className="flex-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50"
+                    />
+                    <button
+                      type="submit"
+                      disabled={
+                        !alivePlayers.includes(playerName) || !chatInput.trim()
+                      }
+                      className="cursor-pointer rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      Gửi
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
