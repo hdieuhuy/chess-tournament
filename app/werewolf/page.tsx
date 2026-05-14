@@ -25,7 +25,7 @@ import {
   GiBowieKnife,
 } from "react-icons/gi";
 import { RoleConfig, ActionLog, ChatMessage } from "./types";
-import { defaultRoles, RoleIcon } from "./utils";
+import { defaultRoles, RoleIcon, getRoleColor } from "./utils";
 import PlayerGrid from "./PlayerGrid";
 import PrivateChat from "./WolfChat";
 import RoleConfigPanel from "./RoleConfigPanel";
@@ -44,7 +44,6 @@ const getNextNightPhase = (
     "seer",
     "witch",
     "cupid",
-    "headhunter",
     "hunter",
   ];
   const startIndex = currentPhase
@@ -52,9 +51,6 @@ const getNextNightPhase = (
     : 0;
   for (let i = startIndex; i < nightPhaseOrder.length; i++) {
     const role = nightPhaseOrder[i];
-    if (role === "headhunter" && dayCount > 1) {
-      continue;
-    }
     if (role === "cupid" && dayCount > 1) {
       continue;
     }
@@ -843,82 +839,6 @@ const HunterNightUI = ({
   );
 };
 
-const HeadhunterNightUI = ({
-  gameState,
-  dispatch,
-  playerName,
-  executeAction,
-}: RoleUIProps) => {
-  const {
-    alivePlayers,
-    dayCount,
-    headhunterTarget,
-    nightSelection,
-    actionConfirmed,
-  } = gameState;
-  if (actionConfirmed) {
-    return (
-      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
-        <p className="text-sm font-medium text-cyan-700">
-          <GiBullseye className="mr-1 inline text-cyan-700" />
-          Bạn đã chốt mục tiêu săn thưởng:
-          <span className="ml-1 font-bold">
-            {headhunterTarget || nightSelection}
-          </span>
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-4 w-full mt-2">
-      <p className="text-sm font-medium text-indigo-300">
-        Chọn 1 người làm mục tiêu. Nếu người này bị làng biểu quyết treo cổ, bạn
-        sẽ giành chiến thắng!
-      </p>
-      <div className="grid grid-cols-2 gap-3 w-full">
-        {alivePlayers
-          .filter((p) => p !== playerName)
-          .map((p) => (
-            <button
-              key={p}
-              onClick={() =>
-                dispatch({ type: "UPDATE", payload: { nightSelection: p } })
-              }
-              className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                nightSelection === p
-                  ? "border-cyan-600 bg-cyan-600 text-white"
-                  : "border-cyan-800 bg-slate-700 text-cyan-300 hover:bg-cyan-900/50"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-      </div>
-      <button
-        onClick={() => {
-          executeAction(
-            `Bạn đã chọn mục tiêu săn thưởng là ${nightSelection}`,
-            { headhunterTarget: nightSelection as string },
-            {
-              name: "night-action",
-              payload: {
-                role: "headhunter",
-                target: nightSelection,
-                playerName,
-              },
-            },
-          );
-        }}
-        disabled={!nightSelection}
-        className="w-full cursor-pointer rounded-lg bg-cyan-700 px-4 py-3 text-sm font-bold text-white hover:bg-cyan-800 disabled:opacity-50"
-      >
-        Xác nhận mục tiêu
-      </button>
-    </div>
-  );
-};
-
 const AssassinNightUI = ({
   gameState,
   dispatch,
@@ -1074,7 +994,6 @@ const CupidNightUI = ({
 };
 
 const ROLE_STRATEGIES: Record<string, React.FC<RoleUIProps>> = {
-  headhunter: HeadhunterNightUI,
   bodyguard: BodyguardNightUI,
   werewolf: WerewolfNightUI,
   cursed_wolf: CursedWolfNightUI,
@@ -1142,6 +1061,9 @@ function WerewolfGame() {
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const [showNameModal, setShowNameModal] = useState<boolean>(true);
   const [linkCopied, setLinkCopied] = useState<boolean>(false);
+  const [showGameSummaryModal, setShowGameSummaryModal] =
+    useState<boolean>(false);
+  const [summaryTab, setSummaryTab] = useState<"night" | "day">("night");
   const [activeLogTab, setActiveLogTab] = useState<"night" | "day">("night");
   const [hasInitialized, setHasInitialized] = useState<boolean>(false);
   const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
@@ -1794,6 +1716,22 @@ function WerewolfGame() {
         content = `Làng đã biểu quyết treo cổ ${executedPlayer}, nhưng với quyền năng của Trưởng Làng, người này vẫn còn sống!`;
       }
 
+      const execVoteDetails = Object.entries(state.executionVotes)
+        .map(
+          ([voter, vote]) =>
+            `${voter} ➔ ${vote === "kill" ? "Treo cổ" : "Tha bổng"}`,
+        )
+        .join(", ");
+      const execVoteLog: ActionLog = {
+        id: Math.random().toString(36).substring(2, 9),
+        dayCount: state.dayCount,
+        roleId: "system",
+        playerName: "system",
+        content: execVoteDetails
+          ? `Chi tiết phiếu sinh tử: ${execVoteDetails}`
+          : "Không có ai tham gia phiếu sinh tử.",
+      };
+
       const sysLog: ActionLog = {
         id: Math.random().toString(36).substring(2, 9),
         dayCount: state.dayCount,
@@ -1802,7 +1740,7 @@ function WerewolfGame() {
         content,
       };
 
-      const newLogs = [...state.actionLogs, sysLog];
+      const newLogs = [...state.actionLogs, execVoteLog, sysLog];
 
       if (newWinner) {
         const endLog: ActionLog = {
@@ -1887,6 +1825,22 @@ function WerewolfGame() {
         }
       });
 
+      const voteDetails = Object.entries(state.dayVotes)
+        .map(
+          ([voter, target]) =>
+            `${voter} ➔ ${target === "skip" ? "Bỏ qua" : target}`,
+        )
+        .join(", ");
+      const voteLog: ActionLog = {
+        id: Math.random().toString(36).substring(2, 9),
+        dayCount: state.dayCount,
+        roleId: "system",
+        playerName: "system",
+        content: voteDetails
+          ? `Chi tiết biểu quyết: ${voteDetails}`
+          : "Không có ai tham gia biểu quyết.",
+      };
+
       let maxVotes = 0;
       let accused: string | null = null;
       let tie = false;
@@ -1909,7 +1863,7 @@ function WerewolfGame() {
           playerName: "system",
           content: `${accused} có nhiều phiếu nhất (${maxVotes} phiếu) và đang bị đưa lên giàn treo cổ để biện hộ.`,
         };
-        const newLogs = [...state.actionLogs, sysLog];
+        const newLogs = [...state.actionLogs, voteLog, sysLog];
 
         dispatch({
           type: "UPDATE",
@@ -1944,7 +1898,7 @@ function WerewolfGame() {
               ? `Bầu cử hòa (${maxVotes} phiếu). Làng quyết định không treo cổ ai hôm nay.`
               : `Làng quyết định không treo cổ ai hôm nay.`,
         };
-        const newLogs = [...state.actionLogs, sysLog];
+        const newLogs = [...state.actionLogs, voteLog, sysLog];
 
         dispatch({
           type: "UPDATE",
@@ -1992,6 +1946,22 @@ function WerewolfGame() {
       if (killVotes > saveVotes && state.accusedPlayer) {
         executeDayExecution(state.accusedPlayer);
       } else {
+        const execVoteDetails = Object.entries(state.executionVotes)
+          .map(
+            ([voter, vote]) =>
+              `${voter} ➔ ${vote === "kill" ? "Treo cổ" : "Tha bổng"}`,
+          )
+          .join(", ");
+        const execVoteLog: ActionLog = {
+          id: Math.random().toString(36).substring(2, 9),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content: execVoteDetails
+            ? `Chi tiết phiếu sinh tử: ${execVoteDetails}`
+            : "Không có ai tham gia phiếu sinh tử.",
+        };
+
         const sysLog: ActionLog = {
           id: Math.random().toString(36).substring(2, 9),
           dayCount: state.dayCount,
@@ -1999,7 +1969,7 @@ function WerewolfGame() {
           playerName: "system",
           content: `${state.accusedPlayer} đã được tha bổng với ${saveVotes} phiếu cứu / ${killVotes} phiếu treo cổ.`,
         };
-        const newLogs = [...state.actionLogs, sysLog];
+        const newLogs = [...state.actionLogs, execVoteLog, sysLog];
 
         dispatch({
           type: "UPDATE",
@@ -2487,6 +2457,49 @@ function WerewolfGame() {
         }
       });
 
+      let initialHeadhunterTarget: string | null = null;
+      const headhunterPlayer = players.find(
+        (p) => newPlayerRoles[p]?.id === "headhunter",
+      );
+      if (headhunterPlayer) {
+        const villagers = players.filter((p) => {
+          const rId = newPlayerRoles[p]?.id;
+          const wolves = [
+            "werewolf",
+            "half_wolf",
+            "white_wolf",
+            "cursed_wolf",
+            "fog_wolf",
+          ];
+          const thirdParties = [
+            "fool",
+            "headhunter",
+            "assassin",
+            "thief",
+            "tanner",
+          ];
+          return (
+            !wolves.includes(rId as string) &&
+            !thirdParties.includes(rId as string)
+          );
+        });
+        if (villagers.length > 0) {
+          initialHeadhunterTarget =
+            villagers[Math.floor(Math.random() * villagers.length)];
+        }
+      }
+
+      const initialLogs: ActionLog[] = [];
+      if (headhunterPlayer && initialHeadhunterTarget) {
+        initialLogs.push({
+          id: Math.random().toString(36).substring(2, 9),
+          dayCount: 1,
+          roleId: "headhunter",
+          playerName: headhunterPlayer,
+          content: `Hệ thống đã chọn ${initialHeadhunterTarget} làm mục tiêu săn thưởng của bạn. Hãy tìm cách để Làng treo cổ người này!`,
+        });
+      }
+
       dispatch({
         type: "UPDATE",
         payload: {
@@ -2513,7 +2526,7 @@ function WerewolfGame() {
           nightPhase: null,
           nightTimeLeft: 0,
           confirmedPlayers: [],
-          actionLogs: [],
+          actionLogs: initialLogs,
           wolfChat: [],
           loversChat: [],
           winner: null,
@@ -2521,7 +2534,7 @@ function WerewolfGame() {
           cursedWolfUsed: false,
           infectedPlayer: null,
           fogWolfUsed: false,
-          headhunterTarget: null,
+          headhunterTarget: initialHeadhunterTarget,
           assassinTarget: null,
           cupidTargets: null,
         },
@@ -2545,7 +2558,7 @@ function WerewolfGame() {
           nightPhase: null,
           nightTimeLeft: 0,
           confirmedPlayers: [],
-          actionLogs: [],
+          actionLogs: initialLogs,
           wolfChat: [],
           loversChat: [],
           winner: null,
@@ -2558,7 +2571,7 @@ function WerewolfGame() {
           cursedWolfUsed: false,
           infectedPlayer: null,
           fogWolfUsed: false,
-          headhunterTarget: null,
+          headhunterTarget: initialHeadhunterTarget,
           assassinTarget: null,
           cupidTargets: null,
         },
@@ -2827,6 +2840,243 @@ function WerewolfGame() {
         </form>
       </Modal>
 
+      <Modal
+        isOpen={showGameSummaryModal}
+        title="Trạng thái phòng & Lịch sử"
+        styleClassWrapper={"max-w-full"}
+      >
+        <div className="flex w-full flex-col space-y-6 lg:min-w-[850px] xl:min-w-[950px]">
+          <div className="max-h-[70vh] overflow-y-auto pr-2 space-y-8">
+            <div>
+              <h3 className="font-bold text-xl mb-4 text-zinc-800 border-b pb-2">
+                Vai trò người chơi
+              </h3>
+              {(() => {
+                const getPlayerFaction = (roleId?: string) => {
+                  if (!roleId) return "villager";
+                  const wolves = [
+                    "werewolf",
+                    "half_wolf",
+                    "white_wolf",
+                    "cursed_wolf",
+                    "fog_wolf",
+                  ];
+                  const thirdParties = [
+                    "fool",
+                    "headhunter",
+                    "assassin",
+                    "thief",
+                    "tanner",
+                  ];
+                  if (wolves.includes(roleId)) return "wolf";
+                  if (thirdParties.includes(roleId)) return "third_party";
+                  return "villager";
+                };
+
+                const groupedPlayers = {
+                  villager: [] as string[],
+                  wolf: [] as string[],
+                  third_party: [] as string[],
+                };
+
+                players.forEach((p) => {
+                  const r = playerRoles[p];
+                  groupedPlayers[getPlayerFaction(r?.id)].push(p);
+                });
+
+                const renderPlayerCard = (p: string) => {
+                  const r = playerRoles[p];
+                  return (
+                    <div
+                      key={p}
+                      className="text-sm bg-white p-2 rounded-lg border border-zinc-200 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow"
+                    >
+                      {r ? (
+                        <RoleIcon
+                          id={r.id}
+                          className={`text-2xl mb-1 ${getRoleColor(r.id)}`}
+                        />
+                      ) : (
+                        <FaUser className="text-2xl mb-1 text-zinc-300" />
+                      )}
+                      <span className="font-semibold text-zinc-800 truncate w-full text-xs">
+                        {p}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold ${r ? getRoleColor(r.id) : "text-zinc-500"}`}
+                      >
+                        {r?.name || "Chưa rõ"}
+                      </span>
+                    </div>
+                  );
+                };
+
+                return (
+                  <div className="grid grid-cols-3 gap-3">
+                    {/* Phe Dân Làng */}
+                    <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 flex flex-col">
+                      <h4 className="font-bold text-emerald-700 mb-3 text-left uppercase tracking-wider text-sm flex items-center">
+                        🌾 Phe Dân Làng
+                      </h4>
+                      <div className="grid grid-cols-5 gap-3">
+                        {groupedPlayers.villager.length === 0 ? (
+                          <p className="text-sm text-emerald-500 py-2 col-span-full">
+                            Không có
+                          </p>
+                        ) : (
+                          groupedPlayers.villager.map(renderPlayerCard)
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Phe Sói */}
+                    <div className="bg-red-50/50 p-4 rounded-xl border border-red-100 flex flex-col">
+                      <h4 className="font-bold text-red-700 mb-3 text-left uppercase tracking-wider text-sm flex items-center">
+                        🐺 Phe Sói
+                      </h4>
+                      <div className="grid grid-cols-5 gap-3">
+                        {groupedPlayers.wolf.length === 0 ? (
+                          <p className="text-sm text-red-400 py-2 col-span-full">
+                            Không có
+                          </p>
+                        ) : (
+                          groupedPlayers.wolf.map(renderPlayerCard)
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Phe Thứ Ba */}
+                    <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-100 flex flex-col">
+                      <h4 className="font-bold text-purple-700 mb-3 text-left uppercase tracking-wider text-sm flex items-center">
+                        🎭 Phe Thứ Ba
+                      </h4>
+                      <div className="grid grid-cols-5 gap-3">
+                        {groupedPlayers.third_party.length === 0 ? (
+                          <p className="text-sm text-purple-400 py-2 col-span-full">
+                            Không có
+                          </p>
+                        ) : (
+                          groupedPlayers.third_party.map(renderPlayerCard)
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div>
+              <h3 className="font-bold text-xl mb-4 text-zinc-800 border-b pb-2">
+                Lịch sử hành động
+              </h3>
+              <div className="flex mb-4 border-b border-zinc-200">
+                <button
+                  onClick={() => setSummaryTab("night")}
+                  className={`flex-1 py-2 text-sm font-bold text-center border-b-2 transition-colors ${
+                    summaryTab === "night"
+                      ? "border-indigo-600 text-indigo-600"
+                      : "border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300"
+                  }`}
+                >
+                  <FaMoon className="inline mr-2 mb-1" /> Ban Đêm
+                </button>
+                <button
+                  onClick={() => setSummaryTab("day")}
+                  className={`flex-1 py-2 text-sm font-bold text-center border-b-2 transition-colors ${
+                    summaryTab === "day"
+                      ? "border-amber-500 text-amber-600"
+                      : "border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300"
+                  }`}
+                >
+                  <FaSun className="inline mr-2 mb-1" /> Ban Ngày
+                </button>
+              </div>
+              <div className="space-y-3">
+                {(() => {
+                  const filteredLogs = actionLogs.filter((log) =>
+                    summaryTab === "night"
+                      ? log.roleId !== "system"
+                      : log.roleId === "system",
+                  );
+                  if (filteredLogs.length === 0) {
+                    return (
+                      <p className="text-sm text-zinc-500">Không có lịch sử.</p>
+                    );
+                  }
+
+                  const groupedLogs = filteredLogs.reduce(
+                    (acc, log) => {
+                      if (!acc[log.dayCount]) acc[log.dayCount] = [];
+                      acc[log.dayCount].push(log);
+                      return acc;
+                    },
+                    {} as Record<number, ActionLog[]>,
+                  );
+
+                  return Object.keys(groupedLogs)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map((dayKey) => {
+                      const dayNum = Number(dayKey);
+                      const logsForDay = groupedLogs[dayNum];
+                      return (
+                        <div key={dayNum} className="mb-4 last:mb-0">
+                          <h4
+                            className={`flex items-center text-sm font-bold mb-2 border-b pb-1 ${summaryTab === "night" ? "border-indigo-100 text-indigo-600" : "border-amber-100 text-amber-600"}`}
+                          >
+                            {summaryTab === "night" ? (
+                              <FaMoon className="mr-2" />
+                            ) : (
+                              <FaSun className="mr-2" />
+                            )}
+                            {summaryTab === "night"
+                              ? `Đêm ${dayNum}`
+                              : `Ngày ${dayNum}`}
+                          </h4>
+                          <div className="space-y-2">
+                            {logsForDay.map((log) => {
+                              const roleName =
+                                log.roleId === "system"
+                                  ? "Quản trò"
+                                  : defaultRoles.find(
+                                      (r) => r.id === log.roleId,
+                                    )?.name || log.roleId;
+                              const isSystem = log.roleId === "system";
+                              return (
+                                <div
+                                  key={log.id}
+                                  className="text-sm bg-zinc-50 p-3 rounded-lg border border-zinc-100"
+                                >
+                                  <span
+                                    className={`font-semibold ${isSystem ? "text-amber-600" : "text-indigo-600"}`}
+                                  >
+                                    {roleName}{" "}
+                                    {log.playerName !== "system"
+                                      ? `(${log.playerName})`
+                                      : ""}
+                                  </span>
+                                  <p className="mt-1 text-zinc-700">
+                                    {log.content}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+                })()}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowGameSummaryModal(false)}
+            className="w-full cursor-pointer rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+          >
+            Đóng
+          </button>
+        </div>
+      </Modal>
+
       {/* Main Layout Grid */}
       <div
         className={`grid w-full flex-1 grid-cols-1 gap-8 md:grid-cols-2 ${gameStarted ? "max-w-7xl lg:grid-cols-[320px_1fr_350px]" : "max-w-5xl lg:grid-cols-[400px_1fr]"}`}
@@ -2928,26 +3178,34 @@ function WerewolfGame() {
                     </p>
 
                     {phase === "game_over" && (
-                      <div
-                        className={`w-full mb-4 flex flex-col items-center justify-center py-4 rounded-xl border ${winner === "wolves" ? "bg-red-50 border-red-200 text-red-700" : winner === "lovers" ? "bg-pink-50 border-pink-200 text-pink-700" : winner === "fool" ? "bg-pink-50 border-pink-200 text-pink-700" : winner === "headhunter" ? "bg-cyan-50 border-cyan-200 text-cyan-700" : winner === "assassin" ? "bg-red-950 border-red-900 text-red-900" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}
-                      >
-                        <h3 className="text-lg font-bold mb-1">
-                          Trò chơi kết thúc!
-                        </h3>
-                        <span className="font-bold uppercase tracking-wider">
-                          {winner === "wolves"
-                            ? "Phe Sói thắng!"
-                            : winner === "lovers"
-                              ? "Cặp đôi thắng!"
-                              : winner === "fool"
-                                ? "Kẻ Ngốc thắng!"
-                                : winner === "headhunter"
-                                  ? "Thợ Săn Người thắng!"
-                                  : winner === "assassin"
-                                    ? "Sát Thủ thắng!"
-                                    : "Phe Dân Làng thắng!"}
-                        </span>
-                      </div>
+                      <>
+                        <div
+                          className={`w-full mb-4 flex flex-col items-center justify-center py-4 rounded-xl border ${winner === "wolves" ? "bg-red-50 border-red-200 text-red-700" : winner === "lovers" ? "bg-pink-50 border-pink-200 text-pink-700" : winner === "fool" ? "bg-pink-50 border-pink-200 text-pink-700" : winner === "headhunter" ? "bg-cyan-50 border-cyan-200 text-cyan-700" : winner === "assassin" ? "bg-red-950 border-red-900 text-red-900" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}
+                        >
+                          <h3 className="text-lg font-bold mb-1">
+                            Trò chơi kết thúc!
+                          </h3>
+                          <span className="font-bold uppercase tracking-wider">
+                            {winner === "wolves"
+                              ? "Phe Sói thắng!"
+                              : winner === "lovers"
+                                ? "Cặp đôi thắng!"
+                                : winner === "fool"
+                                  ? "Kẻ Ngốc thắng!"
+                                  : winner === "headhunter"
+                                    ? "Thợ Săn Người thắng!"
+                                    : winner === "assassin"
+                                      ? "Sát Thủ thắng!"
+                                      : "Phe Dân Làng thắng!"}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => setShowGameSummaryModal(true)}
+                          className={`w-full mb-4 cursor-pointer rounded-lg px-4 py-3 text-sm font-medium transition-colors ${isNight ? "bg-slate-700 text-slate-200 hover:bg-slate-600" : "bg-zinc-800 text-white hover:bg-zinc-900"}`}
+                        >
+                          Xem Trạng thái phòng & Lịch sử
+                        </button>
+                      </>
                     )}
 
                     {hostName === playerName ? (
@@ -2983,7 +3241,9 @@ function WerewolfGame() {
                         className={`w-full rounded-lg p-3 text-center text-sm font-medium ${isNight ? "bg-slate-700/50 text-slate-300" : "bg-zinc-100 text-zinc-600"}`}
                       >
                         {gameStarted
-                          ? "Trò chơi đang diễn ra..."
+                          ? phase === "game_over"
+                            ? "Trò chơi đã kết thúc, đang chờ chủ phòng..."
+                            : "Trò chơi đang diễn ra..."
                           : "Đang chờ chủ phòng bắt đầu..."}
                       </div>
                     )}

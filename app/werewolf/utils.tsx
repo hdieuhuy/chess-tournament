@@ -108,7 +108,7 @@ export const getRoleDescription = (id?: string) => {
     case "fool":
       return "Chỉ chiến thắng 1 mình. Không có kỹ năng, nhưng nếu bị làng biểu quyết treo cổ vào ban ngày, Kẻ Ngốc sẽ lập tức giành chiến thắng.";
     case "headhunter":
-      return "Phe thứ 3. Đêm đầu tiên chọn 1 người làm mục tiêu. Nếu mục tiêu bị làng biểu quyết treo cổ và bạn còn sống, bạn giành chiến thắng.";
+      return "Phe thứ 3. Hệ thống sẽ tự động gán ngẫu nhiên 1 người phe Dân làm mục tiêu. Nếu người này bị làng treo cổ và bạn còn sống, bạn giành chiến thắng.";
     case "assassin":
       return "Phe thứ 3. Mỗi đêm được chọn 1 người để giết. Chiến thắng khi làng chỉ còn 2 người (bao gồm cả bạn).";
     case "cupid":

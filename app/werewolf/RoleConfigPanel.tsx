@@ -73,34 +73,55 @@ export default function RoleConfigPanel({
       </div>
 
       {/* Luôn hiển thị giao diện xem (dạng lưới) */}
-      <div className="grid w-full grid-cols-5 gap-2">
-        {roleConfig
-          .filter((role) => role.count > 0)
-          .map((role) => (
-            <div
-              key={role.id}
-              className={`group relative flex flex-col items-center justify-center rounded-lg border p-2 transition-colors ${isNight ? "border-slate-600 bg-slate-700/50 hover:bg-slate-700" : "border-zinc-100 bg-zinc-50 hover:bg-zinc-100"}`}
-            >
-              <RoleIcon
-                id={role.id}
-                className={`mb-1 text-2xl ${getRoleColor(role.id)}`}
-              />
-              <span
-                className={`text-sm font-bold ${isNight ? "text-slate-200" : "text-zinc-800"}`}
-              >
-                {role.count}
-              </span>
+      <div className="flex w-full flex-col space-y-4">
+        {FACTIONS.map((faction) => {
+          const factionRoles = roleConfig.filter(
+            (r) => r.count > 0 && getFaction(r.id) === faction.id,
+          );
+          const factionTotal = factionRoles.reduce(
+            (sum, r) => sum + r.count,
+            0,
+          );
 
-              {/* Tooltip hiển thị khi hover */}
-              <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-40 -translate-x-1/2 rounded bg-zinc-800 px-2 py-1.5 text-center text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-                <p className="mb-0.5 font-bold">{role.name}</p>
-                <p className="text-[10px] leading-tight text-zinc-300">
-                  {getRoleDescription(role.id)}
-                </p>
-                <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+          if (factionRoles.length === 0) return null;
+
+          return (
+            <div key={faction.id} className="flex w-full flex-col">
+              <div
+                className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${isNight ? "text-slate-400" : faction.id === "villager" ? "text-emerald-600" : faction.id === "wolf" ? "text-red-600" : "text-purple-600"}`}
+              >
+                {faction.name} ({factionTotal})
+              </div>
+              <div className="grid w-full grid-cols-5 gap-2">
+                {factionRoles.map((role) => (
+                  <div
+                    key={role.id}
+                    className={`group relative flex flex-col items-center justify-center rounded-lg border p-2 transition-colors ${isNight ? "border-slate-600 bg-slate-700/50 hover:bg-slate-700" : "border-zinc-100 bg-zinc-50 hover:bg-zinc-100"}`}
+                  >
+                    <RoleIcon
+                      id={role.id}
+                      className={`mb-1 text-2xl ${getRoleColor(role.id)}`}
+                    />
+                    <span
+                      className={`text-sm font-bold ${isNight ? "text-slate-200" : "text-zinc-800"}`}
+                    >
+                      {role.count}
+                    </span>
+
+                    {/* Tooltip hiển thị khi hover */}
+                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-40 -translate-x-1/2 rounded bg-zinc-800 px-2 py-1.5 text-center text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
+                      <p className="mb-0.5 font-bold">{role.name}</p>
+                      <p className="text-[10px] leading-tight text-zinc-300">
+                        {getRoleDescription(role.id)}
+                      </p>
+                      <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
+          );
+        })}
       </div>
 
       {hostName === playerName &&
@@ -123,12 +144,16 @@ export default function RoleConfigPanel({
               const factionRoles = roleConfig.filter(
                 (r) => getFaction(r.id) === faction.id,
               );
+              const factionTotal = factionRoles.reduce(
+                (sum, r) => sum + r.count,
+                0,
+              );
               if (factionRoles.length === 0) return null;
 
               return (
                 <div key={faction.id} className="mb-4 last:mb-0">
                   <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
-                    {faction.name}
+                    {faction.name} ({factionTotal})
                   </h4>
                   <div className="flex flex-col space-y-2">
                     {factionRoles.map((role) => (
