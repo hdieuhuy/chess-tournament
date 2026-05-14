@@ -276,8 +276,9 @@ function BattleshipGame() {
           setIsPlayer1Turn(data.isPlayer1Turn);
 
         setWinner(data.winner);
-        if (data.gameStartTime) setGameStartTime(data.gameStartTime);
-        if (data.gameStarted) setGameStarted(data.gameStarted);
+        if (data.gameStartTime !== undefined)
+          setGameStartTime(data.gameStartTime);
+        if (data.gameStarted !== undefined) setGameStarted(data.gameStarted);
         if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
 
         if (playerName === data.player1Name && data.p1Ships?.length === 5) {
@@ -303,6 +304,33 @@ function BattleshipGame() {
           setHasInitialized(false);
           setShowNameModal(true);
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
+        }
+      })
+      .on("broadcast", { event: "kick-player" }, (payload) => {
+        if (payload.payload.playerName === playerName) {
+          alert("Bạn đã bị chủ phòng kích khỏi phòng!");
+          if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
+          router.replace("/");
+        }
+      })
+      .on("broadcast", { event: "request-role-change" }, (payload) => {
+        const { playerName: reqPlayer, newRole } = payload.payload;
+        const state = stateRef.current;
+        if (state.hostName === playerName) {
+          if (newRole === "player" && !state.player2Name) {
+            const newSpecs = state.spectators.filter((s) => s !== reqPlayer);
+            setPlayer2Name(reqPlayer);
+            setSpectators(newSpecs);
+            roomChannel.send({
+              type: "broadcast",
+              event: "room-sync",
+              payload: {
+                ...stateRef.current,
+                player2Name: reqPlayer,
+                spectators: newSpecs,
+              },
+            });
+          }
         }
       })
       .subscribe((status) => {
@@ -658,6 +686,57 @@ function BattleshipGame() {
     }
   };
 
+  const handleKickPlayer = (targetName: string) => {
+    if (playerName !== hostName || !channel) return;
+
+    channel.send({
+      type: "broadcast",
+      event: "kick-player",
+      payload: { playerName: targetName },
+    });
+
+    if (targetName === player2Name) {
+      setPlayer2Name(null);
+      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
+      if (gameStarted) {
+        resetGame();
+      }
+      setTimeout(() => {
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: {
+            ...stateRef.current,
+            player2Name: null,
+            readyPlayers: stateRef.current.readyPlayers.filter(
+              (p) => p !== targetName,
+            ),
+          },
+        });
+      }, 50);
+    } else if (spectators.includes(targetName)) {
+      const newSpecs = spectators.filter((s) => s !== targetName);
+      setSpectators(newSpecs);
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: { ...stateRef.current, spectators: newSpecs },
+      });
+    }
+  };
+
+  const handleBecomePlayer = () => {
+    if (channel && isSpectator && !player2Name) {
+      channel.send({
+        type: "broadcast",
+        event: "request-role-change",
+        payload: { playerName, newRole: "player" },
+      });
+      setRequestedRole("player");
+      if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
       .toString()
@@ -950,8 +1029,8 @@ function BattleshipGame() {
           {!showNameModal && (
             <>
               {player2Name ? (
-                <p className="text-sm text-zinc-500">
-                  Trận đấu:{" "}
+                <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 xl:justify-start justify-center">
+                  <span>Trận đấu:</span>
                   <span className="font-semibold text-blue-600">
                     {player1Name}
                   </span>{" "}
@@ -959,7 +1038,15 @@ function BattleshipGame() {
                   <span className="font-semibold text-red-600">
                     {player2Name}
                   </span>
-                </p>
+                  {playerName === hostName && (
+                    <button
+                      onClick={() => handleKickPlayer(player2Name)}
+                      className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
+                    >
+                      Kick
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div className="mt-4 flex w-full flex-col items-center xl:items-start">
                   <p className="mb-3 text-sm text-zinc-500">
@@ -982,6 +1069,14 @@ function BattleshipGame() {
                       {linkCopied ? "Đã copy!" : "Copy Link"}
                     </button>
                   </div>
+                  {isSpectator && (
+                    <button
+                      onClick={handleBecomePlayer}
+                      className="mt-4 w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+                    >
+                      Tham gia làm người chơi
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1217,13 +1312,26 @@ function BattleshipGame() {
             ) : (
               <ul className="space-y-3">
                 {spectators.map((spec, idx) => (
-                  <li key={idx} className="flex items-center space-x-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-sm font-bold text-zinc-700">
-                      {spec.charAt(0).toUpperCase()}
+                  <li
+                    key={idx}
+                    className="flex items-center justify-between space-x-3"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-sm font-bold text-zinc-700">
+                        {spec.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800">
+                        {spec}
+                      </span>
                     </div>
-                    <span className="text-sm font-medium text-zinc-800">
-                      {spec}
-                    </span>
+                    {playerName === hostName && (
+                      <button
+                        onClick={() => handleKickPlayer(spec)}
+                        className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
+                      >
+                        Kick
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

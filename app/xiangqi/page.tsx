@@ -468,10 +468,10 @@ function XiangqiGame() {
         setIsRedTurn(data.isRedTurn);
         setWinner(data.winner);
         setLastMove(data.lastMove);
-        if (data.gameStarted) setGameStarted(data.gameStarted);
+        if (data.gameStarted !== undefined) setGameStarted(data.gameStarted);
         if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
-        if (data.player1Time) setPlayer1Time(data.player1Time);
-        if (data.player2Time) setPlayer2Time(data.player2Time);
+        if (data.player1Time !== undefined) setPlayer1Time(data.player1Time);
+        if (data.player2Time !== undefined) setPlayer2Time(data.player2Time);
       })
       .on("broadcast", { event: "update-name" }, (payload) => {
         const { oldName, newName } = payload.payload;
@@ -489,6 +489,33 @@ function XiangqiGame() {
           setHasInitialized(false);
           setShowNameModal(true);
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
+        }
+      })
+      .on("broadcast", { event: "kick-player" }, (payload) => {
+        if (payload.payload.playerName === playerName) {
+          alert("Bạn đã bị chủ phòng kích khỏi phòng!");
+          if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
+          router.replace("/");
+        }
+      })
+      .on("broadcast", { event: "request-role-change" }, (payload) => {
+        const { playerName: reqPlayer, newRole } = payload.payload;
+        const state = stateRef.current;
+        if (state.hostName === playerName) {
+          if (newRole === "player" && !state.player2Name) {
+            const newSpecs = state.spectators.filter((s) => s !== reqPlayer);
+            setPlayer2Name(reqPlayer);
+            setSpectators(newSpecs);
+            roomChannel.send({
+              type: "broadcast",
+              event: "room-sync",
+              payload: {
+                ...stateRef.current,
+                player2Name: reqPlayer,
+                spectators: newSpecs,
+              },
+            });
+          }
         }
       })
       .subscribe((status) => {
@@ -764,6 +791,57 @@ function XiangqiGame() {
     }
   };
 
+  const handleKickPlayer = (targetName: string) => {
+    if (playerName !== hostName || !channel) return;
+
+    channel.send({
+      type: "broadcast",
+      event: "kick-player",
+      payload: { playerName: targetName },
+    });
+
+    if (targetName === player2Name) {
+      setPlayer2Name(null);
+      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
+      if (gameStarted) {
+        resetGame();
+      }
+      setTimeout(() => {
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: {
+            ...stateRef.current,
+            player2Name: null,
+            readyPlayers: stateRef.current.readyPlayers.filter(
+              (p) => p !== targetName,
+            ),
+          },
+        });
+      }, 50);
+    } else if (spectators.includes(targetName)) {
+      const newSpecs = spectators.filter((s) => s !== targetName);
+      setSpectators(newSpecs);
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: { ...stateRef.current, spectators: newSpecs },
+      });
+    }
+  };
+
+  const handleBecomePlayer = () => {
+    if (channel && isSpectator && !player2Name) {
+      channel.send({
+        type: "broadcast",
+        event: "request-role-change",
+        payload: { playerName, newRole: "player" },
+      });
+      setRequestedRole("player");
+      if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
+    }
+  };
+
   const handleStartClick = () => {
     if (!playerName || readyPlayers.includes(playerName)) return;
     setReadyPlayers((prev) => [...prev, playerName]);
@@ -772,6 +850,26 @@ function XiangqiGame() {
         type: "broadcast",
         event: "player-ready",
         payload: { playerName },
+      });
+    }
+  };
+
+  const handleResign = () => {
+    if (winner || !gameStarted || isSpectator) return;
+    const myColor = isPlayer1 ? "r" : isPlayer2 ? "b" : null;
+    if (!myColor) return;
+
+    const newWinner = myColor === "r" ? "b" : "r";
+    setWinner(newWinner);
+
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "sync-move",
+        payload: {
+          ...stateRef.current,
+          winner: newWinner,
+        },
       });
     }
   };
@@ -894,7 +992,8 @@ function XiangqiGame() {
           {!showNameModal && (
             <>
               {player2Name ? (
-                <p className="text-sm text-zinc-500">
+                <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 xl:justify-start justify-center">
+                  <span>Trận đấu:</span>
                   <span className="font-semibold text-red-600">
                     {player1Name} (Đỏ)
                   </span>{" "}
@@ -902,7 +1001,15 @@ function XiangqiGame() {
                   <span className="font-semibold text-zinc-800">
                     {player2Name} (Đen)
                   </span>
-                </p>
+                  {playerName === hostName && (
+                    <button
+                      onClick={() => handleKickPlayer(player2Name)}
+                      className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
+                    >
+                      Kick
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div className="mt-4 flex w-full flex-col items-center xl:items-start">
                   <p className="mb-3 text-sm text-zinc-500">
@@ -925,6 +1032,14 @@ function XiangqiGame() {
                       {linkCopied ? "Đã copy!" : "Copy Link"}
                     </button>
                   </div>
+                  {isSpectator && (
+                    <button
+                      onClick={handleBecomePlayer}
+                      className="mt-4 w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+                    >
+                      Tham gia làm người chơi
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -933,24 +1048,38 @@ function XiangqiGame() {
                   {gameStarted ? (
                     <div className="w-full space-y-4 text-left xl:text-left text-center">
                       <div
-                        className={`rounded-lg border-2 p-3 transition-colors ${isRedTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
+                        className={`rounded-lg border-2 p-3 transition-colors ${isRedTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"} ${isRedInCheck && !winner ? "border-red-500 bg-red-50 ring-1 ring-red-500" : ""}`}
                       >
                         <div className="flex justify-between items-baseline">
-                          <span className="font-semibold text-red-600">
-                            {player1Name} (Đỏ)
-                          </span>
+                          <div className="flex flex-col items-start">
+                            <span className="font-semibold text-red-600">
+                              {player1Name} (Đỏ)
+                            </span>
+                            {isRedInCheck && !winner && (
+                              <span className="text-xs font-bold text-red-600 animate-bounce mt-1">
+                                ⚠️ CHIẾU TƯỚNG!
+                              </span>
+                            )}
+                          </div>
                           <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
                             {formatTime(player1Time)}
                           </span>
                         </div>
                       </div>
                       <div
-                        className={`rounded-lg border-2 p-3 transition-colors ${!isRedTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
+                        className={`rounded-lg border-2 p-3 transition-colors ${!isRedTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"} ${isBlackInCheck && !winner ? "border-red-500 bg-red-50 ring-1 ring-red-500" : ""}`}
                       >
                         <div className="flex justify-between items-baseline">
-                          <span className="font-semibold text-zinc-800">
-                            {player2Name} (Đen)
-                          </span>
+                          <div className="flex flex-col items-start">
+                            <span className="font-semibold text-zinc-800">
+                              {player2Name} (Đen)
+                            </span>
+                            {isBlackInCheck && !winner && (
+                              <span className="text-xs font-bold text-red-600 animate-bounce mt-1">
+                                ⚠️ CHIẾU TƯỚNG!
+                              </span>
+                            )}
+                          </div>
                           <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
                             {formatTime(player2Time)}
                           </span>
@@ -963,6 +1092,14 @@ function XiangqiGame() {
                             : `Lượt đi: ${isRedTurn ? "Đỏ" : "Đen"}`}
                         </p>
                       </div>
+                      {gameStarted && !winner && !isSpectator && (
+                        <button
+                          onClick={handleResign}
+                          className="mt-2 w-full cursor-pointer rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+                        >
+                          Bỏ cuộc
+                        </button>
+                      )}
                     </div>
                   ) : (
                     !isSpectator && (
@@ -1008,11 +1145,6 @@ function XiangqiGame() {
         </div>
 
         <div className="flex w-full flex-col items-center pb-8">
-          {(isRedInCheck || isBlackInCheck) && !winner && (
-            <h2 className="mb-4 animate-bounce text-2xl font-bold text-red-600 drop-shadow-md">
-              ⚠️ CHIẾU TƯỚNG!
-            </h2>
-          )}
           <div
             className={`bg-[#E6C697] p-2 sm:p-6 rounded shadow-2xl border-4 border-[#8B5A2B] transition-opacity ${!gameStarted || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
           >
@@ -1209,13 +1341,26 @@ function XiangqiGame() {
             ) : (
               <ul className="space-y-3">
                 {spectators.map((spec, idx) => (
-                  <li key={idx} className="flex items-center space-x-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-sm font-bold text-zinc-700">
-                      {spec.charAt(0).toUpperCase()}
+                  <li
+                    key={idx}
+                    className="flex items-center justify-between space-x-3"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-sm font-bold text-zinc-700">
+                        {spec.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800">
+                        {spec}
+                      </span>
                     </div>
-                    <span className="text-sm font-medium text-zinc-800">
-                      {spec}
-                    </span>
+                    {playerName === hostName && (
+                      <button
+                        onClick={() => handleKickPlayer(spec)}
+                        className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
+                      >
+                        Kick
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
