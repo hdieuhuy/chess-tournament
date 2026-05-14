@@ -180,7 +180,7 @@ const checkWinCondition = (
   alivePlayers: string[],
   playerRoles: Record<string, RoleConfig>,
   cupidTargets: [string, string] | null,
-) => {
+): GameState["winner"] => {
   const getFaction = (p: string) => {
     const rId = playerRoles[p]?.id || "";
     if (["werewolf", "cursed_wolf", "fog_wolf"].includes(rId)) return "wolf";
@@ -1758,7 +1758,7 @@ function WerewolfGame() {
       }
 
       const newAlive = state.alivePlayers.filter((p) => !actualDeaths.has(p));
-      let newWinner = checkWinCondition(
+      let newWinner: GameState["winner"] = checkWinCondition(
         newAlive,
         state.playerRoles,
         state.cupidTargets,
@@ -1826,17 +1826,18 @@ function WerewolfGame() {
         newLogs.push(endLog);
       }
 
-      dispatch({
-        type: "UPDATE",
-        payload: {
-          alivePlayers: newAlive,
-          extraLives: newExtraLives,
-          dayPhase: null,
-          dayTimeLeft: 0,
-          actionLogs: newLogs,
-          ...(newWinner && { phase: "game_over", winner: newWinner }),
-        },
-      });
+      const updatePayload: Partial<GameState> = {
+        alivePlayers: newAlive,
+        extraLives: newExtraLives,
+        dayPhase: null,
+        dayTimeLeft: 0,
+        actionLogs: newLogs,
+      };
+      if (newWinner) {
+        updatePayload.phase = "game_over";
+        updatePayload.winner = newWinner;
+      }
+      dispatch({ type: "UPDATE", payload: updatePayload });
 
       if (channel) {
         channel.send({
