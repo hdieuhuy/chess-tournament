@@ -20,7 +20,12 @@ export default function ActionLogsArea({
   const visibleLogs = actionLogs.filter((log) => {
     if (log.roleId === "system") return true;
     if (log.playerName === playerName) return true;
-    if (log.roleId === "werewolf" && playerRoles[playerName]?.id === "werewolf")
+    if (
+      log.roleId === "werewolf" &&
+      (playerRoles[playerName]?.id === "werewolf" ||
+        playerRoles[playerName]?.id === "cursed_wolf" ||
+        playerRoles[playerName]?.id === "fog_wolf")
+    )
       return true;
     return false;
   });

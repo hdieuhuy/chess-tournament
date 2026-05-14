@@ -1,4 +1,5 @@
 import { FaCrown, FaGhost } from "react-icons/fa";
+import { GiBullseye } from "react-icons/gi";
 import { RoleConfig } from "./types";
 import { RoleIcon, getRoleColor } from "./utils";
 
@@ -11,6 +12,7 @@ type PlayerGridProps = {
   hostName: string | null;
   gameStarted: boolean;
   phase: string;
+  headhunterTarget?: string | null;
 };
 
 export default function PlayerGrid({
@@ -22,6 +24,7 @@ export default function PlayerGrid({
   hostName,
   gameStarted,
   phase,
+  headhunterTarget,
 }: PlayerGridProps) {
   return (
     <div className="flex w-full flex-col space-y-6">
@@ -48,8 +51,16 @@ export default function PlayerGrid({
               const myRole = playerRoles[playerName];
               const isMe = p === playerName;
               const isBothWolves =
-                myRole?.id === "werewolf" && role?.id === "werewolf";
+                (myRole?.id === "werewolf" ||
+                  myRole?.id === "cursed_wolf" ||
+                  myRole?.id === "fog_wolf") &&
+                (role?.id === "werewolf" ||
+                  role?.id === "cursed_wolf" ||
+                  role?.id === "fog_wolf");
               const canSeeRole = isMe || isBothWolves || phase === "game_over";
+              const isTarget =
+                headhunterTarget === p &&
+                (myRole?.id === "headhunter" || phase === "game_over");
 
               return (
                 <div
@@ -74,11 +85,22 @@ export default function PlayerGrid({
                       </div>
                     </div>
                   )}
+                  {gameStarted && isTarget && (
+                    <div className="group absolute right-2 bottom-2 cursor-help text-lg text-cyan-600">
+                      <GiBullseye />
+                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-800 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                        Mục tiêu săn thưởng
+                        <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+                      </div>
+                    </div>
+                  )}
                   <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-200 text-2xl font-bold text-zinc-700 shadow-inner">
                     {p.charAt(0).toUpperCase()}
                   </div>
-                  <span className="w-full truncate text-center text-sm font-medium text-zinc-800">
-                    {p}
+                  <span
+                    className={`w-full truncate text-center text-sm ${isMe ? "font-bold text-indigo-700" : "font-medium text-zinc-800"}`}
+                  >
+                    {p} {isMe && "(Bạn)"}
                   </span>
                   {gameStarted && role && canSeeRole && (
                     <span

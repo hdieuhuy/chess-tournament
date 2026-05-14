@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Modal } from "@/components/Modal";
 import { RoleConfig } from "./types";
 import { RoleIcon, getRoleColor, getRoleDescription } from "./utils";
 
@@ -10,6 +12,33 @@ type RoleConfigPanelProps = {
   updateRoleCount: (id: string, delta: number) => void;
 };
 
+const getFaction = (roleId: string) => {
+  const wolves = [
+    "werewolf",
+    "half_wolf",
+    "white_wolf",
+    "cursed_wolf",
+    "fog_wolf",
+  ];
+  const thirdParties = [
+    "fool",
+    "headhunter",
+    "assassin",
+    "cupid",
+    "thief",
+    "tanner",
+  ];
+  if (wolves.includes(roleId)) return "wolf";
+  if (thirdParties.includes(roleId)) return "third_party";
+  return "villager";
+};
+
+const FACTIONS = [
+  { id: "villager", name: "Phe Dân Làng" },
+  { id: "wolf", name: "Phe Sói" },
+  { id: "third_party", name: "Phe Thứ Ba" },
+];
+
 export default function RoleConfigPanel({
   roleConfig,
   playersCount,
@@ -18,58 +47,35 @@ export default function RoleConfigPanel({
   gameStarted,
   updateRoleCount,
 }: RoleConfigPanelProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const totalRoles = roleConfig.reduce((acc, r) => acc + r.count, 0);
+
   return (
     <div className="flex flex-col items-center rounded-xl border border-zinc-200 bg-white p-6 shadow-sm md:items-start w-full">
       <div className="mb-4 flex w-full items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-800">
-          Cấu hình Vai trò
-        </h3>
-        <span className="text-xs font-medium text-zinc-500">
-          Tổng: {roleConfig.reduce((acc, r) => acc + r.count, 0)}/{playersCount}
-        </span>
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-800">
+            Cấu hình Vai trò
+          </h3>
+          <span className="text-xs font-medium text-zinc-500">
+            Tổng: {totalRoles}/{playersCount}
+          </span>
+        </div>
+        {hostName === playerName && !gameStarted && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="cursor-pointer rounded-md bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-200"
+          >
+            Chỉnh sửa
+          </button>
+        )}
       </div>
 
-      {hostName === playerName && !gameStarted ? (
-        <div className="flex w-full flex-col space-y-3">
-          {roleConfig.map((role) => (
-            <div
-              key={role.id}
-              className="flex items-center justify-between rounded-lg border border-zinc-100 bg-zinc-50 p-2"
-            >
-              <div className="flex items-center space-x-2">
-                <RoleIcon
-                  id={role.id}
-                  className={`text-xl ${getRoleColor(role.id)}`}
-                />
-                <span className="text-sm font-medium text-zinc-700">
-                  {role.name}
-                </span>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => updateRoleCount(role.id, -1)}
-                  disabled={role.count === 0}
-                  className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md bg-zinc-200 text-zinc-600 transition-colors hover:bg-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  -
-                </button>
-                <span className="w-4 text-center text-sm font-bold text-zinc-800">
-                  {role.count}
-                </span>
-                <button
-                  onClick={() => updateRoleCount(role.id, 1)}
-                  className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md bg-zinc-200 text-zinc-600 transition-colors hover:bg-zinc-300"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid w-full grid-cols-5 gap-2">
-          {roleConfig.map((role) => (
+      {/* Luôn hiển thị giao diện xem (dạng lưới) */}
+      <div className="grid w-full grid-cols-5 gap-2">
+        {roleConfig
+          .filter((role) => role.count > 0)
+          .map((role) => (
             <div
               key={role.id}
               className="group relative flex flex-col items-center justify-center rounded-lg border border-zinc-100 bg-zinc-50 p-2 hover:bg-zinc-100"
@@ -92,15 +98,84 @@ export default function RoleConfigPanel({
               </div>
             </div>
           ))}
-        </div>
-      )}
+      </div>
+
       {hostName === playerName &&
         !gameStarted &&
-        roleConfig.reduce((acc, r) => acc + r.count, 0) !== playersCount && (
+        totalRoles !== playersCount && (
           <p className="mt-3 w-full text-center text-xs text-red-500">
             * Tổng số vai trò chưa khớp với số người chơi
           </p>
         )}
+
+      <Modal isOpen={isModalOpen} title="Chỉnh sửa Vai trò">
+        <div className="flex w-full flex-col space-y-3">
+          <p className="text-center text-sm font-medium text-zinc-500 mb-2">
+            Số lượng đang chọn:{" "}
+            <span className="font-bold text-zinc-800">{totalRoles}</span> /{" "}
+            {playersCount} người
+          </p>
+          <div className="flex max-h-[60vh] w-full flex-col overflow-y-auto pr-1">
+            {FACTIONS.map((faction) => {
+              const factionRoles = roleConfig.filter(
+                (r) => getFaction(r.id) === faction.id,
+              );
+              if (factionRoles.length === 0) return null;
+
+              return (
+                <div key={faction.id} className="mb-4 last:mb-0">
+                  <h4 className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-500">
+                    {faction.name}
+                  </h4>
+                  <div className="flex flex-col space-y-2">
+                    {factionRoles.map((role) => (
+                      <div
+                        key={role.id}
+                        className="flex items-center justify-between rounded-lg border border-zinc-100 bg-zinc-50 p-2"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RoleIcon
+                            id={role.id}
+                            className={`text-xl ${getRoleColor(role.id)}`}
+                          />
+                          <span className="text-sm font-medium text-zinc-700">
+                            {role.name}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center space-x-3">
+                          <button
+                            onClick={() => updateRoleCount(role.id, -1)}
+                            disabled={role.count === 0}
+                            className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md bg-zinc-200 text-zinc-600 transition-colors hover:bg-zinc-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            -
+                          </button>
+                          <span className="w-4 text-center text-sm font-bold text-zinc-800">
+                            {role.count}
+                          </span>
+                          <button
+                            onClick={() => updateRoleCount(role.id, 1)}
+                            className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md bg-zinc-200 text-zinc-600 transition-colors hover:bg-zinc-300"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => setIsModalOpen(false)}
+            className="mt-4 w-full cursor-pointer rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+          >
+            Hoàn tất
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -1,10 +1,15 @@
-import { FaEye } from "react-icons/fa";
+import { FaEye, FaUserTie } from "react-icons/fa";
 import {
   GiWolfHead,
   GiFarmer,
   GiShield,
   GiWitchFlight,
   GiMusket,
+  GiWerewolf,
+  GiWolfHowl,
+  GiJesterHat,
+  GiBullseye,
+  GiBowieKnife,
 } from "react-icons/gi";
 import { RoleConfig } from "./types";
 
@@ -28,6 +33,18 @@ export const RoleIcon = ({
       return <GiWitchFlight className={className} />;
     case "hunter":
       return <GiMusket className={className} />;
+    case "mayor":
+      return <FaUserTie className={className} />;
+    case "cursed_wolf":
+      return <GiWerewolf className={className} />;
+    case "fog_wolf":
+      return <GiWolfHowl className={className} />;
+    case "fool":
+      return <GiJesterHat className={className} />;
+    case "headhunter":
+      return <GiBullseye className={className} />;
+    case "assassin":
+      return <GiBowieKnife className={className} />;
     default:
       return null;
   }
@@ -47,6 +64,18 @@ export const getRoleColor = (id?: string) => {
       return "text-fuchsia-600";
     case "hunter":
       return "text-orange-600";
+    case "mayor":
+      return "text-yellow-600";
+    case "cursed_wolf":
+      return "text-rose-700";
+    case "fog_wolf":
+      return "text-slate-600";
+    case "fool":
+      return "text-pink-600";
+    case "headhunter":
+      return "text-cyan-600";
+    case "assassin":
+      return "text-red-900";
     default:
       return "text-zinc-500";
   }
@@ -66,6 +95,18 @@ export const getRoleDescription = (id?: string) => {
       return "Có 1 bình cứu 1 người và 1 bình độc giết người. Mỗi đêm được biết là người nào bị sói cắn";
     case "hunter":
       return "Mỗi đêm sẽ được chọn 1 người để ghim. nếu Thợ Sơn chết sẽ kéo theo người đó chết";
+    case "mayor":
+      return "Có 2 mạng (sống sót 1 lần bị giết). Khi biểu quyết ban ngày, phiếu của Trưởng Làng được tính bằng 2.";
+    case "cursed_wolf":
+      return "Cùng Sói cắn người. Được quyền chọn lây nhiễm 1 lần/trận thay vì cắn chết. Người bị lây sẽ thành Sói vào hôm sau.";
+    case "fog_wolf":
+      return "Cùng Sói cắn người. Ban ngày có thể tung sương mù 1 lần/trận để hủy bỏ biểu quyết và lập tức chuyển sang đêm.";
+    case "fool":
+      return "Chỉ chiến thắng 1 mình. Không có kỹ năng, nhưng nếu bị làng biểu quyết treo cổ vào ban ngày, Kẻ Ngốc sẽ lập tức giành chiến thắng.";
+    case "headhunter":
+      return "Phe thứ 3. Đêm đầu tiên chọn 1 người làm mục tiêu. Nếu mục tiêu bị làng biểu quyết treo cổ và bạn còn sống, bạn giành chiến thắng.";
+    case "assassin":
+      return "Phe thứ 3. Mỗi đêm được chọn 1 người để giết. Chiến thắng khi làng chỉ còn 2 người (bao gồm cả bạn).";
     default:
       return "";
   }
@@ -78,4 +119,10 @@ export const defaultRoles: RoleConfig[] = [
   { id: "bodyguard", name: "Bảo Vệ", count: 1 },
   { id: "witch", name: "Phù Thủy", count: 0 },
   { id: "hunter", name: "Thợ Săn", count: 0 },
+  { id: "mayor", name: "Trưởng Làng", count: 0 },
+  { id: "cursed_wolf", name: "Sói Nguyền", count: 0 },
+  { id: "fog_wolf", name: "Sói Sương Mù", count: 0 },
+  { id: "fool", name: "Kẻ Ngốc", count: 0 },
+  { id: "headhunter", name: "Thợ Săn Người", count: 0 },
+  { id: "assassin", name: "Sát Thủ", count: 0 },
 ];
