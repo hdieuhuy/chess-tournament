@@ -141,6 +141,511 @@ const checkWinCondition = (
   return null;
 };
 
+// ============================================================================
+// ==================== STRATEGY PATTERN CHO ROLE UIs =========================
+// ============================================================================
+
+type RoleUIProps = {
+  gameState: GameState;
+  dispatch: React.Dispatch<GameAction>;
+  channel: RealtimeChannel | null;
+  playerName: string;
+  executeAction: (
+    logContent: string | null,
+    stateUpdates: Partial<GameState>,
+    broadcastEvent?: { name: string; payload: any },
+  ) => void;
+};
+
+const BodyguardNightUI = ({
+  gameState,
+  dispatch,
+  playerName,
+  executeAction,
+}: RoleUIProps) => {
+  const { alivePlayers, lastProtected, nightSelection, actionConfirmed } =
+    gameState;
+  if (actionConfirmed) {
+    return (
+      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+        <p className="text-sm font-medium text-green-700">
+          <GiShield className="mr-1 inline text-green-700" />
+          Bạn đã chọn bảo vệ:
+          <span className="ml-1 font-bold">{nightSelection}</span>
+        </p>
+      </div>
+    );
+  }
+  return (
+    <>
+      <p className="text-xs text-indigo-800">
+        Chọn 1 người để bảo vệ đêm nay (không được bảo vệ người cũ của đêm qua):
+      </p>
+      <div className="grid grid-cols-2 gap-2 w-full">
+        {alivePlayers.map((p) => (
+          <button
+            key={p}
+            disabled={p === lastProtected}
+            onClick={() =>
+              dispatch({ type: "UPDATE", payload: { nightSelection: p } })
+            }
+            className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+              nightSelection === p
+                ? "border-indigo-600 bg-indigo-600 text-white"
+                : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
+            }`}
+          >
+            {p} {p === lastProtected && "(Đã bảo vệ)"}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={() => {
+          executeAction(
+            `Bạn đã bảo vệ ${nightSelection}`,
+            { lastProtected: nightSelection as string | null },
+            {
+              name: "night-action",
+              payload: {
+                role: "bodyguard",
+                target: nightSelection,
+                playerName,
+              },
+            },
+          );
+        }}
+        disabled={!nightSelection}
+        className="w-full cursor-pointer rounded-lg bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
+      >
+        Xác nhận
+      </button>
+    </>
+  );
+};
+
+const WerewolfNightUI = ({
+  gameState,
+  dispatch,
+  channel,
+  playerName,
+  executeAction,
+}: RoleUIProps) => {
+  const { alivePlayers, playerRoles, wolfVotes, actionConfirmed } = gameState;
+  if (actionConfirmed) {
+    return (
+      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+        <p className="text-sm font-medium text-red-700">
+          <GiWolfHead className="mr-1 inline text-red-700" />
+          Bạn đã chốt vote cắn:
+          <span className="ml-1 font-bold">
+            {wolfVotes[playerName] === "none"
+              ? "Không ai"
+              : wolfVotes[playerName]}
+          </span>
+        </p>
+        <p className="mt-1 text-xs text-indigo-600">
+          Đợi các Sói khác và Phù thủy...
+        </p>
+      </div>
+    );
+  }
+
+  const handleVote = (target: string) => {
+    const newVotes = { ...wolfVotes, [playerName]: target };
+    dispatch({
+      type: "UPDATE",
+      payload: { nightSelection: target, wolfVotes: newVotes },
+    });
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "wolf-vote",
+        payload: { playerName, target },
+      });
+    }
+  };
+
+  const myVote = wolfVotes[playerName];
+  const aliveWolves = alivePlayers.filter(
+    (w) => playerRoles[w]?.id === "werewolf",
+  );
+  const isWaitingForOthers = aliveWolves.some((w) => wolfVotes[w] !== myVote);
+
+  return (
+    <>
+      <p className="text-xs text-indigo-800">
+        Chọn 1 người để cắn. Sói cần phải thống nhất vote cùng 1 người.
+      </p>
+      <div className="grid grid-cols-2 gap-2 w-full">
+        {alivePlayers.map((p) => {
+          const wolvesVotingForP = aliveWolves.filter(
+            (w) => wolfVotes[w] === p,
+          );
+          return (
+            <button
+              key={p}
+              onClick={() => handleVote(p)}
+              className={`relative cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                myVote === p
+                  ? "border-red-600 bg-red-600 text-white"
+                  : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
+              }`}
+            >
+              {p}
+              {wolvesVotingForP.length > 0 && (
+                <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-xs text-white">
+                  {wolvesVotingForP.length}
+                </span>
+              )}
+            </button>
+          );
+        })}
+        <button
+          onClick={() => handleVote("none")}
+          className={`relative cursor-pointer col-span-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            myVote === "none"
+              ? "border-zinc-600 bg-zinc-600 text-white"
+              : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
+          }`}
+        >
+          Không cắn ai
+          {aliveWolves.filter((w) => wolfVotes[w] === "none").length > 0 && (
+            <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-xs text-white">
+              {aliveWolves.filter((w) => wolfVotes[w] === "none").length}
+            </span>
+          )}
+        </button>
+      </div>
+      <button
+        onClick={() => {
+          executeAction(
+            `Bạn đã vote cắn ${myVote === "none" ? "Không ai" : myVote}`,
+            {},
+          );
+        }}
+        disabled={!myVote || isWaitingForOthers}
+        className="w-full cursor-pointer rounded-lg bg-red-700 px-4 py-3 text-sm font-bold text-white hover:bg-red-800 disabled:opacity-50"
+      >
+        {isWaitingForOthers ? "Chờ đồng bọn thống nhất" : "Xác nhận vote"}
+      </button>
+    </>
+  );
+};
+
+const SeerNightUI = ({
+  gameState,
+  dispatch,
+  playerName,
+  executeAction,
+}: RoleUIProps) => {
+  const { players, nightSelection, actionConfirmed, seerResult, playerRoles } =
+    gameState;
+  if (actionConfirmed) {
+    return (
+      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+        <p className="text-sm font-medium text-indigo-700">
+          <FaEye className="mr-1 inline text-indigo-700" />
+          Bạn đã soi:
+          <span className="ml-1 font-bold">{seerResult?.name}</span>
+        </p>
+        <p className="mt-2 text-base font-bold text-indigo-900">
+          Kết quả: {seerResult?.isWolf ? "LÀ SÓI 🐺" : "KHÔNG PHẢI SÓI 👨‍🌾"}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <>
+      <p className="text-xs text-indigo-800">
+        Chọn 1 người để soi xem họ có phải là Sói hay không:
+      </p>
+      <div className="grid grid-cols-2 gap-2 w-full">
+        {players
+          .filter((p) => p !== playerName)
+          .map((p) => (
+            <button
+              key={p}
+              onClick={() =>
+                dispatch({ type: "UPDATE", payload: { nightSelection: p } })
+              }
+              className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                nightSelection === p
+                  ? "border-indigo-600 bg-indigo-600 text-white"
+                  : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+      </div>
+      <button
+        onClick={() => {
+          const isWolf =
+            playerRoles[nightSelection as string]?.id === "werewolf";
+          executeAction(
+            `Bạn đã soi ${nightSelection} ${isWolf ? "LÀ SÓI" : "KHÔNG PHẢI là sói"}`,
+            { seerResult: { name: nightSelection as string, isWolf } },
+            {
+              name: "night-action",
+              payload: { role: "seer", target: nightSelection, playerName },
+            },
+          );
+        }}
+        disabled={!nightSelection}
+        className="w-full cursor-pointer rounded-lg bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
+      >
+        Xác nhận soi
+      </button>
+    </>
+  );
+};
+
+const WitchNightUI = ({
+  gameState,
+  dispatch,
+  playerName,
+  executeAction,
+}: RoleUIProps) => {
+  const {
+    alivePlayers,
+    wolfVictim,
+    witchPotions,
+    witchAction,
+    actionConfirmed,
+  } = gameState;
+  if (actionConfirmed) {
+    return (
+      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+        <p className="text-sm font-medium text-purple-700">
+          <GiWitchFlight className="mr-1 inline text-purple-700" />
+          Bạn đã hoàn tất hành động đêm nay!
+        </p>
+      </div>
+    );
+  }
+  return (
+    <>
+      <div className="w-full rounded-lg bg-indigo-100 p-3 text-center">
+        <p className="text-sm font-medium text-indigo-900">
+          Đêm nay, Sói đã cắn:{" "}
+          <span className="font-bold text-red-600">
+            {wolfVictim === "none" || !wolfVictim ? "Không ai" : wolfVictim}
+          </span>
+        </p>
+      </div>
+      <div className="flex flex-col space-y-3 w-full">
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-bold text-green-800">
+              🧪 Bình Máu (còn {witchPotions.heal})
+            </span>
+            <button
+              onClick={() =>
+                dispatch({
+                  type: "UPDATE_FUNCTION",
+                  payload: (prev) => ({
+                    witchAction: {
+                      ...prev.witchAction,
+                      heal: !prev.witchAction.heal,
+                    },
+                  }),
+                })
+              }
+              disabled={
+                witchPotions.heal <= 0 || !wolfVictim || wolfVictim === "none"
+              }
+              className={`cursor-pointer rounded-md px-3 py-1 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                witchAction.heal
+                  ? "border border-green-600 bg-green-600 text-white"
+                  : "border border-green-300 bg-white text-green-700 hover:bg-green-100"
+              }`}
+            >
+              {witchAction.heal ? "Đang sử dụng" : "Sử dụng"}
+            </button>
+          </div>
+          <p className="text-xs text-green-700">
+            Dùng để cứu người bị Sói cắn.
+          </p>
+        </div>
+        <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-bold text-purple-800">
+              ☠️ Bình Độc (còn {witchPotions.poison})
+            </span>
+            {witchAction.poison && (
+              <button
+                onClick={() =>
+                  dispatch({
+                    type: "UPDATE_FUNCTION",
+                    payload: (prev) => ({
+                      witchAction: { ...prev.witchAction, poison: null },
+                    }),
+                  })
+                }
+                className="cursor-pointer rounded-md border border-purple-300 bg-white px-3 py-1 text-xs font-bold text-purple-700 hover:bg-purple-100"
+              >
+                Hủy dùng
+              </button>
+            )}
+          </div>
+          <p className="mb-2 text-xs text-purple-700">
+            Dùng để giết 1 người bất kỳ.
+          </p>
+          <div className="grid grid-cols-2 gap-2 w-full">
+            {alivePlayers
+              .filter((p) => p !== playerName)
+              .map((p) => (
+                <button
+                  key={p}
+                  onClick={() =>
+                    dispatch({
+                      type: "UPDATE_FUNCTION",
+                      payload: (prev) => ({
+                        witchAction: { ...prev.witchAction, poison: p },
+                      }),
+                    })
+                  }
+                  disabled={witchPotions.poison <= 0}
+                  className={`cursor-pointer rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                    witchAction.poison === p
+                      ? "border-purple-600 bg-purple-600 text-white"
+                      : "border-purple-200 bg-white text-purple-900 hover:bg-purple-100"
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+          </div>
+        </div>
+      </div>
+      <button
+        onClick={() => {
+          let content = "";
+          if (witchAction.heal)
+            content += `Bạn đã dùng bình cứu lên ${wolfVictim === "none" ? "Không ai" : wolfVictim}. `;
+          if (witchAction.poison)
+            content += `Bạn đã ném bình độc vào ${witchAction.poison}.`;
+          if (!witchAction.heal && !witchAction.poison)
+            content += "Bạn đã không dùng bình nào.";
+          executeAction(
+            content.trim(),
+            {},
+            {
+              name: "witch-action",
+              payload: { action: witchAction, playerName },
+            },
+          );
+        }}
+        className="w-full cursor-pointer rounded-lg bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800"
+      >
+        Xác nhận hành động
+      </button>
+    </>
+  );
+};
+
+const HunterNightUI = ({
+  gameState,
+  dispatch,
+  playerName,
+  executeAction,
+}: RoleUIProps) => {
+  const {
+    alivePlayers,
+    dayCount,
+    hunterTarget,
+    nightSelection,
+    actionConfirmed,
+  } = gameState;
+  if (actionConfirmed) {
+    return (
+      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+        <p className="text-sm font-medium text-orange-700">
+          <GiMusket className="mr-1 inline text-orange-700" />
+          Bạn đã ghim:
+          <span className="ml-1 font-bold">
+            {hunterTarget || "Không có ai"}
+          </span>
+        </p>
+      </div>
+    );
+  }
+  return (
+    <>
+      <p className="text-xs text-indigo-800">
+        Chọn 1 người để ghim. Nếu đêm nay bạn chết, người này sẽ chết theo.
+      </p>
+      {dayCount > 1 && (
+        <p className="text-sm font-bold text-orange-700">
+          Mục tiêu đang ghim: {hunterTarget || "Chưa có"}
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-2 w-full">
+        {alivePlayers
+          .filter((p) => p !== playerName)
+          .map((p) => (
+            <button
+              key={p}
+              onClick={() =>
+                dispatch({ type: "UPDATE", payload: { nightSelection: p } })
+              }
+              className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                nightSelection === p
+                  ? "border-orange-600 bg-orange-600 text-white"
+                  : "border-orange-200 bg-white text-orange-900 hover:bg-orange-100"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+      </div>
+      <div className="flex space-x-2 w-full">
+        <button
+          onClick={() => {
+            executeAction(
+              `Bạn đã ghim mục tiêu ${nightSelection || "Không có ai"}`,
+              { hunterTarget: nightSelection as string | null },
+              {
+                name: "night-action",
+                payload: { role: "hunter", target: nightSelection, playerName },
+              },
+            );
+          }}
+          disabled={!nightSelection}
+          className="w-full cursor-pointer rounded-lg bg-orange-700 px-4 py-3 text-sm font-bold text-white hover:bg-orange-800 disabled:opacity-50"
+        >
+          Xác nhận ghim mới
+        </button>
+        {dayCount > 1 && (
+          <button
+            onClick={() => {
+              executeAction(
+                `Bạn đã giữ nguyên mục tiêu ${hunterTarget || "Không có ai"}`,
+                {},
+                {
+                  name: "night-action",
+                  payload: { role: "hunter", target: hunterTarget, playerName },
+                },
+              );
+            }}
+            className="w-full cursor-pointer rounded-lg bg-zinc-600 px-4 py-3 text-sm font-bold text-white hover:bg-zinc-700"
+          >
+            Bỏ qua
+          </button>
+        )}
+      </div>
+    </>
+  );
+};
+
+const ROLE_STRATEGIES: Record<string, React.FC<RoleUIProps>> = {
+  bodyguard: BodyguardNightUI,
+  werewolf: WerewolfNightUI,
+  seer: SeerNightUI,
+  witch: WitchNightUI,
+  hunter: HunterNightUI,
+};
+
 function WerewolfGame() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -1352,127 +1857,57 @@ function WerewolfGame() {
     }
   };
 
-  const confirmNightAction = (overrideTarget?: any) => {
-    let target = nightSelection;
-    if (overrideTarget === null || typeof overrideTarget === "string") {
-      target = overrideTarget;
-    }
+  const executeAction = useCallback(
+    (
+      logContent: string | null,
+      stateUpdates: Partial<GameState>,
+      broadcastEvent?: { name: string; payload: any },
+    ) => {
+      let newLog: ActionLog | null = null;
+      if (logContent) {
+        newLog = {
+          id: Math.random().toString(36).substring(2, 9),
+          dayCount: stateRef.current.dayCount,
+          roleId: stateRef.current.playerRoles[playerName]?.id || "system",
+          playerName,
+          content: logContent,
+        };
+      }
 
-    if (!target && playerRoles[playerName]?.id !== "hunter") return;
-
-    const myRole = playerRoles[playerName];
-    if (!myRole) return;
-
-    let newLog: ActionLog | null = null;
-    let content = "";
-    if (myRole?.id === "seer") {
-      const isWolf = playerRoles[target as string]?.id === "werewolf";
-      content = `Bạn đã soi ${target} ${isWolf ? "LÀ SÓI" : "KHÔNG PHẢI là sói"}`;
-    } else if (myRole?.id === "bodyguard") {
-      content = `Bạn đã bảo vệ ${target}`;
-    } else if (myRole?.id === "hunter") {
-      content = `Bạn đã ghim mục tiêu ${target || "Không có ai"}`;
-    }
-
-    if (content) {
-      newLog = {
-        id: Math.random().toString(36).substring(2, 9),
-        dayCount,
-        roleId: myRole.id,
-        playerName,
-        content,
-      };
-    }
-
-    dispatch({
-      type: "UPDATE_FUNCTION",
-      payload: (prev) => {
-        const updates: Partial<GameState> = {
+      dispatch({
+        type: "UPDATE_FUNCTION",
+        payload: (prev) => ({
           actionConfirmed: true,
           confirmedPlayers: [
             ...new Set([...prev.confirmedPlayers, playerName]),
           ],
-        };
-        if (myRole?.id === "seer" && target)
-          updates.seerResult = {
-            name: target,
-            isWolf: playerRoles[target]?.id === "werewolf",
-          };
-        if (myRole?.id === "bodyguard")
-          updates.lastProtected = target as string | null;
-        if (myRole?.id === "hunter")
-          updates.hunterTarget = target as string | null;
-        if (newLog) updates.actionLogs = [...prev.actionLogs, newLog];
-        return updates;
-      },
-    });
+          ...stateUpdates,
+          ...(newLog ? { actionLogs: [...prev.actionLogs, newLog] } : {}),
+        }),
+      });
 
-    if (channel) {
-      if (newLog) {
+      if (channel) {
+        if (newLog)
+          channel.send({
+            type: "broadcast",
+            event: "add-log",
+            payload: { log: newLog },
+          });
+        if (broadcastEvent)
+          channel.send({
+            type: "broadcast",
+            event: broadcastEvent.name,
+            payload: broadcastEvent.payload,
+          });
         channel.send({
           type: "broadcast",
-          event: "add-log",
-          payload: { log: newLog },
+          event: "player-confirm",
+          payload: { playerName },
         });
       }
-
-      channel.send({
-        type: "broadcast",
-        event: "night-action",
-        payload: { role: myRole?.id, target: target, playerName },
-      });
-      channel.send({
-        type: "broadcast",
-        event: "player-confirm",
-        payload: { playerName },
-      });
-    }
-  };
-
-  const confirmWitchAction = () => {
-    let content = "";
-    if (witchAction.heal)
-      content += `Bạn đã dùng bình cứu lên ${wolfVictim === "none" ? "Không ai" : wolfVictim}. `;
-    if (witchAction.poison)
-      content += `Bạn đã ném bình độc vào ${witchAction.poison}.`;
-    if (!witchAction.heal && !witchAction.poison)
-      content += "Bạn đã không dùng bình nào.";
-
-    const newLog: ActionLog = {
-      id: Math.random().toString(36).substring(2, 9),
-      dayCount,
-      roleId: "witch",
-      playerName,
-      content: content.trim(),
-    };
-
-    dispatch({
-      type: "UPDATE_FUNCTION",
-      payload: (prev) => ({
-        actionConfirmed: true,
-        confirmedPlayers: [...new Set([...prev.confirmedPlayers, playerName])],
-        actionLogs: [...prev.actionLogs, newLog],
-      }),
-    });
-
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "add-log",
-        payload: { log: newLog },
-      });
-      channel.send({
-        type: "broadcast",
-        event: "witch-action",
-        payload: { action: witchAction, playerName },
-      });
-      channel.send({
-        type: "broadcast",
-        event: "player-confirm",
-        payload: { playerName },
-      });
-    }
-  };
+    },
+    [channel, playerName],
+  );
 
   const updateRoleCount = (id: string, delta: number) => {
     if (hostName !== playerName) return;
@@ -1825,521 +2260,21 @@ function WerewolfGame() {
                   <p className="w-full animate-pulse py-4 text-center text-sm font-medium text-indigo-800">
                     Hãy nhắm mắt lại. Đang chờ các vai trò khác hành động...
                   </p>
-                ) : (
-                  <>
-                    {/* BODYGUARD */}
-                    {playerRoles[playerName]?.id === "bodyguard" && (
-                      <div className="flex w-full flex-col space-y-4">
-                        {actionConfirmed ? (
-                          <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
-                            <p className="text-sm font-medium text-green-700">
-                              <GiShield className="mr-1 inline text-green-700" />
-                              Bạn đã chọn bảo vệ:
-                              <span className="ml-1 font-bold">
-                                {nightSelection}
-                              </span>
-                            </p>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-xs text-indigo-800">
-                              Chọn 1 người để bảo vệ đêm nay (không được bảo vệ
-                              người cũ của đêm qua):
-                            </p>
-
-                            <div className="grid grid-cols-2 gap-2">
-                              {alivePlayers.map((p) => (
-                                <button
-                                  key={p}
-                                  disabled={p === lastProtected}
-                                  onClick={() =>
-                                    dispatch({
-                                      type: "UPDATE",
-                                      payload: { nightSelection: p },
-                                    })
-                                  }
-                                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                                    nightSelection === p
-                                      ? "border-indigo-600 bg-indigo-600 text-white"
-                                      : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
-                                  }`}
-                                >
-                                  {p} {p === lastProtected && "(Đã bảo vệ)"}
-                                </button>
-                              ))}
-                            </div>
-
-                            <button
-                              onClick={confirmNightAction}
-                              disabled={!nightSelection}
-                              className="w-full rounded-lg bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
-                            >
-                              Xác nhận
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {/* WEREWOLF */}
-                    {playerRoles[playerName]?.id === "werewolf" && (
-                      <div className="flex w-full flex-col space-y-4">
-                        {actionConfirmed ? (
-                          <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
-                            <p className="text-sm font-medium text-red-700">
-                              <GiWolfHead className="mr-1 inline text-red-700" />
-                              Bạn đã chốt vote cắn:
-                              <span className="ml-1 font-bold">
-                                {wolfVotes[playerName] === "none"
-                                  ? "Không ai"
-                                  : wolfVotes[playerName]}
-                              </span>
-                            </p>
-
-                            <p className="mt-1 text-xs text-indigo-600">
-                              Đợi các Sói khác và Phù thủy...
-                            </p>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-xs text-indigo-800">
-                              Chọn 1 người để cắn. Sói cần phải thống nhất vote
-                              cùng 1 người.
-                            </p>
-
-                            <div className="grid grid-cols-2 gap-2">
-                              {alivePlayers.map((p) => {
-                                const wolvesVotingForP = alivePlayers.filter(
-                                  (w) =>
-                                    playerRoles[w]?.id === "werewolf" &&
-                                    wolfVotes[w] === p,
-                                );
-
-                                return (
-                                  <button
-                                    key={p}
-                                    onClick={() => {
-                                      const newVotes = {
-                                        ...wolfVotes,
-                                        [playerName]: p,
-                                      };
-
-                                      dispatch({
-                                        type: "UPDATE",
-                                        payload: {
-                                          nightSelection: p,
-                                          wolfVotes: newVotes,
-                                        },
-                                      });
-
-                                      if (channel) {
-                                        channel.send({
-                                          type: "broadcast",
-                                          event: "wolf-vote",
-                                          payload: {
-                                            playerName,
-                                            target: p,
-                                          },
-                                        });
-                                      }
-                                    }}
-                                    className={`relative rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                                      wolfVotes[playerName] === p
-                                        ? "border-red-600 bg-red-600 text-white"
-                                        : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
-                                    }`}
-                                  >
-                                    {p}
-
-                                    {wolvesVotingForP.length > 0 && (
-                                      <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-xs text-white">
-                                        {wolvesVotingForP.length}
-                                      </span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-
-                              <button
-                                onClick={() => {
-                                  const newVotes = {
-                                    ...wolfVotes,
-                                    [playerName]: "none",
-                                  };
-
-                                  dispatch({
-                                    type: "UPDATE",
-                                    payload: {
-                                      nightSelection: "none",
-                                      wolfVotes: newVotes,
-                                    },
-                                  });
-
-                                  if (channel) {
-                                    channel.send({
-                                      type: "broadcast",
-                                      event: "wolf-vote",
-                                      payload: { playerName, target: "none" },
-                                    });
-                                  }
-                                }}
-                                className={`relative col-span-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${wolfVotes[playerName] === "none" ? "border-zinc-600 bg-zinc-600 text-white" : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"}`}
-                              >
-                                Không cắn ai
-                                {alivePlayers.filter(
-                                  (w) =>
-                                    playerRoles[w]?.id === "werewolf" &&
-                                    wolfVotes[w] === "none",
-                                ).length > 0 && (
-                                  <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-xs text-white">
-                                    {
-                                      alivePlayers.filter(
-                                        (w) =>
-                                          playerRoles[w]?.id === "werewolf" &&
-                                          wolfVotes[w] === "none",
-                                      ).length
-                                    }
-                                  </span>
-                                )}
-                              </button>
-                            </div>
-
-                            <button
-                              onClick={() => {
-                                const newLog: ActionLog = {
-                                  id: Math.random()
-                                    .toString(36)
-                                    .substring(2, 9),
-                                  dayCount,
-                                  roleId: "werewolf",
-                                  playerName,
-                                  content: `Bạn đã vote cắn ${wolfVotes[playerName] === "none" ? "Không ai" : wolfVotes[playerName]}`,
-                                };
-
-                                dispatch({
-                                  type: "UPDATE_FUNCTION",
-                                  payload: (prev) => ({
-                                    actionConfirmed: true,
-                                    confirmedPlayers: [
-                                      ...new Set([
-                                        ...prev.confirmedPlayers,
-                                        playerName,
-                                      ]),
-                                    ],
-                                    actionLogs: [...prev.actionLogs, newLog],
-                                  }),
-                                });
-
-                                if (channel) {
-                                  channel.send({
-                                    type: "broadcast",
-                                    event: "add-log",
-                                    payload: { log: newLog },
-                                  });
-
-                                  channel.send({
-                                    type: "broadcast",
-                                    event: "player-confirm",
-                                    payload: { playerName },
-                                  });
-                                }
-                              }}
-                              disabled={
-                                !wolfVotes[playerName] ||
-                                alivePlayers
-                                  .filter(
-                                    (w) => playerRoles[w]?.id === "werewolf",
-                                  )
-                                  .some(
-                                    (w) =>
-                                      wolfVotes[w] !== wolfVotes[playerName],
-                                  )
-                              }
-                              className="w-full rounded-lg bg-red-700 px-4 py-3 text-sm font-bold text-white hover:bg-red-800 disabled:opacity-50"
-                            >
-                              {alivePlayers
-                                .filter(
-                                  (w) => playerRoles[w]?.id === "werewolf",
-                                )
-                                .some(
-                                  (w) => wolfVotes[w] !== wolfVotes[playerName],
-                                )
-                                ? "Chờ đồng bọn thống nhất"
-                                : "Xác nhận vote"}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {/* SEER */}
-                    {playerRoles[playerName]?.id === "seer" && (
-                      <div className="flex w-full flex-col space-y-4">
-                        {actionConfirmed ? (
-                          <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
-                            <p className="text-sm font-medium text-indigo-700">
-                              <FaEye className="mr-1 inline text-indigo-700" />
-                              Bạn đã soi:
-                              <span className="ml-1 font-bold">
-                                {seerResult?.name}
-                              </span>
-                            </p>
-                            <p className="mt-2 text-base font-bold text-indigo-900">
-                              Kết quả:{" "}
-                              {seerResult?.isWolf
-                                ? "LÀ SÓI 🐺"
-                                : "KHÔNG PHẢI SÓI 👨‍🌾"}
-                            </p>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-xs text-indigo-800">
-                              Chọn 1 người để soi xem họ có phải là Sói hay
-                              không:
-                            </p>
-
-                            <div className="grid grid-cols-2 gap-2">
-                              {players
-                                .filter((p) => p !== playerName)
-                                .map((p) => (
-                                  <button
-                                    key={p}
-                                    onClick={() =>
-                                      dispatch({
-                                        type: "UPDATE",
-                                        payload: { nightSelection: p },
-                                      })
-                                    }
-                                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                                      nightSelection === p
-                                        ? "border-indigo-600 bg-indigo-600 text-white"
-                                        : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
-                                    }`}
-                                  >
-                                    {p}
-                                  </button>
-                                ))}
-                            </div>
-
-                            <button
-                              onClick={confirmNightAction}
-                              disabled={!nightSelection}
-                              className="w-full rounded-lg bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
-                            >
-                              Xác nhận soi
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {/* WITCH */}
-                    {playerRoles[playerName]?.id === "witch" && (
-                      <div className="flex w-full flex-col space-y-4">
-                        {actionConfirmed ? (
-                          <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
-                            <p className="text-sm font-medium text-purple-700">
-                              <GiWitchFlight className="mr-1 inline text-purple-700" />
-                              Bạn đã hoàn tất hành động đêm nay!
-                            </p>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="rounded-lg bg-indigo-100 p-3 text-center">
-                              <p className="text-sm font-medium text-indigo-900">
-                                Đêm nay, Sói đã cắn:{" "}
-                                <span className="font-bold text-red-600">
-                                  {wolfVictim === "none" || !wolfVictim
-                                    ? "Không ai"
-                                    : wolfVictim}
-                                </span>
-                              </p>
-                            </div>
-
-                            <div className="flex flex-col space-y-3">
-                              {/* BÌNH MÁU */}
-                              <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                                <div className="mb-2 flex items-center justify-between">
-                                  <span className="text-sm font-bold text-green-800">
-                                    🧪 Bình Máu (còn {witchPotions.heal})
-                                  </span>
-                                  <button
-                                    onClick={() =>
-                                      dispatch({
-                                        type: "UPDATE_FUNCTION",
-                                        payload: (prev) => ({
-                                          witchAction: {
-                                            ...prev.witchAction,
-                                            heal: !prev.witchAction.heal,
-                                          },
-                                        }),
-                                      })
-                                    }
-                                    disabled={
-                                      witchPotions.heal <= 0 ||
-                                      !wolfVictim ||
-                                      wolfVictim === "none"
-                                    }
-                                    className={`cursor-pointer rounded-md px-3 py-1 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                                      witchAction.heal
-                                        ? "border border-green-600 bg-green-600 text-white"
-                                        : "border border-green-300 bg-white text-green-700 hover:bg-green-100"
-                                    }`}
-                                  >
-                                    {witchAction.heal
-                                      ? "Đang sử dụng"
-                                      : "Sử dụng"}
-                                  </button>
-                                </div>
-                                <p className="text-xs text-green-700">
-                                  Dùng để cứu người bị Sói cắn.
-                                </p>
-                              </div>
-
-                              {/* BÌNH ĐỘC */}
-                              <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
-                                <div className="mb-2 flex items-center justify-between">
-                                  <span className="text-sm font-bold text-purple-800">
-                                    ☠️ Bình Độc (còn {witchPotions.poison})
-                                  </span>
-                                  {witchAction.poison && (
-                                    <button
-                                      onClick={() =>
-                                        dispatch({
-                                          type: "UPDATE_FUNCTION",
-                                          payload: (prev) => ({
-                                            witchAction: {
-                                              ...prev.witchAction,
-                                              poison: null,
-                                            },
-                                          }),
-                                        })
-                                      }
-                                      className="cursor-pointer rounded-md border border-purple-300 bg-white px-3 py-1 text-xs font-bold text-purple-700 hover:bg-purple-100"
-                                    >
-                                      Hủy dùng
-                                    </button>
-                                  )}
-                                </div>
-                                <p className="mb-2 text-xs text-purple-700">
-                                  Dùng để giết 1 người bất kỳ.
-                                </p>
-                                <div className="grid grid-cols-2 gap-2">
-                                  {alivePlayers
-                                    .filter((p) => p !== playerName)
-                                    .map((p) => (
-                                      <button
-                                        key={p}
-                                        onClick={() =>
-                                          dispatch({
-                                            type: "UPDATE_FUNCTION",
-                                            payload: (prev) => ({
-                                              witchAction: {
-                                                ...prev.witchAction,
-                                                poison: p,
-                                              },
-                                            }),
-                                          })
-                                        }
-                                        disabled={witchPotions.poison <= 0}
-                                        className={`cursor-pointer rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                                          witchAction.poison === p
-                                            ? "border-purple-600 bg-purple-600 text-white"
-                                            : "border-purple-200 bg-white text-purple-900 hover:bg-purple-100"
-                                        }`}
-                                      >
-                                        {p}
-                                      </button>
-                                    ))}
-                                </div>
-                              </div>
-                            </div>
-
-                            <button
-                              onClick={confirmWitchAction}
-                              className="w-full cursor-pointer rounded-lg bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800"
-                            >
-                              Xác nhận hành động
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    {/* HUNTER */}
-                    {playerRoles[playerName]?.id === "hunter" && (
-                      <div className="flex w-full flex-col space-y-4">
-                        {actionConfirmed ? (
-                          <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
-                            <p className="text-sm font-medium text-orange-700">
-                              <GiMusket className="mr-1 inline text-orange-700" />
-                              Bạn đã ghim:
-                              <span className="ml-1 font-bold">
-                                {hunterTarget || "Không có ai"}
-                              </span>
-                            </p>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-xs text-indigo-800">
-                              Chọn 1 người để ghim. Nếu đêm nay bạn chết, người
-                              này sẽ chết theo.
-                            </p>
-
-                            {dayCount > 1 && (
-                              <p className="text-sm font-bold text-orange-700">
-                                Mục tiêu đang ghim: {hunterTarget || "Chưa có"}
-                              </p>
-                            )}
-
-                            <div className="grid grid-cols-2 gap-2">
-                              {alivePlayers
-                                .filter((p) => p !== playerName)
-                                .map((p) => (
-                                  <button
-                                    key={p}
-                                    onClick={() =>
-                                      dispatch({
-                                        type: "UPDATE",
-                                        payload: { nightSelection: p },
-                                      })
-                                    }
-                                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                                      nightSelection === p
-                                        ? "border-orange-600 bg-orange-600 text-white"
-                                        : "border-orange-200 bg-white text-orange-900 hover:bg-orange-100"
-                                    }`}
-                                  >
-                                    {p}
-                                  </button>
-                                ))}
-                            </div>
-
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={confirmNightAction}
-                                disabled={!nightSelection}
-                                className="w-full rounded-lg bg-orange-700 px-4 py-3 text-sm font-bold text-white hover:bg-orange-800 disabled:opacity-50"
-                              >
-                                Xác nhận ghim mới
-                              </button>
-                              {dayCount > 1 && (
-                                <button
-                                  onClick={() =>
-                                    confirmNightAction(hunterTarget)
-                                  }
-                                  className="w-full rounded-lg bg-zinc-600 px-4 py-3 text-sm font-bold text-white hover:bg-zinc-700"
-                                >
-                                  Bỏ qua
-                                </button>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
+                ) : ROLE_STRATEGIES[playerRoles[playerName]?.id] ? (
+                  (() => {
+                    const ActiveRoleUI =
+                      ROLE_STRATEGIES[playerRoles[playerName]?.id];
+                    return (
+                      <ActiveRoleUI
+                        gameState={gameState}
+                        dispatch={dispatch}
+                        channel={channel}
+                        playerName={playerName}
+                        executeAction={executeAction}
+                      />
+                    );
+                  })()
+                ) : null}
               </div>
             )}
 
