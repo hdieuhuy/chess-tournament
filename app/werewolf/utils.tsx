@@ -1,4 +1,4 @@
-import { FaEye, FaUserTie } from "react-icons/fa";
+import { FaEye, FaUserTie, FaHeart } from "react-icons/fa";
 import {
   GiWolfHead,
   GiFarmer,
@@ -45,6 +45,8 @@ export const RoleIcon = ({
       return <GiBullseye className={className} />;
     case "assassin":
       return <GiBowieKnife className={className} />;
+    case "cupid":
+      return <FaHeart className={className} />;
     default:
       return null;
   }
@@ -76,6 +78,8 @@ export const getRoleColor = (id?: string) => {
       return "text-cyan-600";
     case "assassin":
       return "text-red-900";
+    case "cupid":
+      return "text-pink-500";
     default:
       return "text-zinc-500";
   }
@@ -107,6 +111,8 @@ export const getRoleDescription = (id?: string) => {
       return "Phe thứ 3. Đêm đầu tiên chọn 1 người làm mục tiêu. Nếu mục tiêu bị làng biểu quyết treo cổ và bạn còn sống, bạn giành chiến thắng.";
     case "assassin":
       return "Phe thứ 3. Mỗi đêm được chọn 1 người để giết. Chiến thắng khi làng chỉ còn 2 người (bao gồm cả bạn).";
+    case "cupid":
+      return "Đêm đầu tiên được chọn 2 người để ghép đôi. Hai người này sẽ sống chết có nhau. Nếu thuộc 2 phe khác nhau, cặp đôi phải sống đến cuối cùng để giành chiến thắng.";
     default:
       return "";
   }
@@ -125,4 +131,5 @@ export const defaultRoles: RoleConfig[] = [
   { id: "fool", name: "Kẻ Ngốc", count: 0 },
   { id: "headhunter", name: "Thợ Săn Người", count: 0 },
   { id: "assassin", name: "Sát Thủ", count: 0 },
+  { id: "cupid", name: "Thần Tình Yêu", count: 0 },
 ];

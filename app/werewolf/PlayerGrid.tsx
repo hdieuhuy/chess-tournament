@@ -1,4 +1,4 @@
-import { FaCrown, FaGhost } from "react-icons/fa";
+import { FaCrown, FaGhost, FaHeart } from "react-icons/fa";
 import { GiBullseye } from "react-icons/gi";
 import { RoleConfig } from "./types";
 import { RoleIcon, getRoleColor } from "./utils";
@@ -13,6 +13,7 @@ type PlayerGridProps = {
   gameStarted: boolean;
   phase: string;
   headhunterTarget?: string | null;
+  cupidTargets?: [string, string] | null;
   isNight?: boolean;
 };
 
@@ -26,6 +27,7 @@ export default function PlayerGrid({
   gameStarted,
   phase,
   headhunterTarget,
+  cupidTargets,
   isNight,
 }: PlayerGridProps) {
   return (
@@ -71,39 +73,56 @@ export default function PlayerGrid({
               const isTarget =
                 headhunterTarget === p &&
                 (myRole?.id === "headhunter" || phase === "game_over");
+              const isLover =
+                cupidTargets &&
+                cupidTargets.includes(p) &&
+                (cupidTargets.includes(playerName) ||
+                  myRole?.id === "cupid" ||
+                  phase === "game_over");
 
               return (
                 <div
                   key={idx}
                   className={`relative flex flex-col items-center justify-center rounded-2xl border p-4 shadow-sm transition-shadow hover:shadow-md ${isNight ? "bg-slate-700/50" : "bg-zinc-50"} ${!alivePlayers.includes(p) && gameStarted ? `opacity-50 grayscale ${isNight ? "border-slate-700" : "border-zinc-200"}` : isNight ? "border-slate-600" : "border-zinc-100"}`}
                 >
-                  {!alivePlayers.includes(p) && gameStarted && (
-                    <div className="group absolute left-2 top-2 cursor-help text-lg text-zinc-500">
-                      <FaGhost />
-                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-800 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        Đã chết
-                        <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+                  <div className="absolute right-2 top-2 flex items-center gap-1">
+                    {!alivePlayers.includes(p) && gameStarted && (
+                      <div className="group relative cursor-help text-lg text-zinc-500">
+                        <FaGhost />
+                        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-800 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                          Đã chết
+                          <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {p === hostName && (
-                    <div className="group absolute right-2 top-2 cursor-help text-lg text-amber-500">
-                      <FaCrown />
-                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-800 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        Chủ phòng
-                        <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+                    )}
+                    {p === hostName && (
+                      <div className="group relative cursor-help text-lg text-amber-500">
+                        <FaCrown />
+                        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-800 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                          Chủ phòng
+                          <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {gameStarted && isTarget && (
-                    <div className="group absolute right-2 bottom-2 cursor-help text-lg text-cyan-600">
-                      <GiBullseye />
-                      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-800 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        Mục tiêu săn thưởng
-                        <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+                    )}
+                    {gameStarted && isTarget && (
+                      <div className="group relative cursor-help text-lg text-cyan-600">
+                        <GiBullseye />
+                        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-800 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                          Mục tiêu săn thưởng
+                          <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                    {gameStarted && isLover && (
+                      <div className="group relative cursor-help text-lg text-pink-500">
+                        <FaHeart />
+                        <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-800 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                          Cặp đôi
+                          <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <div
                     className={`mb-3 flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold shadow-inner ${isNight ? "bg-slate-600 text-slate-300" : "bg-zinc-200 text-zinc-700"}`}
                   >
