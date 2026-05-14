@@ -10,6 +10,7 @@ type RoleConfigPanelProps = {
   playerName: string;
   gameStarted: boolean;
   updateRoleCount: (id: string, delta: number) => void;
+  isNight?: boolean;
 };
 
 const getFaction = (roleId: string) => {
@@ -46,25 +47,32 @@ export default function RoleConfigPanel({
   playerName,
   gameStarted,
   updateRoleCount,
+  isNight,
 }: RoleConfigPanelProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const totalRoles = roleConfig.reduce((acc, r) => acc + r.count, 0);
 
   return (
-    <div className="flex flex-col items-center rounded-xl border border-zinc-200 bg-white p-6 shadow-sm md:items-start w-full">
+    <div
+      className={`flex flex-col items-center rounded-xl border p-6 shadow-sm md:items-start w-full ${isNight ? "border-slate-700 bg-slate-800" : "border-zinc-200 bg-white"}`}
+    >
       <div className="mb-4 flex w-full items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-zinc-800">
+          <h3
+            className={`text-sm font-semibold ${isNight ? "text-slate-200" : "text-zinc-800"}`}
+          >
             Cấu hình Vai trò
           </h3>
-          <span className="text-xs font-medium text-zinc-500">
+          <span
+            className={`text-xs font-medium ${isNight ? "text-slate-400" : "text-zinc-500"}`}
+          >
             Tổng: {totalRoles}/{playersCount}
           </span>
         </div>
         {hostName === playerName && !gameStarted && (
           <button
             onClick={() => setIsModalOpen(true)}
-            className="cursor-pointer rounded-md bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-200"
+            className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${isNight ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"}`}
           >
             Chỉnh sửa
           </button>
@@ -78,13 +86,15 @@ export default function RoleConfigPanel({
           .map((role) => (
             <div
               key={role.id}
-              className="group relative flex flex-col items-center justify-center rounded-lg border border-zinc-100 bg-zinc-50 p-2 hover:bg-zinc-100"
+              className={`group relative flex flex-col items-center justify-center rounded-lg border p-2 transition-colors ${isNight ? "border-slate-600 bg-slate-700/50 hover:bg-slate-700" : "border-zinc-100 bg-zinc-50 hover:bg-zinc-100"}`}
             >
               <RoleIcon
                 id={role.id}
                 className={`mb-1 text-2xl ${getRoleColor(role.id)}`}
               />
-              <span className="text-sm font-bold text-zinc-800">
+              <span
+                className={`text-sm font-bold ${isNight ? "text-slate-200" : "text-zinc-800"}`}
+              >
                 {role.count}
               </span>
 

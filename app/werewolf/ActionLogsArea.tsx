@@ -8,6 +8,7 @@ type ActionLogsAreaProps = {
   setActiveLogTab: (tab: "night" | "day") => void;
   playerName: string;
   playerRoles: Record<string, RoleConfig>;
+  isNight?: boolean;
 };
 
 export default function ActionLogsArea({
@@ -16,6 +17,7 @@ export default function ActionLogsArea({
   setActiveLogTab,
   playerName,
   playerRoles,
+  isNight,
 }: ActionLogsAreaProps) {
   const visibleLogs = actionLogs.filter((log) => {
     if (log.roleId === "system") return true;
@@ -59,7 +61,7 @@ export default function ActionLogsArea({
         return (
           <span
             key={i}
-            className={`font-bold ${isDeathLog ? "text-red-600" : "text-zinc-900"}`}
+            className={`font-bold ${isDeathLog ? (isNight ? "text-red-400" : "text-red-600") : isNight ? "text-slate-200" : "text-zinc-900"}`}
           >
             {part}
           </span>
@@ -70,32 +72,42 @@ export default function ActionLogsArea({
   };
 
   return (
-    <div className="flex h-[300px] flex-col rounded-xl border border-zinc-200 bg-white shadow-sm">
-      <div className="flex flex-col rounded-t-xl border-b border-zinc-100 bg-zinc-50">
+    <div
+      className={`flex h-[300px] flex-col rounded-xl border shadow-sm ${isNight ? "border-slate-700 bg-slate-800" : "border-zinc-200 bg-white"}`}
+    >
+      <div
+        className={`flex flex-col rounded-t-xl border-b ${isNight ? "border-slate-700 bg-slate-800/80" : "border-zinc-100 bg-zinc-50"}`}
+      >
         <div className="p-3">
-          <h3 className="flex items-center text-sm font-bold text-zinc-800">
+          <h3
+            className={`flex items-center text-sm font-bold ${isNight ? "text-slate-200" : "text-zinc-800"}`}
+          >
             📜 Nhật ký hành động
           </h3>
         </div>
         <div className="flex">
           <button
             onClick={() => setActiveLogTab("night")}
-            className={`flex-1 border-b-2 py-2 text-sm font-bold text-center transition-colors ${activeLogTab === "night" ? "border-indigo-600 bg-indigo-50/50 text-indigo-700" : "border-transparent text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"}`}
+            className={`flex-1 border-b-2 py-2 text-sm font-bold text-center transition-colors ${activeLogTab === "night" ? (isNight ? "border-indigo-500 bg-indigo-900/30 text-indigo-400" : "border-indigo-600 bg-indigo-50/50 text-indigo-700") : isNight ? "border-transparent text-slate-400 hover:bg-slate-700" : "border-transparent text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"}`}
           >
             <FaMoon className="mb-1 mr-2 inline" /> Ban Đêm
           </button>
           <button
             onClick={() => setActiveLogTab("day")}
-            className={`flex-1 border-b-2 py-2 text-sm font-bold text-center transition-colors ${activeLogTab === "day" ? "border-amber-500 bg-amber-50/50 text-amber-600" : "border-transparent text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"}`}
+            className={`flex-1 border-b-2 py-2 text-sm font-bold text-center transition-colors ${activeLogTab === "day" ? (isNight ? "border-amber-500 bg-amber-900/30 text-amber-500" : "border-amber-500 bg-amber-50/50 text-amber-600") : isNight ? "border-transparent text-slate-400 hover:bg-slate-700" : "border-transparent text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"}`}
           >
             <FaSun className="mb-1 mr-2 inline" /> Ban Ngày
           </button>
         </div>
       </div>
 
-      <div className="flex-1 space-y-2 overflow-y-auto rounded-b-xl bg-white p-4">
+      <div
+        className={`flex-1 space-y-2 overflow-y-auto rounded-b-xl p-4 ${isNight ? "bg-slate-800" : "bg-white"}`}
+      >
         {actionLogs.length === 0 && activeLogTab === "day" && (
-          <div className="ml-2 text-sm text-zinc-600">
+          <div
+            className={`ml-2 text-sm ${isNight ? "text-slate-400" : "text-zinc-600"}`}
+          >
             <span className="block text-xs font-semibold text-amber-600">
               (Hệ thống -{" "}
               <span className="font-bold text-amber-700 text-[13px]">
@@ -121,12 +133,17 @@ export default function ActionLogsArea({
               <div key={dayStr} className="mb-6 space-y-4">
                 {activeLogTab === "night" && nightLogs.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="flex items-center border-b border-zinc-100 pb-1 text-sm font-bold text-indigo-900">
+                    <h4
+                      className={`flex items-center border-b pb-1 text-sm font-bold ${isNight ? "border-slate-700 text-indigo-400" : "border-zinc-100 text-indigo-900"}`}
+                    >
                       <FaMoon className="mr-2 text-indigo-600" />
                       Đêm {dayStr}
                     </h4>
                     {nightLogs.map((log: ActionLog) => (
-                      <div key={log.id} className="ml-2 text-sm text-zinc-600">
+                      <div
+                        key={log.id}
+                        className={`ml-2 text-sm ${isNight ? "text-slate-400" : "text-zinc-600"}`}
+                      >
                         {log.roleId === "werewolf" &&
                         log.playerName !== playerName ? (
                           <span className="block text-xs font-semibold text-red-500">
@@ -160,11 +177,16 @@ export default function ActionLogsArea({
 
                 {activeLogTab === "day" && dayLogs.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="flex items-center border-b border-zinc-100 pb-1 text-sm font-bold text-amber-600">
+                    <h4
+                      className={`flex items-center border-b pb-1 text-sm font-bold ${isNight ? "border-slate-700 text-amber-500" : "border-zinc-100 text-amber-600"}`}
+                    >
                       <FaSun className="mr-2 text-amber-500" /> Ngày {dayStr}
                     </h4>
                     {dayLogs.map((log: ActionLog) => (
-                      <div key={log.id} className="ml-2 text-sm text-zinc-600">
+                      <div
+                        key={log.id}
+                        className={`ml-2 text-sm ${isNight ? "text-slate-400" : "text-zinc-600"}`}
+                      >
                         <span className="block text-xs font-semibold text-amber-600">
                           (Hệ thống -{" "}
                           <span className="font-bold text-amber-700 text-[13px]">

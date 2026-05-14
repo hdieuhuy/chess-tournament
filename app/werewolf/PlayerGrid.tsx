@@ -13,6 +13,7 @@ type PlayerGridProps = {
   gameStarted: boolean;
   phase: string;
   headhunterTarget?: string | null;
+  isNight?: boolean;
 };
 
 export default function PlayerGrid({
@@ -25,12 +26,19 @@ export default function PlayerGrid({
   gameStarted,
   phase,
   headhunterTarget,
+  isNight,
 }: PlayerGridProps) {
   return (
     <div className="flex w-full flex-col space-y-6">
-      <div className="w-full rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between border-b border-zinc-100 pb-4">
-          <h3 className="text-lg font-medium text-zinc-900">
+      <div
+        className={`w-full rounded-xl border p-6 shadow-sm ${isNight ? "border-slate-700 bg-slate-800" : "border-zinc-200 bg-white"}`}
+      >
+        <div
+          className={`mb-4 flex items-center justify-between border-b pb-4 ${isNight ? "border-slate-700" : "border-zinc-100"}`}
+        >
+          <h3
+            className={`text-lg font-medium ${isNight ? "text-slate-200" : "text-zinc-900"}`}
+          >
             Người chơi ({players.length})
           </h3>
           {gameStarted && (
@@ -41,7 +49,9 @@ export default function PlayerGrid({
         </div>
 
         {players.length === 0 ? (
-          <p className="py-8 text-center text-sm italic text-zinc-500">
+          <p
+            className={`py-8 text-center text-sm italic ${isNight ? "text-slate-400" : "text-zinc-500"}`}
+          >
             Chưa có người chơi nào.
           </p>
         ) : (
@@ -65,7 +75,7 @@ export default function PlayerGrid({
               return (
                 <div
                   key={idx}
-                  className={`relative flex flex-col items-center justify-center rounded-2xl border bg-zinc-50 p-4 shadow-sm transition-shadow hover:shadow-md ${!alivePlayers.includes(p) && gameStarted ? "opacity-50 grayscale border-zinc-200" : "border-zinc-100"}`}
+                  className={`relative flex flex-col items-center justify-center rounded-2xl border p-4 shadow-sm transition-shadow hover:shadow-md ${isNight ? "bg-slate-700/50" : "bg-zinc-50"} ${!alivePlayers.includes(p) && gameStarted ? `opacity-50 grayscale ${isNight ? "border-slate-700" : "border-zinc-200"}` : isNight ? "border-slate-600" : "border-zinc-100"}`}
                 >
                   {!alivePlayers.includes(p) && gameStarted && (
                     <div className="group absolute left-2 top-2 cursor-help text-lg text-zinc-500">
@@ -94,11 +104,13 @@ export default function PlayerGrid({
                       </div>
                     </div>
                   )}
-                  <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-200 text-2xl font-bold text-zinc-700 shadow-inner">
+                  <div
+                    className={`mb-3 flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold shadow-inner ${isNight ? "bg-slate-600 text-slate-300" : "bg-zinc-200 text-zinc-700"}`}
+                  >
                     {p.charAt(0).toUpperCase()}
                   </div>
                   <span
-                    className={`w-full truncate text-center text-sm ${isMe ? "font-bold text-indigo-700" : "font-medium text-zinc-800"}`}
+                    className={`w-full truncate text-center text-sm ${isMe ? (isNight ? "font-bold text-indigo-400" : "font-bold text-indigo-700") : isNight ? "font-medium text-slate-200" : "font-medium text-zinc-800"}`}
                   >
                     {p} {isMe && "(Bạn)"}
                   </span>

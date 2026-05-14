@@ -215,7 +215,7 @@ const BodyguardNightUI = ({
     gameState;
   if (actionConfirmed) {
     return (
-      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
         <p className="text-sm font-medium text-green-700">
           <GiShield className="mr-1 inline text-green-700" />
           Bạn đã chọn bảo vệ:
@@ -226,7 +226,7 @@ const BodyguardNightUI = ({
   }
   return (
     <div className="flex flex-col gap-4 w-full mt-2">
-      <p className="text-sm font-medium text-indigo-800">
+      <p className="text-sm font-medium text-indigo-300">
         Chọn 1 người để bảo vệ đêm nay (không được bảo vệ người cũ của đêm qua):
       </p>
       <div className="grid grid-cols-2 gap-3 w-full">
@@ -240,7 +240,7 @@ const BodyguardNightUI = ({
             className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
               nightSelection === p
                 ? "border-indigo-600 bg-indigo-600 text-white"
-                : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
+                : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"
             }`}
           >
             {p} {p === lastProtected && "(Đã bảo vệ)"}
@@ -263,7 +263,7 @@ const BodyguardNightUI = ({
           );
         }}
         disabled={!nightSelection}
-        className="w-full cursor-pointer rounded-lg bg-indigo-700 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
+        className="w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
       >
         Xác nhận
       </button>
@@ -281,7 +281,7 @@ const WerewolfNightUI = ({
   const { alivePlayers, playerRoles, wolfVotes, actionConfirmed } = gameState;
   if (actionConfirmed) {
     return (
-      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
         <p className="text-sm font-medium text-red-700">
           <GiWolfHead className="mr-1 inline text-red-700" />
           Bạn đã chốt vote cắn:
@@ -291,7 +291,7 @@ const WerewolfNightUI = ({
               : wolfVotes[playerName]}
           </span>
         </p>
-        <p className="mt-1 text-xs text-indigo-600">
+        <p className="mt-1 text-xs text-indigo-400">
           Đợi các Sói khác và Phù thủy...
         </p>
       </div>
@@ -324,7 +324,7 @@ const WerewolfNightUI = ({
 
   return (
     <div className="flex flex-col gap-4 w-full mt-2">
-      <p className="text-sm font-medium text-indigo-800">
+      <p className="text-sm font-medium text-indigo-300">
         Chọn 1 người để cắn. Sói cần phải thống nhất vote cùng 1 người.
       </p>
       <div className="grid grid-cols-2 gap-3 w-full">
@@ -339,7 +339,7 @@ const WerewolfNightUI = ({
               className={`relative cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                 myVote === p
                   ? "border-red-600 bg-red-600 text-white"
-                  : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
+                  : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"
               }`}
             >
               {p}
@@ -355,8 +355,8 @@ const WerewolfNightUI = ({
           onClick={() => handleVote("none")}
           className={`relative cursor-pointer col-span-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
             myVote === "none"
-              ? "border-zinc-600 bg-zinc-600 text-white"
-              : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
+              ? "border-slate-500 bg-slate-600 text-white"
+              : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"
           }`}
         >
           Không cắn ai
@@ -392,7 +392,7 @@ const CursedWolfNightUI = ({
   const { wolfVictim, cursedWolfUsed, actionConfirmed } = gameState;
   if (actionConfirmed) {
     return (
-      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
         <p className="text-sm font-medium text-rose-700">
           Bạn đã hoàn tất lượt của mình.
         </p>
@@ -403,7 +403,7 @@ const CursedWolfNightUI = ({
   if (cursedWolfUsed || !wolfVictim || wolfVictim === "none") {
     return (
       <div className="flex flex-col gap-4 w-full mt-2">
-        <p className="text-sm font-medium text-indigo-800">
+        <p className="text-sm font-medium text-indigo-300">
           {cursedWolfUsed
             ? "Bạn đã sử dụng quyền năng lây nhiễm trong trận này."
             : "Đêm nay Sói không cắn ai, không có mục tiêu để nguyền."}
@@ -429,7 +429,7 @@ const CursedWolfNightUI = ({
 
   return (
     <div className="flex flex-col gap-4 w-full mt-2">
-      <p className="text-sm font-medium text-indigo-800">
+      <p className="text-sm font-medium text-indigo-300">
         Sói đã chọn cắn:{" "}
         <span className="font-bold text-red-600">{wolfVictim}</span>. Bạn có
         muốn sử dụng quyền năng lây nhiễm (chỉ 1 lần/trận) để biến người này
@@ -470,7 +470,7 @@ const CursedWolfNightUI = ({
               },
             )
           }
-          className="w-full cursor-pointer rounded-lg bg-zinc-600 px-4 py-3 text-sm font-bold text-white hover:bg-zinc-700"
+          className="w-full cursor-pointer rounded-lg bg-slate-600 px-4 py-3 text-sm font-bold text-white hover:bg-slate-700"
         >
           Không
         </button>
@@ -489,13 +489,13 @@ const SeerNightUI = ({
     gameState;
   if (actionConfirmed) {
     return (
-      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
-        <p className="text-sm font-medium text-indigo-700">
-          <FaEye className="mr-1 inline text-indigo-700" />
+      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
+        <p className="text-sm font-medium text-indigo-400">
+          <FaEye className="mr-1 inline text-indigo-400" />
           Bạn đã soi:
           <span className="ml-1 font-bold">{seerResult?.name}</span>
         </p>
-        <p className="mt-2 text-base font-bold text-indigo-900">
+        <p className="mt-2 text-base font-bold text-indigo-300">
           Kết quả: {seerResult?.isWolf ? "LÀ SÓI 🐺" : "KHÔNG PHẢI SÓI 👨‍🌾"}
         </p>
       </div>
@@ -503,7 +503,7 @@ const SeerNightUI = ({
   }
   return (
     <div className="flex flex-col gap-4 w-full mt-2">
-      <p className="text-sm font-medium text-indigo-800">
+      <p className="text-sm font-medium text-indigo-300">
         Chọn 1 người để soi xem họ có phải là Sói hay không:
       </p>
       <div className="grid grid-cols-2 gap-3 w-full">
@@ -518,7 +518,7 @@ const SeerNightUI = ({
               className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                 nightSelection === p
                   ? "border-indigo-600 bg-indigo-600 text-white"
-                  : "border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100"
+                  : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"
               }`}
             >
               {p}
@@ -562,7 +562,7 @@ const WitchNightUI = ({
   } = gameState;
   if (actionConfirmed) {
     return (
-      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
         <p className="text-sm font-medium text-purple-700">
           <GiWitchFlight className="mr-1 inline text-purple-700" />
           Bạn đã hoàn tất hành động đêm nay!
@@ -572,8 +572,8 @@ const WitchNightUI = ({
   }
   return (
     <div className="flex flex-col gap-4 w-full mt-2">
-      <div className="w-full rounded-lg bg-indigo-100 p-3 text-center">
-        <p className="text-sm font-medium text-indigo-900">
+      <div className="w-full rounded-lg bg-indigo-900/40 p-3 text-center">
+        <p className="text-sm font-medium text-indigo-300">
           Đêm nay, Sói đã cắn:{" "}
           <span className="font-bold text-red-600">
             {wolfVictim === "none" || !wolfVictim ? "Không ai" : wolfVictim}
@@ -581,9 +581,9 @@ const WitchNightUI = ({
         </p>
       </div>
       <div className="flex flex-col gap-4 w-full">
-        <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+        <div className="rounded-lg border border-green-900/50 bg-green-900/20 p-4">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-bold text-green-800">
+            <span className="text-sm font-bold text-green-400">
               🧪 Bình Máu (còn {witchPotions.heal})
             </span>
             <button
@@ -604,19 +604,19 @@ const WitchNightUI = ({
               className={`cursor-pointer rounded-md px-3 py-1 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                 witchAction.heal
                   ? "border border-green-600 bg-green-600 text-white"
-                  : "border border-green-300 bg-white text-green-700 hover:bg-green-100"
+                  : "border border-green-800 bg-slate-700 text-green-300 hover:bg-green-900/50"
               }`}
             >
               {witchAction.heal ? "Đang sử dụng" : "Sử dụng"}
             </button>
           </div>
-          <p className="text-xs text-green-700">
+          <p className="text-xs text-green-500">
             Dùng để cứu người bị Sói cắn.
           </p>
         </div>
-        <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
+        <div className="rounded-lg border border-purple-900/50 bg-purple-900/20 p-4">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-bold text-purple-800">
+            <span className="text-sm font-bold text-purple-400">
               ☠️ Bình Độc (còn {witchPotions.poison})
             </span>
             {witchAction.poison && (
@@ -629,13 +629,13 @@ const WitchNightUI = ({
                     }),
                   })
                 }
-                className="cursor-pointer rounded-md border border-purple-300 bg-white px-3 py-1 text-xs font-bold text-purple-700 hover:bg-purple-100"
+                className="cursor-pointer rounded-md border border-purple-800 bg-slate-700 px-3 py-1 text-xs font-bold text-purple-300 hover:bg-purple-900/50"
               >
                 Hủy dùng
               </button>
             )}
           </div>
-          <p className="mb-2 text-xs text-purple-700">
+          <p className="mb-2 text-xs text-purple-500">
             Dùng để giết 1 người bất kỳ.
           </p>
           <div className="grid grid-cols-2 gap-3 w-full">
@@ -656,7 +656,7 @@ const WitchNightUI = ({
                   className={`cursor-pointer rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                     witchAction.poison === p
                       ? "border-purple-600 bg-purple-600 text-white"
-                      : "border-purple-200 bg-white text-purple-900 hover:bg-purple-100"
+                      : "border-purple-800 bg-slate-700 text-purple-300 hover:bg-purple-900/50"
                   }`}
                 >
                   {p}
@@ -706,7 +706,7 @@ const HunterNightUI = ({
   } = gameState;
   if (actionConfirmed) {
     return (
-      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
         <p className="text-sm font-medium text-orange-700">
           <GiMusket className="mr-1 inline text-orange-700" />
           Bạn đã ghim:
@@ -719,7 +719,7 @@ const HunterNightUI = ({
   }
   return (
     <div className="flex flex-col gap-4 w-full mt-2">
-      <p className="text-sm font-medium text-indigo-800">
+      <p className="text-sm font-medium text-indigo-300">
         Chọn 1 người để ghim. Nếu đêm nay bạn chết, người này sẽ chết theo.
       </p>
       {dayCount > 1 && (
@@ -739,7 +739,7 @@ const HunterNightUI = ({
               className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                 nightSelection === p
                   ? "border-orange-600 bg-orange-600 text-white"
-                  : "border-orange-200 bg-white text-orange-900 hover:bg-orange-100"
+                  : "border-orange-900/50 bg-slate-700 text-orange-300 hover:bg-orange-900/50"
               }`}
             >
               {p}
@@ -775,7 +775,7 @@ const HunterNightUI = ({
                 },
               );
             }}
-            className="w-full cursor-pointer rounded-lg bg-zinc-600 px-4 py-3 text-sm font-bold text-white hover:bg-zinc-700"
+            className="w-full cursor-pointer rounded-lg bg-slate-600 px-4 py-3 text-sm font-bold text-white hover:bg-slate-700"
           >
             Bỏ qua
           </button>
@@ -800,7 +800,7 @@ const HeadhunterNightUI = ({
   } = gameState;
   if (actionConfirmed) {
     return (
-      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
         <p className="text-sm font-medium text-cyan-700">
           <GiBullseye className="mr-1 inline text-cyan-700" />
           Bạn đã chốt mục tiêu săn thưởng:
@@ -814,7 +814,7 @@ const HeadhunterNightUI = ({
 
   return (
     <div className="flex flex-col gap-4 w-full mt-2">
-      <p className="text-sm font-medium text-indigo-800">
+      <p className="text-sm font-medium text-indigo-300">
         Chọn 1 người làm mục tiêu. Nếu người này bị làng biểu quyết treo cổ, bạn
         sẽ giành chiến thắng!
       </p>
@@ -830,7 +830,7 @@ const HeadhunterNightUI = ({
               className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                 nightSelection === p
                   ? "border-cyan-600 bg-cyan-600 text-white"
-                  : "border-cyan-200 bg-white text-cyan-900 hover:bg-cyan-100"
+                  : "border-cyan-800 bg-slate-700 text-cyan-300 hover:bg-cyan-900/50"
               }`}
             >
               {p}
@@ -870,7 +870,7 @@ const AssassinNightUI = ({
   const { alivePlayers, nightSelection, actionConfirmed } = gameState;
   if (actionConfirmed) {
     return (
-      <div className="rounded-lg border border-indigo-100 bg-white p-3 text-center">
+      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
         <p className="text-sm font-medium text-red-900">
           <GiBowieKnife className="mr-1 inline text-red-900" />
           Bạn đã quyết định ám sát:
@@ -884,7 +884,7 @@ const AssassinNightUI = ({
 
   return (
     <div className="flex flex-col gap-4 w-full mt-2">
-      <p className="text-sm font-medium text-indigo-800">
+      <p className="text-sm font-medium text-indigo-300">
         Chọn 1 người để ám sát trong đêm nay:
       </p>
       <div className="grid grid-cols-2 gap-3 w-full">
@@ -899,7 +899,7 @@ const AssassinNightUI = ({
               className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                 nightSelection === p
                   ? "border-red-900 bg-red-900 text-white"
-                  : "border-red-200 bg-white text-red-900 hover:bg-red-100"
+                  : "border-red-900/50 bg-slate-700 text-red-300 hover:bg-red-900/50"
               }`}
             >
               {p}
@@ -911,8 +911,8 @@ const AssassinNightUI = ({
           }
           className={`col-span-2 cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
             nightSelection === "none"
-              ? "border-zinc-600 bg-zinc-600 text-white"
-              : "border-red-200 bg-white text-red-900 hover:bg-red-100"
+              ? "border-slate-500 bg-slate-600 text-white"
+              : "border-red-900/50 bg-slate-700 text-red-300 hover:bg-red-900/50"
           }`}
         >
           Không giết ai
@@ -1007,6 +1007,8 @@ function WerewolfGame() {
     headhunterTarget,
     assassinTarget,
   } = gameState;
+
+  const isNight = phase === "night" && gameStarted;
 
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const [showNameModal, setShowNameModal] = useState<boolean>(true);
@@ -2630,10 +2632,14 @@ function WerewolfGame() {
             <div className="flex w-full flex-col space-y-6">
               {/* Copy Link */}
               <div>
-                <label className="mb-2 block text-xs font-medium text-zinc-700">
+                <label
+                  className={`mb-2 block text-xs font-medium ${isNight ? "text-slate-400" : "text-zinc-700"}`}
+                >
                   Mời bạn bè tham gia:
                 </label>
-                <div className="flex w-full items-center space-x-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm">
+                <div
+                  className={`flex w-full items-center space-x-2 rounded-lg border px-3 py-2 shadow-sm ${isNight ? "border-slate-700 bg-slate-800" : "border-zinc-200 bg-white"}`}
+                >
                   <span className="flex-1 select-all truncate text-left text-xs text-zinc-500">
                     {typeof window !== "undefined" ? window.location.href : ""}
                   </span>
@@ -2651,18 +2657,20 @@ function WerewolfGame() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-col items-center rounded-xl border border-zinc-200 bg-white p-6 shadow-sm md:items-start">
+              <div
+                className={`flex flex-col items-center rounded-xl border p-6 shadow-sm md:items-start ${isNight ? "border-slate-700 bg-slate-800" : "border-zinc-200 bg-white"}`}
+              >
                 {phase === "night" && gameStarted ? (
                   <>
-                    <h3 className="mb-2 flex items-center text-sm font-semibold text-indigo-900">
+                    <h3 className="mb-2 flex items-center text-sm font-semibold text-indigo-300">
                       <FaMoon className="mr-2 text-indigo-700" /> Đêm {dayCount}
                     </h3>
-                    <div className="flex flex-col items-center justify-center w-full py-4 bg-indigo-50 rounded-lg border border-indigo-100 mb-4">
-                      <span className="text-4xl font-mono text-indigo-900 mb-2">
+                    <div className="flex flex-col items-center justify-center w-full py-4 bg-indigo-900/30 rounded-lg border border-indigo-900/50 mb-4">
+                      <span className="text-4xl font-mono text-indigo-200 mb-2">
                         {Math.floor(nightTimeLeft / 60)}:
                         {(nightTimeLeft % 60).toString().padStart(2, "0")}
                       </span>
-                      <span className="text-sm font-medium text-indigo-800 uppercase tracking-wider">
+                      <span className="text-sm font-medium text-indigo-300 uppercase tracking-wider">
                         Lượt của:{" "}
                         {defaultRoles.find((r) => r.id === nightPhase)?.name ||
                           "..."}
@@ -2679,12 +2687,16 @@ function WerewolfGame() {
                   </>
                 ) : (
                   <>
-                    <h3 className="mb-2 text-sm font-semibold text-zinc-800">
+                    <h3
+                      className={`mb-2 text-sm font-semibold ${isNight ? "text-slate-200" : "text-zinc-800"}`}
+                    >
                       {gameStarted
                         ? `Trạng thái: ${phase === "role_reveal" ? "Phát vai trò" : phase === "game_over" ? "Kết thúc" : `Ngày ${dayCount}`}`
                         : "Trạng thái phòng"}
                     </h3>
-                    <p className="mb-4 text-sm text-zinc-500">
+                    <p
+                      className={`mb-4 text-sm ${isNight ? "text-slate-400" : "text-zinc-500"}`}
+                    >
                       {gameStarted
                         ? `${alivePlayers.length} người còn sống.`
                         : `${players.length} người chơi đã sẵn sàng trong sảnh.`}
@@ -2740,7 +2752,9 @@ function WerewolfGame() {
                         </div>
                       )
                     ) : (
-                      <div className="w-full rounded-lg bg-zinc-100 p-3 text-center text-sm font-medium text-zinc-600">
+                      <div
+                        className={`w-full rounded-lg p-3 text-center text-sm font-medium ${isNight ? "bg-slate-700/50 text-slate-300" : "bg-zinc-100 text-zinc-600"}`}
+                      >
                         {gameStarted
                           ? "Trò chơi đang diễn ra..."
                           : "Đang chờ chủ phòng bắt đầu..."}
@@ -2757,6 +2771,7 @@ function WerewolfGame() {
                 playerName={playerName}
                 gameStarted={gameStarted}
                 updateRoleCount={updateRoleCount}
+                isNight={isNight}
               />
 
               <div className="border-t border-zinc-200 pt-4">
@@ -2783,24 +2798,33 @@ function WerewolfGame() {
             gameStarted={gameStarted}
             phase={phase}
             headhunterTarget={headhunterTarget}
+            isNight={isNight}
           />
 
           {/* Spectators */}
           {spectators.length > 0 && (
-            <div className="w-full rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <h3 className="mb-4 border-b border-zinc-100 pb-3 text-base font-medium text-zinc-900">
+            <div
+              className={`w-full rounded-xl border p-6 shadow-sm ${isNight ? "border-slate-700 bg-slate-800" : "border-zinc-200 bg-white"}`}
+            >
+              <h3
+                className={`mb-4 border-b pb-3 text-base font-medium ${isNight ? "border-slate-700 text-slate-200" : "border-zinc-100 text-zinc-900"}`}
+              >
                 Người xem ({spectators.length})
               </h3>
               <div className="flex flex-wrap gap-3">
                 {spectators.map((spec, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center space-x-2 rounded-full border border-zinc-100 bg-zinc-50 px-3 py-1.5"
+                    className={`flex items-center space-x-2 rounded-full border px-3 py-1.5 ${isNight ? "border-slate-600 bg-slate-700" : "border-zinc-100 bg-zinc-50"}`}
                   >
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-200 text-xs font-bold text-zinc-700">
+                    <div
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${isNight ? "bg-slate-600 text-slate-300" : "bg-zinc-200 text-zinc-700"}`}
+                    >
                       {spec.charAt(0).toUpperCase()}
                     </div>
-                    <span className="text-xs font-medium text-zinc-800">
+                    <span
+                      className={`text-xs font-medium ${isNight ? "text-slate-200" : "text-zinc-800"}`}
+                    >
                       {spec}
                     </span>
                   </div>
@@ -2814,13 +2838,19 @@ function WerewolfGame() {
         {!showNameModal && gameStarted && (
           <div className="flex w-full flex-col space-y-6">
             {!alivePlayers.includes(playerName) && (
-              <div className="flex w-full flex-col items-center rounded-xl border border-zinc-200 bg-zinc-100 p-6 shadow-sm md:items-start">
-                <h3 className="mb-2 flex items-center text-sm font-bold text-zinc-600">
+              <div
+                className={`flex w-full flex-col items-center rounded-xl border p-6 shadow-sm md:items-start ${isNight ? "border-slate-700 bg-slate-800/80" : "border-zinc-200 bg-zinc-100"}`}
+              >
+                <h3
+                  className={`mb-2 flex items-center text-sm font-bold ${isNight ? "text-slate-300" : "text-zinc-600"}`}
+                >
                   <FaGhost className="mr-2 text-zinc-500" />
                   Trạng thái: Đã chết
                 </h3>
 
-                <p className="text-sm text-zinc-500">
+                <p
+                  className={`text-sm ${isNight ? "text-slate-400" : "text-zinc-500"}`}
+                >
                   Bạn không còn khả năng tham gia vào các hoạt động của làng
                   nữa. Hãy giữ im lặng để không ảnh hưởng đến người chơi khác.
                 </p>
@@ -2829,8 +2859,8 @@ function WerewolfGame() {
 
             {/* Night Action Area */}
             {phase === "night" && alivePlayers.includes(playerName) && (
-              <div className="flex flex-col items-center rounded-xl border border-indigo-200 bg-indigo-50 p-6 shadow-sm md:items-start">
-                <h3 className="mb-4 flex items-center text-sm font-bold text-indigo-900">
+              <div className="flex flex-col items-center rounded-xl border border-indigo-900/50 bg-slate-800/80 p-6 shadow-sm md:items-start">
+                <h3 className="mb-4 flex items-center text-sm font-bold text-indigo-300">
                   Chức năng: {playerRoles[playerName]?.name}
                   <RoleIcon
                     id={playerRoles[playerName]?.id}
@@ -2841,7 +2871,7 @@ function WerewolfGame() {
                 {playerRoles[playerName]?.id === "villager" ||
                 playerRoles[playerName]?.id === "mayor" ||
                 playerRoles[playerName]?.id === "fool" ? (
-                  <p className="w-full py-4 text-center text-sm text-indigo-800">
+                  <p className="w-full py-4 text-center text-sm text-indigo-300">
                     Nhân vật của bạn không có chức năng trong đêm. Hãy nhắm mắt
                     lại!
                   </p>
@@ -2857,7 +2887,7 @@ function WerewolfGame() {
                     executeAction={executeAction}
                   />
                 ) : nightPhase !== playerRoles[playerName]?.id ? (
-                  <p className="w-full animate-pulse py-4 text-center text-sm font-medium text-indigo-800">
+                  <p className="w-full animate-pulse py-4 text-center text-sm font-medium text-indigo-300">
                     Hãy nhắm mắt lại. Đang chờ các vai trò khác hành động...
                   </p>
                 ) : ROLE_STRATEGIES[playerRoles[playerName]?.id] ? (
@@ -3248,6 +3278,7 @@ function WerewolfGame() {
               setActiveLogTab={setActiveLogTab}
               playerName={playerName}
               playerRoles={playerRoles}
+              isNight={isNight}
             />
 
             {/* Wolf Chat Area */}
@@ -3279,6 +3310,7 @@ function WerewolfGame() {
                     });
                   }
                 }}
+                isNight={isNight}
               />
             )}
           </div>
