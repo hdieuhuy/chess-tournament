@@ -115,6 +115,18 @@ export default function LandingPage() {
               <h3 className="text-base font-medium text-zinc-900">Ô Ăn Quan</h3>
               <p className="mt-1 text-xs text-zinc-500">O An Quan</p>
             </Link>
+
+            {/* Cờ Thú */}
+            <Link
+              href="/jungle"
+              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
+            >
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-2xl transition-colors group-hover:bg-zinc-100">
+                🦁
+              </div>
+              <h3 className="text-base font-medium text-zinc-900">Cờ Thú</h3>
+              <p className="mt-1 text-xs text-zinc-500">Jungle</p>
+            </Link>
           </div>
         </div>
       </main>

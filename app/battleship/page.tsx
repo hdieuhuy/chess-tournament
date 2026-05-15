@@ -1195,7 +1195,7 @@ function BattleshipGame() {
             </>
           )}
 
-          <div className="mt-10 flex space-x-4">
+          <div className="mt-10 flex w-full flex-wrap justify-center gap-4 xl:justify-start">
             <button
               onClick={resetGame}
               disabled={!player2Name || isSpectator}
