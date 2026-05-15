@@ -660,21 +660,6 @@ function GoGame() {
 
       if (myColor !== currentTurnColor) return;
 
-      const currentState = {
-        board: stateRef.current.board,
-        isBlackNext: stateRef.current.isBlackNext,
-        winner: stateRef.current.winner,
-        lastMove: stateRef.current.lastMove,
-        captures: stateRef.current.captures,
-        passCount: stateRef.current.passCount,
-        boardHistory: stateRef.current.boardHistory,
-        player1Time: stateRef.current.player1Time,
-        player2Time: stateRef.current.player2Time,
-        finalScore: stateRef.current.finalScore,
-      };
-      const newHistory = [...stateRef.current.history, currentState];
-      setHistory(newHistory);
-
       const newBoard = board.map((r) => [...r]);
       newBoard[row][col] = currentTurnColor;
 
@@ -728,7 +713,23 @@ function GoGame() {
         return;
       }
 
-      const newHistory = [...boardHistory, serializedBoard];
+      // Đã hợp lệ, tiến hành lưu lịch sử đi lại (undo)
+      const currentState = {
+        board: stateRef.current.board,
+        isBlackNext: stateRef.current.isBlackNext,
+        winner: stateRef.current.winner,
+        lastMove: stateRef.current.lastMove,
+        captures: stateRef.current.captures,
+        passCount: stateRef.current.passCount,
+        boardHistory: stateRef.current.boardHistory,
+        player1Time: stateRef.current.player1Time,
+        player2Time: stateRef.current.player2Time,
+        finalScore: stateRef.current.finalScore,
+      };
+      const newUndoHistory = [...stateRef.current.history, currentState];
+      setHistory(newUndoHistory);
+
+      const newBoardHistory = [...boardHistory, serializedBoard];
       const newCaptures = { ...captures };
       if (currentTurnColor === "B") {
         newCaptures.B += capturedStones;
@@ -743,7 +744,7 @@ function GoGame() {
       setCaptures(newCaptures);
       setLastMove([row, col]);
       setPassCount(0); // Reset chuỗi bỏ lượt
-      setBoardHistory(newHistory);
+      setBoardHistory(newBoardHistory);
 
       if (channel) {
         channel.send({
@@ -756,8 +757,8 @@ function GoGame() {
             captures: newCaptures,
             lastMove: [row, col],
             passCount: 0,
-            boardHistory: newHistory,
-            history: newHistory,
+            boardHistory: newBoardHistory,
+            history: newUndoHistory,
             player1Time: player1Time,
             player2Time: player2Time,
             finalScore: finalScore,

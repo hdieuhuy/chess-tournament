@@ -97,6 +97,7 @@ type GameState = {
   confirmedPlayers: string[];
   wolfChat: ChatMessage[];
   loversChat: ChatMessage[];
+  generalChat: ChatMessage[];
   winner:
     | "wolves"
     | "villagers"
@@ -155,6 +156,7 @@ const initialGameState: GameState = {
   confirmedPlayers: [],
   wolfChat: [],
   loversChat: [],
+  generalChat: [],
   winner: null,
   extraLives: {},
   cursedWolfUsed: false,
@@ -1287,6 +1289,7 @@ function WerewolfGame() {
               actionLogs: state.actionLogs,
               wolfChat: state.wolfChat,
               loversChat: state.loversChat,
+              generalChat: state.generalChat,
               winner: state.winner,
               extraLives: state.extraLives,
               cursedWolfUsed: state.cursedWolfUsed,
@@ -1340,6 +1343,7 @@ function WerewolfGame() {
         if (data.actionLogs) updates.actionLogs = data.actionLogs;
         if (data.wolfChat) updates.wolfChat = data.wolfChat;
         if (data.loversChat) updates.loversChat = data.loversChat;
+        if (data.generalChat) updates.generalChat = data.generalChat;
         if (data.winner !== undefined) updates.winner = data.winner;
         if (data.extraLives) updates.extraLives = data.extraLives;
         if (data.cursedWolfUsed !== undefined)
@@ -1393,6 +1397,7 @@ function WerewolfGame() {
             actionLogs: [],
             wolfChat: [],
             loversChat: [],
+            generalChat: [],
             winner: null,
             extraLives: data.extraLives || {},
             cursedWolfUsed: false,
@@ -1643,6 +1648,18 @@ function WerewolfGame() {
               ...(prev.loversChat || []),
             ];
             return { loversChat: newArray };
+          },
+        });
+      })
+      .on("broadcast", { event: "general-chat" }, (payload) => {
+        dispatch({
+          type: "UPDATE_FUNCTION",
+          payload: (prev) => {
+            const newArray = [
+              payload.payload.message,
+              ...(prev.generalChat || []),
+            ];
+            return { generalChat: newArray };
           },
         });
       })
@@ -2813,6 +2830,7 @@ function WerewolfGame() {
           actionLogs: initialLogs,
           wolfChat: [],
           loversChat: [],
+          generalChat: [],
           winner: null,
           extraLives: newExtraLives,
           cursedWolfUsed: false,
@@ -2848,6 +2866,7 @@ function WerewolfGame() {
           actionLogs: initialLogs,
           wolfChat: [],
           loversChat: [],
+          generalChat: [],
           winner: null,
           extraLives: newExtraLives,
           dayPhase: null,
@@ -2900,6 +2919,7 @@ function WerewolfGame() {
           actionLogs: [],
           wolfChat: [],
           loversChat: [],
+          generalChat: [],
           winner: null,
           extraLives: {},
           cursedWolfUsed: false,
@@ -4110,67 +4130,98 @@ function WerewolfGame() {
             />
 
             {/* Private Chat Area */}
-            {(playerRoles[playerName]?.id === "werewolf" ||
-              playerRoles[playerName]?.id === "cursed_wolf" ||
-              playerRoles[playerName]?.id === "fog_wolf" ||
-              (cupidTargets && cupidTargets.includes(playerName))) && (
-              <PrivateChat
-                wolfChat={wolfChat}
-                loversChat={loversChat}
-                playerName={playerName}
-                alivePlayers={alivePlayers}
-                isWolf={
-                  playerRoles[playerName]?.id === "werewolf" ||
-                  playerRoles[playerName]?.id === "cursed_wolf" ||
-                  playerRoles[playerName]?.id === "fog_wolf"
-                }
-                isLover={!!(cupidTargets && cupidTargets.includes(playerName))}
-                onSendWolfMessage={(msg) => {
-                  const newMsg: ChatMessage = {
-                    id: Math.random().toString(36).substring(2, 9),
-                    playerName,
-                    message: msg,
-                    timestamp: Date.now(),
-                  };
-                  dispatch({
-                    type: "UPDATE_FUNCTION",
-                    payload: (prev) => ({
-                      wolfChat: [newMsg, ...(prev.wolfChat || [])],
-                    }),
-                  });
-                  if (channel) {
-                    channel.send({
-                      type: "broadcast",
-                      event: "wolf-chat",
-                      payload: { message: newMsg },
+            {(() => {
+              const isWolf =
+                playerRoles[playerName]?.id === "werewolf" ||
+                playerRoles[playerName]?.id === "cursed_wolf" ||
+                playerRoles[playerName]?.id === "fog_wolf";
+              const isLover = !!(
+                cupidTargets && cupidTargets.includes(playerName)
+              );
+              const showChat =
+                isWolf ||
+                isLover ||
+                (phase === "day" && alivePlayers.includes(playerName));
+
+              if (!showChat) return null;
+
+              return (
+                <PrivateChat
+                  wolfChat={wolfChat}
+                  loversChat={loversChat}
+                  generalChat={gameState.generalChat}
+                  playerName={playerName}
+                  alivePlayers={alivePlayers}
+                  isWolf={isWolf}
+                  isLover={isLover}
+                  phase={phase}
+                  onSendWolfMessage={(msg) => {
+                    const newMsg: ChatMessage = {
+                      id: Math.random().toString(36).substring(2, 9),
+                      playerName,
+                      message: msg,
+                      timestamp: Date.now(),
+                    };
+                    dispatch({
+                      type: "UPDATE_FUNCTION",
+                      payload: (prev) => ({
+                        wolfChat: [newMsg, ...(prev.wolfChat || [])],
+                      }),
                     });
-                  }
-                }}
-                onSendLoversMessage={(msg) => {
-                  const newMsg: ChatMessage = {
-                    id: Math.random().toString(36).substring(2, 9),
-                    playerName,
-                    message: msg,
-                    timestamp: Date.now(),
-                  };
-                  dispatch({
-                    type: "UPDATE_FUNCTION",
-                    payload: (prev) => {
-                      const newArray = [newMsg, ...(prev.loversChat || [])];
-                      return { loversChat: newArray };
-                    },
-                  });
-                  if (channel) {
-                    channel.send({
-                      type: "broadcast",
-                      event: "lovers-chat",
-                      payload: { message: newMsg },
+                    if (channel) {
+                      channel.send({
+                        type: "broadcast",
+                        event: "wolf-chat",
+                        payload: { message: newMsg },
+                      });
+                    }
+                  }}
+                  onSendLoversMessage={(msg) => {
+                    const newMsg: ChatMessage = {
+                      id: Math.random().toString(36).substring(2, 9),
+                      playerName,
+                      message: msg,
+                      timestamp: Date.now(),
+                    };
+                    dispatch({
+                      type: "UPDATE_FUNCTION",
+                      payload: (prev) => ({
+                        loversChat: [newMsg, ...(prev.loversChat || [])],
+                      }),
                     });
-                  }
-                }}
-                isNight={isNight}
-              />
-            )}
+                    if (channel) {
+                      channel.send({
+                        type: "broadcast",
+                        event: "lovers-chat",
+                        payload: { message: newMsg },
+                      });
+                    }
+                  }}
+                  onSendGeneralMessage={(msg) => {
+                    const newMsg: ChatMessage = {
+                      id: Math.random().toString(36).substring(2, 9),
+                      playerName,
+                      message: msg,
+                      timestamp: Date.now(),
+                    };
+                    dispatch({
+                      type: "UPDATE_FUNCTION",
+                      payload: (prev) => ({
+                        generalChat: [newMsg, ...(prev.generalChat || [])],
+                      }),
+                    });
+                    if (channel) {
+                      channel.send({
+                        type: "broadcast",
+                        event: "general-chat",
+                        payload: { message: newMsg },
+                      });
+                    }
+                  }}
+                  isNight={isNight}
+                />
+              );
+            })()}
           </div>
         )}
       </div>

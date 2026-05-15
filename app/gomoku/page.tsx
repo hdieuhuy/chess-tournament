@@ -812,6 +812,26 @@ function GomokuGame() {
     }
   };
 
+  const handleResign = () => {
+    if (winner || !gameStarted || isSpectator) return;
+    const myColor = isPlayer1 ? "B" : isPlayer2 ? "W" : null;
+    if (!myColor) return;
+
+    const newWinner = myColor === "B" ? "W" : "B";
+    setWinner(newWinner);
+
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "sync-move",
+        payload: {
+          ...stateRef.current,
+          winner: newWinner,
+        },
+      });
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
       .toString()
@@ -1074,6 +1094,12 @@ function GomokuGame() {
                     Đổi phe (Swap)
                   </button>
                 )}
+                <button
+                  onClick={handleResign}
+                  className="cursor-pointer rounded-full border border-red-300 bg-red-50 px-6 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-100"
+                >
+                  Bỏ cuộc
+                </button>
               </>
             )}
             <button
