@@ -16,10 +16,10 @@ type RoleConfigPanelProps = {
 const getFaction = (roleId: string) => {
   const wolves = [
     "werewolf",
-    "half_wolf",
     "white_wolf",
     "cursed_wolf",
     "fog_wolf",
+    "wolf_cub",
   ];
   const thirdParties = [
     "fool",

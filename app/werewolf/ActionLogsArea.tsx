@@ -26,7 +26,8 @@ export default function ActionLogsArea({
       log.roleId === "werewolf" &&
       (playerRoles[playerName]?.id === "werewolf" ||
         playerRoles[playerName]?.id === "cursed_wolf" ||
-        playerRoles[playerName]?.id === "fog_wolf")
+        playerRoles[playerName]?.id === "fog_wolf" ||
+        playerRoles[playerName]?.id === "wolf_cub")
     )
       return true;
     return false;

@@ -72,10 +72,12 @@ export default function PlayerGrid({
               const isBothWolves =
                 (myRole?.id === "werewolf" ||
                   myRole?.id === "cursed_wolf" ||
-                  myRole?.id === "fog_wolf") &&
+                  myRole?.id === "fog_wolf" ||
+                  myRole?.id === "wolf_cub") &&
                 (role?.id === "werewolf" ||
                   role?.id === "cursed_wolf" ||
-                  role?.id === "fog_wolf");
+                  role?.id === "fog_wolf" ||
+                  role?.id === "wolf_cub");
               const canSeeRole = isMe || isBothWolves || phase === "game_over";
               const isTarget =
                 headhunterTarget === p &&

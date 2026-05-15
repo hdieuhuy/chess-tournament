@@ -41,6 +41,10 @@ export const RoleIcon = ({
       return <GiWerewolf className={className} />;
     case "fog_wolf":
       return <GiWolfHowl className={className} />;
+    case "half_wolf":
+      return <GiWolfHead className={className} />;
+    case "wolf_cub":
+      return <GiWolfHead className={className} />;
     case "fool":
       return <GiJesterHat className={className} />;
     case "headhunter":
@@ -78,6 +82,10 @@ export const getRoleColor = (id?: string) => {
       return "text-rose-700";
     case "fog_wolf":
       return "text-slate-600";
+    case "half_wolf":
+      return "text-amber-700";
+    case "wolf_cub":
+      return "text-red-500";
     case "fool":
       return "text-pink-600";
     case "headhunter":
@@ -115,6 +123,10 @@ export const getRoleDescription = (id?: string) => {
       return "Cùng Sói cắn người. Được quyền chọn lây nhiễm 1 lần/trận thay vì cắn chết. Người bị lây sẽ thành Sói vào hôm sau.";
     case "fog_wolf":
       return "Cùng Sói cắn người. Ban ngày có thể tung sương mù 1 lần/trận để hủy bỏ biểu quyết và lập tức chuyển sang đêm.";
+    case "half_wolf":
+      return "Phe Dân Làng. Nếu bị Sói cắn, không chết mà sẽ trở thành Sói vào đêm tiếp theo.";
+    case "wolf_cub":
+      return "Phe Sói. Thức dậy và cắn người cùng Sói. Nếu Sói Con chết, đêm tiếp theo bầy Sói được phép cắn 2 người.";
     case "fool":
       return "Chỉ chiến thắng 1 mình. Không có kỹ năng, nhưng nếu bị làng biểu quyết treo cổ vào ban ngày, Kẻ Ngốc sẽ lập tức giành chiến thắng.";
     case "headhunter":
@@ -142,6 +154,8 @@ export const defaultRoles: RoleConfig[] = [
   { id: "mayor", name: "Trưởng Làng", count: 0 },
   { id: "cursed_wolf", name: "Sói Nguyền", count: 0 },
   { id: "fog_wolf", name: "Sói Sương Mù", count: 0 },
+  { id: "half_wolf", name: "Bán Sói", count: 0 },
+  { id: "wolf_cub", name: "Sói Con", count: 0 },
   { id: "fool", name: "Kẻ Ngốc", count: 0 },
   { id: "headhunter", name: "Thợ Săn Người", count: 0 },
   { id: "assassin", name: "Sát Thủ", count: 0 },
