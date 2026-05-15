@@ -44,6 +44,8 @@ function GoGame() {
     black: number;
     white: number;
   } | null>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
 
   const [player1Time, setPlayer1Time] = useState<number>(INITIAL_TIME);
   const [player2Time, setPlayer2Time] = useState<number>(INITIAL_TIME);
@@ -116,6 +118,8 @@ function GoGame() {
     captures,
     passCount,
     finalScore,
+    history,
+    undoRequestedBy,
     player1Time,
     player2Time,
     gameStarted,
@@ -136,6 +140,8 @@ function GoGame() {
       captures,
       passCount,
       finalScore,
+      history,
+      undoRequestedBy,
       player1Time,
       player2Time,
       gameStarted,
@@ -154,6 +160,8 @@ function GoGame() {
     captures,
     passCount,
     finalScore,
+    history,
+    undoRequestedBy,
     player1Time,
     player2Time,
     gameStarted,
@@ -175,6 +183,8 @@ function GoGame() {
         if (data.captures) setCaptures(data.captures);
         if (data.passCount !== undefined) setPassCount(data.passCount);
         if (data.boardHistory) setBoardHistory(data.boardHistory);
+        if (data.history) setHistory(data.history);
+        setUndoRequestedBy(null);
         if (data.player1Time !== undefined) setPlayer1Time(data.player1Time);
         if (data.player2Time !== undefined) setPlayer2Time(data.player2Time);
         if (data.finalScore) setFinalScore(data.finalScore);
@@ -188,6 +198,8 @@ function GoGame() {
         setPassCount(0);
         setBoardHistory([]);
         setFinalScore(null);
+        setHistory([]);
+        setUndoRequestedBy(null);
         setPlayer1Time(INITIAL_TIME);
         setPlayer2Time(INITIAL_TIME);
         setGameStarted(false);
@@ -263,6 +275,8 @@ function GoGame() {
               player2Name: newP2,
               spectators: newSpecs,
               readyPlayers: [],
+              history: state.history,
+              undoRequestedBy: state.undoRequestedBy,
             },
           });
         }
@@ -280,6 +294,9 @@ function GoGame() {
         if (data.captures) setCaptures(data.captures);
         if (data.passCount !== undefined) setPassCount(data.passCount);
         if (data.boardHistory) setBoardHistory(data.boardHistory);
+        if (data.history) setHistory(data.history);
+        if (data.undoRequestedBy !== undefined)
+          setUndoRequestedBy(data.undoRequestedBy);
         if (data.player1Time !== undefined) setPlayer1Time(data.player1Time);
         if (data.player2Time !== undefined) setPlayer2Time(data.player2Time);
         if (data.finalScore) setFinalScore(data.finalScore);
@@ -344,6 +361,16 @@ function GoGame() {
             });
           }, 50);
         }
+      })
+      .on("broadcast", { event: "request-undo" }, (payload) => {
+        setUndoRequestedBy(payload.payload.playerName);
+      })
+      .on("broadcast", { event: "reject-undo" }, () => {
+        const state = stateRef.current;
+        if (playerName === state.undoRequestedBy) {
+          alert("Đối thủ đã từ chối yêu cầu đi lại.");
+        }
+        setUndoRequestedBy(null);
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -633,6 +660,21 @@ function GoGame() {
 
       if (myColor !== currentTurnColor) return;
 
+      const currentState = {
+        board: stateRef.current.board,
+        isBlackNext: stateRef.current.isBlackNext,
+        winner: stateRef.current.winner,
+        lastMove: stateRef.current.lastMove,
+        captures: stateRef.current.captures,
+        passCount: stateRef.current.passCount,
+        boardHistory: stateRef.current.boardHistory,
+        player1Time: stateRef.current.player1Time,
+        player2Time: stateRef.current.player2Time,
+        finalScore: stateRef.current.finalScore,
+      };
+      const newHistory = [...stateRef.current.history, currentState];
+      setHistory(newHistory);
+
       const newBoard = board.map((r) => [...r]);
       newBoard[row][col] = currentTurnColor;
 
@@ -715,6 +757,7 @@ function GoGame() {
             lastMove: [row, col],
             passCount: 0,
             boardHistory: newHistory,
+            history: newHistory,
             player1Time: player1Time,
             player2Time: player2Time,
             finalScore: finalScore,
@@ -744,6 +787,21 @@ function GoGame() {
     const currentTurnColor = isBlackNext ? "B" : "W";
     const myColor = isPlayer1 ? "B" : isPlayer2 ? "W" : null;
     if (myColor !== currentTurnColor) return;
+
+    const currentState = {
+      board: stateRef.current.board,
+      isBlackNext: stateRef.current.isBlackNext,
+      winner: stateRef.current.winner,
+      lastMove: stateRef.current.lastMove,
+      captures: stateRef.current.captures,
+      passCount: stateRef.current.passCount,
+      boardHistory: stateRef.current.boardHistory,
+      player1Time: stateRef.current.player1Time,
+      player2Time: stateRef.current.player2Time,
+      finalScore: stateRef.current.finalScore,
+    };
+    const newHistory = [...stateRef.current.history, currentState];
+    setHistory(newHistory);
 
     const newPassCount = passCount + 1;
     let newWinner = winner;
@@ -780,6 +838,7 @@ function GoGame() {
           lastMove,
           passCount: newPassCount,
           boardHistory,
+          history: newHistory,
           player1Time,
           player2Time,
           finalScore: score,
@@ -816,6 +875,8 @@ function GoGame() {
     setCaptures({ B: 0, W: 0 });
     setPassCount(0);
     setBoardHistory([]);
+    setHistory([]);
+    setUndoRequestedBy(null);
     setFinalScore(null);
     setPlayer1Time(INITIAL_TIME);
     setPlayer2Time(INITIAL_TIME);
@@ -823,6 +884,67 @@ function GoGame() {
     setReadyPlayers([]);
     if (channel) {
       channel.send({ type: "broadcast", event: "reset-game" });
+    }
+  };
+
+  const handleRequestUndo = () => {
+    if (channel && !isSpectator) {
+      setUndoRequestedBy(playerName);
+      channel.send({
+        type: "broadcast",
+        event: "request-undo",
+        payload: { playerName },
+      });
+    }
+  };
+
+  const handleAcceptUndo = () => {
+    const state = stateRef.current;
+    if (state.history.length > 0 && channel) {
+      const prevState = state.history[state.history.length - 1];
+      const newHistory = state.history.slice(0, -1);
+
+      setBoard(prevState.board);
+      setIsBlackNext(prevState.isBlackNext);
+      setWinner(prevState.winner);
+      setLastMove(prevState.lastMove);
+      setCaptures(prevState.captures);
+      setPassCount(prevState.passCount);
+      setBoardHistory(prevState.boardHistory);
+      setPlayer1Time(prevState.player1Time);
+      setPlayer2Time(prevState.player2Time);
+      setFinalScore(prevState.finalScore);
+      setHistory(newHistory);
+      setUndoRequestedBy(null);
+
+      channel.send({
+        type: "broadcast",
+        event: "sync-move",
+        payload: {
+          board: prevState.board,
+          isBlackNext: prevState.isBlackNext,
+          winner: prevState.winner,
+          lastMove: prevState.lastMove,
+          captures: prevState.captures,
+          passCount: prevState.passCount,
+          boardHistory: prevState.boardHistory,
+          player1Time: prevState.player1Time,
+          player2Time: prevState.player2Time,
+          finalScore: prevState.finalScore,
+          history: newHistory,
+        },
+      });
+    }
+  };
+
+  const handleRejectUndo = () => {
+    setUndoRequestedBy(null);
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "reject-undo",
+        payload: {},
+      });
     }
   };
 
@@ -860,6 +982,39 @@ function GoGame() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12">
+      {undoRequestedBy && undoRequestedBy !== playerName && !isSpectator && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4 border border-zinc-200">
+            <p className="mb-6 text-lg font-medium text-zinc-800">
+              <span className="font-bold text-purple-600">
+                {undoRequestedBy}
+              </span>{" "}
+              muốn xin đi lại 1 nước.
+            </p>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={handleAcceptUndo}
+                className="px-6 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm cursor-pointer"
+              >
+                Đồng ý
+              </button>
+              <button
+                onClick={handleRejectUndo}
+                className="px-6 py-2.5 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors shadow-sm cursor-pointer"
+              >
+                Từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {undoRequestedBy === playerName && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg font-medium animate-pulse">
+          Đang chờ đối thủ phản hồi yêu cầu đi lại...
+        </div>
+      )}
+
       {hasInitialized && (
         <div className="fixed left-4 top-4 z-50">
           <button
@@ -1115,6 +1270,15 @@ function GoGame() {
           <div className="mt-10 flex flex-wrap gap-4 justify-center xl:justify-start w-full">
             {gameStarted && !winner && !isSpectator && (
               <>
+                {history.length > 0 && (
+                  <button
+                    onClick={handleRequestUndo}
+                    disabled={!!undoRequestedBy}
+                    className="cursor-pointer rounded-full border border-purple-300 bg-purple-50 px-6 py-2 text-sm font-medium text-purple-700 shadow-sm transition-colors hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Xin đi lại
+                  </button>
+                )}
                 <button
                   onClick={handlePass}
                   disabled={!isMyTurn}

@@ -299,6 +299,8 @@ function ChessGame() {
     castlingRights: { wK: boolean; wQ: boolean; bK: boolean; bQ: boolean };
     color: "W" | "B";
   } | null>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
   const [roomId, setRoomId] = useState<string | null>(roomParam);
@@ -367,6 +369,8 @@ function ChessGame() {
     castlingRights,
     enPassantTarget,
     lastMove,
+    history,
+    undoRequestedBy,
     gameStarted,
     readyPlayers,
     player1Time,
@@ -385,6 +389,8 @@ function ChessGame() {
       castlingRights,
       enPassantTarget,
       lastMove,
+      history,
+      undoRequestedBy,
       gameStarted,
       readyPlayers,
       player1Time,
@@ -401,6 +407,8 @@ function ChessGame() {
     castlingRights,
     enPassantTarget,
     lastMove,
+    history,
+    undoRequestedBy,
     gameStarted,
     readyPlayers,
     player1Time,
@@ -413,13 +421,15 @@ function ChessGame() {
 
     roomChannel
       .on("broadcast", { event: "sync-move" }, (payload) => {
-        const data = payload.payload;
+        const { history: newHistory, ...data } = payload.payload;
         setBoard(data.board);
         setIsWhiteTurn(data.isWhiteTurn);
         setWinner(data.winner);
         setCastlingRights(data.castlingRights);
         setEnPassantTarget(data.enPassantTarget);
         setLastMove(data.lastMove);
+        if (newHistory) setHistory(newHistory);
+        setUndoRequestedBy(null);
         setPlayer1Time(data.player1Time);
         setPlayer2Time(data.player2Time);
       })
@@ -511,6 +521,8 @@ function ChessGame() {
               castlingRights: state.castlingRights,
               enPassantTarget: state.enPassantTarget,
               lastMove: state.lastMove,
+              history: state.history,
+              undoRequestedBy: state.undoRequestedBy,
               gameStarted: state.gameStarted,
               readyPlayers: [],
               player1Time: INITIAL_TIME,
@@ -531,6 +543,9 @@ function ChessGame() {
         setCastlingRights(data.castlingRights);
         setEnPassantTarget(data.enPassantTarget);
         setLastMove(data.lastMove);
+        if (data.history) setHistory(data.history);
+        if (data.undoRequestedBy !== undefined)
+          setUndoRequestedBy(data.undoRequestedBy);
         if (data.gameStarted !== undefined) setGameStarted(data.gameStarted);
         if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
         if (data.player1Time !== undefined) setPlayer1Time(data.player1Time);
@@ -580,6 +595,16 @@ function ChessGame() {
             });
           }
         }
+      })
+      .on("broadcast", { event: "request-undo" }, (payload) => {
+        setUndoRequestedBy(payload.payload.playerName);
+      })
+      .on("broadcast", { event: "reject-undo" }, () => {
+        const state = stateRef.current;
+        if (playerName === state.undoRequestedBy) {
+          alert("Đối thủ đã từ chối yêu cầu đi lại.");
+        }
+        setUndoRequestedBy(null);
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -741,6 +766,19 @@ function ChessGame() {
       r: number,
       c: number,
     ) => {
+      const currentState = {
+        board: stateRef.current.board,
+        isWhiteTurn: stateRef.current.isWhiteTurn,
+        winner: stateRef.current.winner,
+        castlingRights: stateRef.current.castlingRights,
+        enPassantTarget: stateRef.current.enPassantTarget,
+        lastMove: stateRef.current.lastMove,
+        player1Time: stateRef.current.player1Time,
+        player2Time: stateRef.current.player2Time,
+      };
+      const newHistory = [...stateRef.current.history, currentState];
+      setHistory(newHistory);
+
       const nextTurn = !isWhiteTurn;
 
       // Kiểm tra xem đối thủ có bị chiếu bí hoặc bí nước (hòa) không
@@ -805,6 +843,7 @@ function ChessGame() {
             castlingRights: newCastlingRights,
             enPassantTarget: newEpTarget,
             lastMove: { from: [fr, fc], to: [r, c] },
+            history: newHistory,
             player1Time: player1Time,
             player2Time: player2Time,
           },
@@ -970,6 +1009,8 @@ function ChessGame() {
     setEnPassantTarget(null);
     setSelectedPos(null);
     setLastMove(null);
+    setHistory([]);
+    setUndoRequestedBy(null);
     setPromotionPending(null);
     setGameStarted(false);
     setReadyPlayers([]);
@@ -1028,6 +1069,63 @@ function ChessGame() {
       });
       setRequestedRole("player");
       if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
+    }
+  };
+
+  const handleRequestUndo = () => {
+    if (channel && !isSpectator) {
+      setUndoRequestedBy(playerName);
+      channel.send({
+        type: "broadcast",
+        event: "request-undo",
+        payload: { playerName },
+      });
+    }
+  };
+
+  const handleAcceptUndo = () => {
+    const state = stateRef.current;
+    if (state.history.length > 0 && channel) {
+      const prevState = state.history[state.history.length - 1];
+      const newHistory = state.history.slice(0, -1);
+
+      setBoard(prevState.board);
+      setIsWhiteTurn(prevState.isWhiteTurn);
+      setWinner(prevState.winner);
+      setCastlingRights(prevState.castlingRights);
+      setEnPassantTarget(prevState.enPassantTarget);
+      setLastMove(prevState.lastMove);
+      setPlayer1Time(prevState.player1Time);
+      setPlayer2Time(prevState.player2Time);
+      setHistory(newHistory);
+      setUndoRequestedBy(null);
+
+      channel.send({
+        type: "broadcast",
+        event: "sync-move",
+        payload: {
+          board: prevState.board,
+          isWhiteTurn: prevState.isWhiteTurn,
+          winner: prevState.winner,
+          castlingRights: prevState.castlingRights,
+          enPassantTarget: prevState.enPassantTarget,
+          lastMove: prevState.lastMove,
+          player1Time: prevState.player1Time,
+          player2Time: prevState.player2Time,
+          history: newHistory,
+        },
+      });
+    }
+  };
+
+  const handleRejectUndo = () => {
+    setUndoRequestedBy(null);
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "reject-undo",
+        payload: {},
+      });
     }
   };
 
@@ -1090,6 +1188,39 @@ function ChessGame() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12">
+      {undoRequestedBy && undoRequestedBy !== playerName && !isSpectator && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4 border border-zinc-200">
+            <p className="mb-6 text-lg font-medium text-zinc-800">
+              <span className="font-bold text-purple-600">
+                {undoRequestedBy}
+              </span>{" "}
+              muốn xin đi lại 1 nước.
+            </p>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={handleAcceptUndo}
+                className="px-6 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm cursor-pointer"
+              >
+                Đồng ý
+              </button>
+              <button
+                onClick={handleRejectUndo}
+                className="px-6 py-2.5 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors shadow-sm cursor-pointer"
+              >
+                Từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {undoRequestedBy === playerName && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg font-medium animate-pulse">
+          Đang chờ đối thủ phản hồi yêu cầu đi lại...
+        </div>
+      )}
+
       {hasInitialized && (
         <div className="fixed left-4 top-4 z-50">
           <button
@@ -1324,6 +1455,15 @@ function ChessGame() {
           )}
 
           <div className="mt-10 flex space-x-4">
+            {gameStarted && !winner && !isSpectator && history.length > 0 && (
+              <button
+                onClick={handleRequestUndo}
+                disabled={!!undoRequestedBy}
+                className="cursor-pointer rounded-full border border-purple-300 bg-purple-50 px-6 py-2 text-sm font-medium text-purple-700 shadow-sm transition-colors hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Xin đi lại
+              </button>
+            )}
             <button
               onClick={resetGame}
               disabled={!player2Name || isSpectator}
