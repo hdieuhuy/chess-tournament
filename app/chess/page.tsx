@@ -489,7 +489,7 @@ function ChessGame() {
                 return;
               }
             } else {
-              if (newSpecs.length < 5) {
+              if (newSpecs.length < 10) {
                 newSpecs.push(newPlayer);
                 setSpectators(newSpecs);
                 stateRef.current.spectators = newSpecs;
@@ -1023,6 +1023,7 @@ function ChessGame() {
 
   const handleKickPlayer = (targetName: string) => {
     if (playerName !== hostName || !channel) return;
+    if (targetName === player2Name && gameStarted) return;
 
     channel.send({
       type: "broadcast",
@@ -1326,7 +1327,7 @@ function ChessGame() {
                   <span className="font-semibold text-zinc-800">
                     {player2Name} (Đen)
                   </span>
-                  {playerName === hostName && (
+                  {playerName === hostName && !gameStarted && (
                     <button
                       onClick={() => handleKickPlayer(player2Name)}
                       className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
@@ -1464,13 +1465,15 @@ function ChessGame() {
                 Xin đi lại
               </button>
             )}
-            <button
-              onClick={resetGame}
-              disabled={!player2Name || isSpectator}
-              className="cursor-pointer rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Chơi lại
-            </button>
+            {playerName === hostName && (
+              <button
+                onClick={resetGame}
+                disabled={!player2Name}
+                className="cursor-pointer rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Chơi lại
+              </button>
+            )}
             <Link
               href="/"
               className="cursor-pointer rounded-full bg-zinc-900 px-6 py-2 text-sm font-medium text-white hover:bg-zinc-800"
@@ -1635,39 +1638,55 @@ function ChessGame() {
 
         {/* Cột phải: Thông tin người xem */}
         <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8">
-          <div className="bg-white rounded-xl border border-zinc-200 p-6 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0">
-            <h3 className="text-lg font-medium text-zinc-900 mb-4 border-b border-zinc-100 pb-3">
-              Người xem ({spectators.length}/5)
-            </h3>
-            {spectators.length === 0 ? (
-              <p className="text-sm text-zinc-500 italic">Chưa có người xem</p>
-            ) : (
-              <ul className="space-y-3">
-                {spectators.map((spec, idx) => (
-                  <li
-                    key={idx}
-                    className="flex items-center justify-between space-x-3"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-sm font-bold text-zinc-700">
-                        {spec.charAt(0).toUpperCase()}
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
+            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
+              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+                <span className="text-lg">👀</span> Người xem
+              </h3>
+              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
+                {spectators.length}/10
+              </span>
+            </div>
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 custom-scrollbar">
+              {spectators.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <span className="text-3xl mb-2 opacity-20">🪑</span>
+                  <p className="text-sm text-zinc-400 font-medium">
+                    Chưa có người xem
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {spectators.map((spec, idx) => (
+                    <li
+                      key={idx}
+                      className="group flex items-center justify-between space-x-3 rounded-xl border border-transparent p-2 transition-all hover:bg-zinc-50 hover:border-zinc-100"
+                    >
+                      <div className="flex items-center space-x-3 overflow-hidden">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-sm font-bold text-indigo-700 shadow-inner">
+                          {spec.charAt(0).toUpperCase()}
+                        </div>
+                        <span
+                          className="text-sm font-medium text-zinc-800 truncate"
+                          title={spec}
+                        >
+                          {spec}
+                        </span>
                       </div>
-                      <span className="text-sm font-medium text-zinc-800">
-                        {spec}
-                      </span>
-                    </div>
-                    {playerName === hostName && (
-                      <button
-                        onClick={() => handleKickPlayer(spec)}
-                        className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
-                      >
-                        Kick
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+                      {playerName === hostName && (
+                        <button
+                          onClick={() => handleKickPlayer(spec)}
+                          className="shrink-0 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 opacity-100 xl:opacity-0 transition-all hover:bg-red-100 xl:group-hover:opacity-100 focus:opacity-100"
+                          title="Kích người xem"
+                        >
+                          Kick
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       </div>

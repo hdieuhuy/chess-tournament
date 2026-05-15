@@ -519,7 +519,7 @@ function OAnQuanGame() {
                 return;
               }
             } else {
-              if (newSpecs.length < 5) {
+              if (newSpecs.length < 10) {
                 newSpecs.push(newPlayer);
                 setSpectators(newSpecs);
                 stateRef.current.spectators = newSpecs;

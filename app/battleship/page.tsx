@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Modal } from "@/components/Modal";
 import confetti from "canvas-confetti";
+import { motion, AnimatePresence } from "framer-motion";
 
 const BOARD_SIZE = 10;
 const ROWS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -42,6 +43,14 @@ function BattleshipGame() {
 
   const [isPlayer1Turn, setIsPlayer1Turn] = useState<boolean>(true);
   const [winner, setWinner] = useState<string | null>(null);
+  const [history, setHistory] = useState<any[]>([]);
+  const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
+  const [activeAnimation, setActiveAnimation] = useState<{
+    r: number;
+    c: number;
+    result: "hit" | "miss";
+    stage: "falling" | "exploding";
+  } | null>(null);
 
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
@@ -67,6 +76,9 @@ function BattleshipGame() {
   const [requestedRole, setRequestedRole] = useState<"player" | "spectator">(
     "player",
   );
+
+  const prevShotsCountRef = useRef(0);
+  const sunkShipsCountRef = useRef({ p1: 0, p2: 0 });
 
   // States sắp xếp thuyền
   const [myShips, setMyShips] = useState<Ship[]>(getInitialShips());
@@ -118,6 +130,8 @@ function BattleshipGame() {
     gameStartTime,
     gameStarted,
     readyPlayers,
+    history,
+    undoRequestedBy,
   });
 
   useEffect(() => {
@@ -135,6 +149,8 @@ function BattleshipGame() {
       gameStartTime,
       gameStarted,
       readyPlayers,
+      history,
+      undoRequestedBy,
     };
   }, [
     hostName,
@@ -150,6 +166,8 @@ function BattleshipGame() {
     gameStartTime,
     gameStarted,
     readyPlayers,
+    history,
+    undoRequestedBy,
   ]);
 
   // Network Effect
@@ -165,11 +183,14 @@ function BattleshipGame() {
           p2Shots: s2,
           isPlayer1Turn: pt,
           winner: w,
+          history: h,
         } = payload.payload;
         setP1Shots(s1);
         setP2Shots(s2);
         setIsPlayer1Turn(pt);
         setWinner(w);
+        if (h) setHistory(h);
+        setUndoRequestedBy(null);
       })
       .on("broadcast", { event: "reset-game" }, () => {
         setP1Ships([]);
@@ -183,6 +204,8 @@ function BattleshipGame() {
         setGameStartTime(null);
         setElapsedTime(0);
         setMyShips(getInitialShips());
+        setHistory([]);
+        setUndoRequestedBy(null);
       })
       .on("broadcast", { event: "player-ready" }, (payload) => {
         const { playerName: readyPlayer, ships } = payload.payload;
@@ -231,7 +254,7 @@ function BattleshipGame() {
                 return;
               }
             } else {
-              if (newSpecs.length < 5) {
+              if (newSpecs.length < 10) {
                 newSpecs.push(newPlayer);
                 setSpectators(newSpecs);
                 stateRef.current.spectators = newSpecs;
@@ -257,6 +280,8 @@ function BattleshipGame() {
               player2Name: newP2,
               spectators: newSpecs,
               readyPlayers: state.readyPlayers,
+              history: state.history,
+              undoRequestedBy: state.undoRequestedBy,
             },
           });
         }
@@ -280,6 +305,9 @@ function BattleshipGame() {
           setGameStartTime(data.gameStartTime);
         if (data.gameStarted !== undefined) setGameStarted(data.gameStarted);
         if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
+        if (data.history) setHistory(data.history);
+        if (data.undoRequestedBy !== undefined)
+          setUndoRequestedBy(data.undoRequestedBy);
 
         if (playerName === data.player1Name && data.p1Ships?.length === 5) {
           setMyShips(data.p1Ships);
@@ -332,6 +360,16 @@ function BattleshipGame() {
             });
           }
         }
+      })
+      .on("broadcast", { event: "request-undo" }, (payload) => {
+        setUndoRequestedBy(payload.payload.playerName);
+      })
+      .on("broadcast", { event: "reject-undo" }, () => {
+        const state = stateRef.current;
+        if (playerName === state.undoRequestedBy) {
+          alert("Đối thủ đã từ chối yêu cầu đi lại.");
+        }
+        setUndoRequestedBy(null);
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -390,6 +428,62 @@ function BattleshipGame() {
       if (interval) clearInterval(interval);
     };
   }, [gameStartTime, winner]);
+
+  // Pháo hoa chìm tàu
+  useEffect(() => {
+    if (!gameStarted) {
+      sunkShipsCountRef.current = { p1: 0, p2: 0 };
+      prevShotsCountRef.current = 0;
+      return;
+    }
+
+    let p1SunkCount = 0;
+    if (p2Ships.length > 0) {
+      p1SunkCount = p2Ships.filter(
+        (ship) =>
+          ship.positions.length > 0 &&
+          ship.positions.every((p) =>
+            p1Shots.some(
+              (s) => s.r === p[0] && s.c === p[1] && s.result === "hit",
+            ),
+          ),
+      ).length;
+    }
+
+    let p2SunkCount = 0;
+    if (p1Ships.length > 0) {
+      p2SunkCount = p1Ships.filter(
+        (ship) =>
+          ship.positions.length > 0 &&
+          ship.positions.every((p) =>
+            p2Shots.some(
+              (s) => s.r === p[0] && s.c === p[1] && s.result === "hit",
+            ),
+          ),
+      ).length;
+    }
+
+    const totalShots = p1Shots.length + p2Shots.length;
+
+    // Chỉ hiển thị pháo hoa khi đúng 1 lượt bắn vừa thực hiện và số lượng tàu chìm tăng lên
+    if (totalShots - prevShotsCountRef.current === 1) {
+      if (
+        p1SunkCount > sunkShipsCountRef.current.p1 ||
+        p2SunkCount > sunkShipsCountRef.current.p2
+      ) {
+        confetti({
+          particleCount: 150,
+          spread: 80,
+          origin: { y: 0.5 },
+          zIndex: 9999,
+          colors: ["#FF4500", "#FFA500", "#FFD700", "#FF0000"],
+        });
+      }
+    }
+
+    sunkShipsCountRef.current = { p1: p1SunkCount, p2: p2SunkCount };
+    prevShotsCountRef.current = totalShots;
+  }, [p1Shots, p2Shots, p1Ships, p2Ships, gameStarted]);
 
   // Pháo hoa chiến thắng
   useEffect(() => {
@@ -613,6 +707,44 @@ function BattleshipGame() {
     }
   };
 
+  const handleShootTrigger = (r: number, c: number) => {
+    if (!gameStarted || winner || isSpectator || activeAnimation) return;
+
+    const isMyTurn =
+      (isPlayer1 && isPlayer1Turn) || (isPlayer2 && !isPlayer1Turn);
+    if (!isMyTurn) return;
+
+    const myShots = isPlayer1 ? p1Shots : p2Shots;
+    if (myShots.some((shot) => shot.r === r && shot.c === c)) return;
+
+    const opponentShips = isPlayer1 ? p2Ships : p1Ships;
+    let isHit = false;
+    for (const ship of opponentShips) {
+      if (ship.positions.some((pos) => pos[0] === r && pos[1] === c)) {
+        isHit = true;
+        break;
+      }
+    }
+
+    setActiveAnimation({
+      r,
+      c,
+      result: isHit ? "hit" : "miss",
+      stage: "falling",
+    });
+
+    setTimeout(() => {
+      setActiveAnimation((prev) =>
+        prev ? { ...prev, stage: "exploding" } : null,
+      );
+    }, 400);
+
+    setTimeout(() => {
+      setActiveAnimation(null);
+      handleShoot(r, c);
+    }, 900);
+  };
+
   const handleShoot = (r: number, c: number) => {
     if (!gameStarted || winner || isSpectator) return;
 
@@ -622,6 +754,15 @@ function BattleshipGame() {
 
     const myShots = isPlayer1 ? p1Shots : p2Shots;
     if (myShots.some((shot) => shot.r === r && shot.c === c)) return;
+
+    const currentState = {
+      p1Shots: stateRef.current.p1Shots,
+      p2Shots: stateRef.current.p2Shots,
+      isPlayer1Turn: stateRef.current.isPlayer1Turn,
+      winner: stateRef.current.winner,
+    };
+    const newHistory = [...stateRef.current.history, currentState];
+    setHistory(newHistory);
 
     const opponentShips = isPlayer1 ? p2Ships : p1Ships;
     let isHit = false;
@@ -663,6 +804,7 @@ function BattleshipGame() {
           p2Shots: newP2Shots,
           isPlayer1Turn: nextTurn,
           winner: newWinner,
+          history: newHistory,
         },
       });
     }
@@ -680,6 +822,8 @@ function BattleshipGame() {
     setGameStartTime(null);
     setElapsedTime(0);
     setMyShips(getInitialShips());
+    setHistory([]);
+    setUndoRequestedBy(null);
 
     if (channel) {
       channel.send({ type: "broadcast", event: "reset-game" });
@@ -688,6 +832,7 @@ function BattleshipGame() {
 
   const handleKickPlayer = (targetName: string) => {
     if (playerName !== hostName || !channel) return;
+    if (targetName === player2Name && gameStarted) return;
 
     channel.send({
       type: "broadcast",
@@ -737,6 +882,75 @@ function BattleshipGame() {
     }
   };
 
+  const handleRequestUndo = () => {
+    if (channel && !isSpectator) {
+      setUndoRequestedBy(playerName);
+      channel.send({
+        type: "broadcast",
+        event: "request-undo",
+        payload: { playerName },
+      });
+    }
+  };
+
+  const handleAcceptUndo = () => {
+    const state = stateRef.current;
+    if (state.history.length > 0 && channel) {
+      const prevState = state.history[state.history.length - 1];
+      const newHistory = state.history.slice(0, -1);
+
+      setP1Shots(prevState.p1Shots);
+      setP2Shots(prevState.p2Shots);
+      setIsPlayer1Turn(prevState.isPlayer1Turn);
+      setWinner(prevState.winner);
+      setHistory(newHistory);
+      setUndoRequestedBy(null);
+
+      channel.send({
+        type: "broadcast",
+        event: "sync-move",
+        payload: {
+          p1Shots: prevState.p1Shots,
+          p2Shots: prevState.p2Shots,
+          isPlayer1Turn: prevState.isPlayer1Turn,
+          winner: prevState.winner,
+          history: newHistory,
+        },
+      });
+    }
+  };
+
+  const handleRejectUndo = () => {
+    setUndoRequestedBy(null);
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "reject-undo",
+        payload: {},
+      });
+    }
+  };
+
+  const handleResign = () => {
+    if (winner || !gameStarted || isSpectator) return;
+    const myColor = isPlayer1 ? "P1" : isPlayer2 ? "P2" : null;
+    if (!myColor) return;
+
+    const newWinner = myColor === "P1" ? player2Name : player1Name;
+    setWinner(newWinner);
+
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "sync-move",
+        payload: {
+          ...stateRef.current,
+          winner: newWinner,
+        },
+      });
+    }
+  };
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
       .toString()
@@ -779,6 +993,12 @@ function BattleshipGame() {
             {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, i) => {
               const r = Math.floor(i / BOARD_SIZE);
               const c = i % BOARD_SIZE;
+              const isAnimatingHere =
+                interactive &&
+                activeAnimation &&
+                activeAnimation.r === r &&
+                activeAnimation.c === c;
+
               return (
                 <div
                   key={`${r}-${c}`}
@@ -794,7 +1014,55 @@ function BattleshipGame() {
                     }
                   }}
                   className="border border-blue-200 relative flex items-center justify-center cursor-pointer hover:bg-blue-100 transition-colors"
-                />
+                >
+                  <AnimatePresence>
+                    {isAnimatingHere && (
+                      <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+                        {activeAnimation.stage === "falling" && (
+                          <motion.div
+                            key="falling"
+                            initial={{
+                              y: -100,
+                              opacity: 0,
+                              scale: 1.5,
+                              rotate: 15,
+                            }}
+                            animate={{ y: 0, opacity: 1, scale: 1, rotate: 0 }}
+                            exit={{ opacity: 0, scale: 0.5 }}
+                            transition={{ duration: 0.35, ease: "easeIn" }}
+                            className="text-2xl md:text-3xl drop-shadow-lg"
+                          >
+                            💣
+                          </motion.div>
+                        )}
+                        {activeAnimation.stage === "exploding" &&
+                          activeAnimation.result === "hit" && (
+                            <motion.div
+                              key="exploding-hit"
+                              initial={{ scale: 0.5, opacity: 1 }}
+                              animate={{ scale: 2.5, opacity: 0 }}
+                              transition={{ duration: 0.5, ease: "easeOut" }}
+                              className="text-3xl md:text-4xl absolute drop-shadow-xl"
+                            >
+                              💥
+                            </motion.div>
+                          )}
+                        {activeAnimation.stage === "exploding" &&
+                          activeAnimation.result === "miss" && (
+                            <motion.div
+                              key="exploding-miss"
+                              initial={{ scale: 0.5, opacity: 1 }}
+                              animate={{ scale: 2, opacity: 0 }}
+                              transition={{ duration: 0.5, ease: "easeOut" }}
+                              className="text-3xl md:text-4xl absolute drop-shadow-md"
+                            >
+                              💦
+                            </motion.div>
+                          )}
+                      </div>
+                    )}
+                  </AnimatePresence>
+                </div>
               );
             })}
 
@@ -952,6 +1220,39 @@ function BattleshipGame() {
 
   return (
     <main className="flex min-h-screen flex-col items-center bg-zinc-50 px-4 py-12">
+      {undoRequestedBy && undoRequestedBy !== playerName && !isSpectator && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4 border border-zinc-200">
+            <p className="mb-6 text-lg font-medium text-zinc-800">
+              <span className="font-bold text-purple-600">
+                {undoRequestedBy}
+              </span>{" "}
+              muốn xin đi lại 1 nước.
+            </p>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={handleAcceptUndo}
+                className="px-6 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm cursor-pointer"
+              >
+                Đồng ý
+              </button>
+              <button
+                onClick={handleRejectUndo}
+                className="px-6 py-2.5 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors shadow-sm cursor-pointer"
+              >
+                Từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {undoRequestedBy === playerName && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg font-medium animate-pulse">
+          Đang chờ đối thủ phản hồi yêu cầu đi lại...
+        </div>
+      )}
+
       {hasInitialized && (
         <div className="fixed left-4 top-4 z-50">
           <button
@@ -1196,13 +1497,34 @@ function BattleshipGame() {
           )}
 
           <div className="mt-10 flex w-full flex-wrap justify-center gap-4 xl:justify-start">
-            <button
-              onClick={resetGame}
-              disabled={!player2Name || isSpectator}
-              className="cursor-pointer rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Chơi lại
-            </button>
+            {gameStarted && !winner && !isSpectator && (
+              <>
+                {history.length > 0 && (
+                  <button
+                    onClick={handleRequestUndo}
+                    disabled={!!undoRequestedBy}
+                    className="cursor-pointer rounded-full border border-purple-300 bg-purple-50 px-6 py-2 text-sm font-medium text-purple-700 shadow-sm transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Xin đi lại
+                  </button>
+                )}
+                <button
+                  onClick={handleResign}
+                  className="cursor-pointer rounded-full border border-red-300 bg-red-50 px-6 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-100"
+                >
+                  Bỏ cuộc
+                </button>
+              </>
+            )}
+            {playerName === hostName && (
+              <button
+                onClick={resetGame}
+                disabled={!player2Name}
+                className="cursor-pointer rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Chơi lại
+              </button>
+            )}
             <Link
               href="/"
               className="cursor-pointer rounded-full bg-zinc-900 px-6 py-2 text-sm font-medium text-white hover:bg-zinc-800"
@@ -1254,7 +1576,7 @@ function BattleshipGame() {
                     "Bảng đối thủ",
                     p2Ships,
                     p1Shots,
-                    (r, c) => handleShoot(r, c),
+                    (r, c) => handleShootTrigger(r, c),
                     !winner,
                     true,
                   )}
@@ -1273,7 +1595,7 @@ function BattleshipGame() {
                     "Bảng đối thủ",
                     p1Ships,
                     p2Shots,
-                    (r, c) => handleShoot(r, c),
+                    (r, c) => handleShootTrigger(r, c),
                     !winner,
                     true,
                   )}
