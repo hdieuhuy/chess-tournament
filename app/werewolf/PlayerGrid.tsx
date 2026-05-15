@@ -8,6 +8,7 @@ type PlayerGridProps = {
   spectators: string[];
   alivePlayers: string[];
   playerRoles: Record<string, RoleConfig>;
+  originalRoles?: Record<string, RoleConfig>;
   playerName: string;
   hostName: string | null;
   gameStarted: boolean;
@@ -15,6 +16,7 @@ type PlayerGridProps = {
   headhunterTarget?: string | null;
   cupidTargets?: [string, string] | null;
   isNight?: boolean;
+  onKickPlayer?: (name: string) => void;
 };
 
 export default function PlayerGrid({
@@ -22,6 +24,7 @@ export default function PlayerGrid({
   spectators,
   alivePlayers,
   playerRoles,
+  originalRoles,
   playerName,
   hostName,
   gameStarted,
@@ -29,6 +32,7 @@ export default function PlayerGrid({
   headhunterTarget,
   cupidTargets,
   isNight,
+  onKickPlayer,
 }: PlayerGridProps) {
   return (
     <div className="flex w-full flex-col space-y-6">
@@ -60,6 +64,7 @@ export default function PlayerGrid({
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {players.map((p, idx) => {
               const role = playerRoles[p];
+              const originalRole = originalRoles?.[p];
               const myRole = playerRoles[playerName];
               const isMe = p === playerName;
               const isBothWolves =
@@ -122,6 +127,24 @@ export default function PlayerGrid({
                         </div>
                       </div>
                     )}
+                    {p !== hostName &&
+                      !gameStarted &&
+                      hostName === playerName &&
+                      onKickPlayer && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onKickPlayer(p);
+                          }}
+                          className="group relative flex h-5 w-5 cursor-pointer items-center justify-center rounded-full bg-red-100/80 text-xs font-bold text-red-600 transition-colors hover:bg-red-200"
+                        >
+                          ✕
+                          <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-red-800 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                            Đuổi người chơi
+                            <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-red-800 -translate-x-1/2"></div>
+                          </div>
+                        </button>
+                      )}
                   </div>
                   <div
                     className={`mb-3 flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold shadow-inner ${isNight ? "bg-slate-600 text-slate-300" : "bg-zinc-200 text-zinc-700"}`}
@@ -134,12 +157,22 @@ export default function PlayerGrid({
                     {p} {isMe && "(Bạn)"}
                   </span>
                   {gameStarted && role && canSeeRole && (
-                    <span
-                      className={`mt-1 flex items-center justify-center space-x-1 text-xs font-bold ${getRoleColor(role.id)}`}
-                    >
-                      <RoleIcon id={role.id} className="text-sm" />
-                      <span>{role.name}</span>
-                    </span>
+                    <div className="mt-1 flex flex-col items-center justify-center space-y-1">
+                      {originalRole && originalRole.id !== role.id && (
+                        <span
+                          className={`flex items-center justify-center space-x-1 text-xs font-bold line-through opacity-50 ${getRoleColor(originalRole.id)}`}
+                        >
+                          <RoleIcon id={originalRole.id} className="text-sm" />
+                          <span>{originalRole.name}</span>
+                        </span>
+                      )}
+                      <span
+                        className={`flex items-center justify-center space-x-1 text-xs font-bold ${getRoleColor(role.id)}`}
+                      >
+                        <RoleIcon id={role.id} className="text-sm" />
+                        <span>{role.name}</span>
+                      </span>
+                    </div>
                   )}
                 </div>
               );

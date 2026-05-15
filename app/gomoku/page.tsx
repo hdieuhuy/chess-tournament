@@ -188,7 +188,10 @@ function GomokuGame() {
 
           if (!isAlreadyPlayer && !isAlreadySpec) {
             if (role === "player") {
-              if (!newP2) {
+              if (!state.player1Name) {
+                setPlayer1Name(newPlayer);
+                stateRef.current.player1Name = newPlayer;
+              } else if (!newP2) {
                 newP2 = newPlayer;
                 setPlayer2Name(newP2);
                 stateRef.current.player2Name = newP2;
@@ -288,20 +291,71 @@ function GomokuGame() {
         const { playerName: reqPlayer, newRole } = payload.payload;
         const state = stateRef.current;
         if (state.hostName === playerName) {
-          if (newRole === "player" && !state.player2Name) {
+          if (newRole === "player") {
             const newSpecs = state.spectators.filter((s) => s !== reqPlayer);
-            setPlayer2Name(reqPlayer);
-            setSpectators(newSpecs);
+            if (!state.player1Name) {
+              setPlayer1Name(reqPlayer);
+              setSpectators(newSpecs);
+              stateRef.current.player1Name = reqPlayer;
+              stateRef.current.spectators = newSpecs;
+              roomChannel.send({
+                type: "broadcast",
+                event: "room-sync",
+                payload: { ...stateRef.current },
+              });
+            } else if (!state.player2Name) {
+              setPlayer2Name(reqPlayer);
+              setSpectators(newSpecs);
+              stateRef.current.player2Name = reqPlayer;
+              stateRef.current.spectators = newSpecs;
+              roomChannel.send({
+                type: "broadcast",
+                event: "room-sync",
+                payload: { ...stateRef.current },
+              });
+            }
+          }
+        }
+      })
+      .on("broadcast", { event: "leave-room" }, (payload) => {
+        const state = stateRef.current;
+        const leavingPlayer = payload.payload.playerName;
+
+        let newP1 = state.player1Name;
+        let newP2 = state.player2Name;
+        if (newP1 === leavingPlayer) newP1 = null;
+        if (newP2 === leavingPlayer) newP2 = null;
+
+        const newSpecs = state.spectators.filter((s) => s !== leavingPlayer);
+        const newReadyPlayers = state.readyPlayers.filter(
+          (p) => p !== leavingPlayer,
+        );
+
+        let newHostName = state.hostName;
+        if (state.hostName === leavingPlayer) {
+          newHostName = newP1 || newP2 || newSpecs[0] || null;
+        }
+
+        setPlayer1Name(newP1);
+        setPlayer2Name(newP2);
+        setSpectators(newSpecs);
+        setReadyPlayers(newReadyPlayers);
+        setHostName(newHostName);
+
+        stateRef.current.player1Name = newP1;
+        stateRef.current.player2Name = newP2;
+        stateRef.current.spectators = newSpecs;
+        stateRef.current.readyPlayers = newReadyPlayers;
+        stateRef.current.hostName = newHostName;
+
+        if (newHostName === playerName) {
+          setTimeout(() => {
             roomChannel.send({
               type: "broadcast",
               event: "room-sync",
-              payload: {
-                ...stateRef.current,
-                player2Name: reqPlayer,
-                spectators: newSpecs,
-              },
+              payload: { ...stateRef.current },
             });
-          }
+          }, 50);
         }
       })
       .subscribe((status) => {
@@ -320,6 +374,31 @@ function GomokuGame() {
       supabase.removeChannel(roomChannel);
     };
   }, [roomId, playerName, hasInitialized, requestedRole]);
+
+  const channelRef = useRef(channel);
+  const playerNameRef = useRef(playerName);
+  useEffect(() => {
+    channelRef.current = channel;
+    playerNameRef.current = playerName;
+  }, [channel, playerName]);
+
+  useEffect(() => {
+    const handleUnload = () => {
+      if (channelRef.current && playerNameRef.current) {
+        channelRef.current.send({
+          type: "broadcast",
+          event: "leave-room",
+          payload: { playerName: playerNameRef.current },
+        });
+      }
+    };
+
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      handleUnload();
+    };
+  }, []);
 
   useEffect(() => {
     if (gameStarted || !player1Name || !player2Name || !channel) return;

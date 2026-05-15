@@ -72,6 +72,7 @@ type GameState = {
   gameStarted: boolean;
   roleConfig: RoleConfig[];
   playerRoles: Record<string, RoleConfig>;
+  originalRoles: Record<string, RoleConfig>;
   phase: "lobby" | "role_reveal" | "night" | "day" | "game_over";
   dayPhase: "discussion" | "voting" | "defense" | "execution" | null;
   dayTimeLeft: number;
@@ -129,6 +130,7 @@ const initialGameState: GameState = {
   gameStarted: false,
   roleConfig: defaultRoles,
   playerRoles: {},
+  originalRoles: {},
   phase: "lobby",
   dayPhase: null,
   dayTimeLeft: 0,
@@ -1263,6 +1265,7 @@ function WerewolfGame() {
               gameStarted: state.gameStarted,
               roleConfig: state.roleConfig,
               playerRoles: state.playerRoles,
+              originalRoles: state.originalRoles,
               phase: state.phase,
               dayPhase: state.dayPhase,
               dayTimeLeft: state.dayTimeLeft,
@@ -1308,6 +1311,7 @@ function WerewolfGame() {
           updates.gameStarted = data.gameStarted;
         if (data.roleConfig) updates.roleConfig = data.roleConfig;
         if (data.playerRoles) updates.playerRoles = data.playerRoles;
+        if (data.originalRoles) updates.originalRoles = data.originalRoles;
         if (data.phase) updates.phase = data.phase;
         if (data.dayPhase !== undefined) updates.dayPhase = data.dayPhase;
         if (data.dayTimeLeft !== undefined)
@@ -1362,6 +1366,7 @@ function WerewolfGame() {
           payload: {
             gameStarted: true,
             playerRoles: data.playerRoles || {},
+            originalRoles: data.originalRoles || {},
             phase: data.phase || "role_reveal",
             dayPhase: null,
             dayTimeLeft: 0,
@@ -1704,6 +1709,54 @@ function WerewolfGame() {
           }
         }
       })
+      .on("broadcast", { event: "kick-player" }, (payload) => {
+        if (payload.payload.playerName === playerName) {
+          alert("Bạn đã bị chủ phòng kích khỏi phòng!");
+          if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
+          router.replace("/");
+        }
+      })
+      .on("broadcast", { event: "leave-room" }, (payload) => {
+        const state = stateRef.current;
+        const leavingPlayer = payload.payload.playerName;
+        const newPlayers = state.players.filter((p) => p !== leavingPlayer);
+        const newSpecs = state.spectators.filter((s) => s !== leavingPlayer);
+
+        let newHostName = state.hostName;
+        if (state.hostName === leavingPlayer) {
+          newHostName = newPlayers[0] || newSpecs[0] || null;
+        }
+
+        if (
+          newPlayers.length !== state.players.length ||
+          newSpecs.length !== state.spectators.length ||
+          newHostName !== state.hostName
+        ) {
+          dispatch({
+            type: "UPDATE",
+            payload: {
+              players: newPlayers,
+              spectators: newSpecs,
+              hostName: newHostName,
+            },
+          });
+          stateRef.current.players = newPlayers;
+          stateRef.current.spectators = newSpecs;
+          stateRef.current.hostName = newHostName;
+
+          if (newHostName === playerName) {
+            setTimeout(() => {
+              roomChannel.send({
+                type: "broadcast",
+                event: "room-sync",
+                payload: {
+                  ...stateRef.current,
+                },
+              });
+            }, 50);
+          }
+        }
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           roomChannel.send({
@@ -1720,6 +1773,31 @@ function WerewolfGame() {
       supabase.removeChannel(roomChannel);
     };
   }, [roomId, playerName, hasInitialized, requestedRole]);
+
+  const channelRef = useRef(channel);
+  const playerNameRef = useRef(playerName);
+  useEffect(() => {
+    channelRef.current = channel;
+    playerNameRef.current = playerName;
+  }, [channel, playerName]);
+
+  useEffect(() => {
+    const handleUnload = () => {
+      if (channelRef.current && playerNameRef.current) {
+        channelRef.current.send({
+          type: "broadcast",
+          event: "leave-room",
+          payload: { playerName: playerNameRef.current },
+        });
+      }
+    };
+
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      handleUnload();
+    };
+  }, []);
 
   const handleJoinRoom = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1762,6 +1840,39 @@ function WerewolfGame() {
         }),
       });
     }
+  };
+
+  const handleKickPlayer = (targetName: string) => {
+    if (playerName !== hostName || !channel || gameStarted) return;
+
+    channel.send({
+      type: "broadcast",
+      event: "kick-player",
+      payload: { playerName: targetName },
+    });
+
+    const state = stateRef.current;
+    const newPlayers = state.players.filter((p) => p !== targetName);
+    const newSpecs = state.spectators.filter((s) => s !== targetName);
+
+    dispatch({
+      type: "UPDATE",
+      payload: { players: newPlayers, spectators: newSpecs },
+    });
+    stateRef.current.players = newPlayers;
+    stateRef.current.spectators = newSpecs;
+
+    setTimeout(() => {
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: {
+          ...stateRef.current,
+          players: newPlayers,
+          spectators: newSpecs,
+        },
+      });
+    }, 50);
   };
 
   const executeDayExecution = useCallback(
@@ -2676,6 +2787,7 @@ function WerewolfGame() {
         type: "UPDATE",
         payload: {
           playerRoles: newPlayerRoles,
+          originalRoles: newPlayerRoles,
           gameStarted: true,
           phase: "role_reveal",
           dayPhase: null,
@@ -2719,6 +2831,7 @@ function WerewolfGame() {
         event: "game-start",
         payload: {
           playerRoles: newPlayerRoles,
+          originalRoles: newPlayerRoles,
           phase: "role_reveal",
           dayCount: 0,
           alivePlayers: players,
@@ -2762,6 +2875,7 @@ function WerewolfGame() {
         payload: {
           gameStarted: false,
           playerRoles: {},
+          originalRoles: {},
           phase: "lobby",
           dayPhase: null,
           dayTimeLeft: 0,
@@ -3458,6 +3572,7 @@ function WerewolfGame() {
             spectators={spectators}
             alivePlayers={alivePlayers}
             playerRoles={playerRoles}
+            originalRoles={gameState.originalRoles}
             playerName={playerName}
             hostName={hostName}
             gameStarted={gameStarted}
@@ -3465,6 +3580,7 @@ function WerewolfGame() {
             headhunterTarget={headhunterTarget}
             cupidTargets={cupidTargets}
             isNight={isNight}
+            onKickPlayer={handleKickPlayer}
           />
 
           {/* Spectators */}
@@ -3493,6 +3609,15 @@ function WerewolfGame() {
                     >
                       {spec}
                     </span>
+                    {hostName === playerName && !gameStarted && (
+                      <button
+                        onClick={() => handleKickPlayer(spec)}
+                        className={`ml-1 flex h-4 w-4 items-center justify-center rounded-full transition-colors ${isNight ? "bg-red-900/80 text-red-200 hover:bg-red-700" : "bg-red-100 text-red-600 hover:bg-red-200"} text-[10px] font-bold`}
+                        title="Đuổi người xem"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
