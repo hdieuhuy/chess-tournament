@@ -1,5 +1,5 @@
 import { FaCrown, FaGhost, FaHeart } from "react-icons/fa";
-import { GiBullseye } from "react-icons/gi";
+import { GiBullseye, GiMusicalNotes } from "react-icons/gi";
 import { RoleConfig } from "./types";
 import { RoleIcon, getRoleColor } from "./utils";
 
@@ -15,6 +15,7 @@ type PlayerGridProps = {
   phase: string;
   headhunterTarget?: string | null;
   cupidTargets?: [string, string] | null;
+  hypnotizedPlayers?: string[];
   isNight?: boolean;
   onKickPlayer?: (name: string) => void;
 };
@@ -31,6 +32,7 @@ export default function PlayerGrid({
   phase,
   headhunterTarget,
   cupidTargets,
+  hypnotizedPlayers,
   isNight,
   onKickPlayer,
 }: PlayerGridProps) {
@@ -84,6 +86,10 @@ export default function PlayerGrid({
                 (cupidTargets.includes(playerName) ||
                   myRole?.id === "cupid" ||
                   phase === "game_over");
+              const canSeeHypnotized =
+                phase === "game_over" ||
+                myRole?.id === "pied_piper" ||
+                (isMe && hypnotizedPlayers?.includes(p));
 
               return (
                 <div
@@ -127,6 +133,17 @@ export default function PlayerGrid({
                         </div>
                       </div>
                     )}
+                    {gameStarted &&
+                      hypnotizedPlayers?.includes(p) &&
+                      canSeeHypnotized && (
+                        <div className="group relative cursor-help text-lg text-emerald-500">
+                          <GiMusicalNotes />
+                          <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-800 px-2 py-1 text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                            Bị thôi miên
+                            <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-800 -translate-x-1/2"></div>
+                          </div>
+                        </div>
+                      )}
                     {p !== hostName &&
                       !gameStarted &&
                       hostName === playerName &&

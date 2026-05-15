@@ -11,6 +11,7 @@ import {
   GiBullseye,
   GiBowieKnife,
   GiMagicSwirl,
+  GiMusicalNotes,
 } from "react-icons/gi";
 import { RoleConfig } from "./types";
 
@@ -50,6 +51,8 @@ export const RoleIcon = ({
       return <FaHeart className={className} />;
     case "medium":
       return <GiMagicSwirl className={className} />;
+    case "pied_piper":
+      return <GiMusicalNotes className={className} />;
     default:
       return null;
   }
@@ -85,6 +88,8 @@ export const getRoleColor = (id?: string) => {
       return "text-pink-500";
     case "medium":
       return "text-teal-600";
+    case "pied_piper":
+      return "text-emerald-500";
     default:
       return "text-zinc-500";
   }
@@ -120,6 +125,8 @@ export const getRoleDescription = (id?: string) => {
       return "Đêm đầu tiên được chọn 2 người để ghép đôi. Hai người này sẽ sống chết có nhau. Nếu thuộc 2 phe khác nhau, cặp đôi phải sống đến cuối cùng để giành chiến thắng.";
     case "medium":
       return "Mỗi trận được phép dùng phép thuật hồi sinh 1 người đã chết. Không cần chờ đến lượt để hành động.";
+    case "pied_piper":
+      return "Phe thứ 3. Mỗi đêm được thôi miên 1 người (không cần đợi lượt). Bạn sẽ chiến thắng nếu tất cả những người còn sống đều đã bị thôi miên.";
     default:
       return "";
   }
@@ -140,4 +147,5 @@ export const defaultRoles: RoleConfig[] = [
   { id: "assassin", name: "Sát Thủ", count: 0 },
   { id: "cupid", name: "Thần Tình Yêu", count: 0 },
   { id: "medium", name: "Thầy Đồng", count: 0 },
+  { id: "pied_piper", name: "Người Thổi Sáo", count: 0 },
 ];

@@ -64,6 +64,11 @@ export default function ActionLogsArea({
             className={`font-bold ${isDeathLog ? (isNight ? "text-red-400" : "text-red-600") : isNight ? "text-slate-200" : "text-zinc-900"}`}
           >
             {part}
+            {part === playerName && (
+              <span className="ml-1 text-[11px] font-normal italic opacity-80">
+                (Bạn)
+              </span>
+            )}
           </span>
         );
       }
@@ -151,6 +156,11 @@ export default function ActionLogsArea({
                             <span className="font-bold text-red-700 text-[13px]">
                               {log.playerName}
                             </span>
+                            {log.playerName === playerName && (
+                              <span className="ml-1 text-[11px] font-normal italic opacity-80">
+                                (Bạn)
+                              </span>
+                            )}
                             )
                           </span>
                         ) : (
@@ -164,6 +174,11 @@ export default function ActionLogsArea({
                             <span className="font-bold text-indigo-700 text-[13px]">
                               {log.playerName}
                             </span>
+                            {log.playerName === playerName && (
+                              <span className="ml-1 text-[11px] font-normal italic opacity-80">
+                                (Bạn)
+                              </span>
+                            )}
                             )
                           </span>
                         )}

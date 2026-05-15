@@ -21,7 +21,14 @@ const getFaction = (roleId: string) => {
     "cursed_wolf",
     "fog_wolf",
   ];
-  const thirdParties = ["fool", "headhunter", "assassin", "thief", "tanner"];
+  const thirdParties = [
+    "fool",
+    "headhunter",
+    "assassin",
+    "thief",
+    "tanner",
+    "pied_piper",
+  ];
   if (wolves.includes(roleId)) return "wolf";
   if (thirdParties.includes(roleId)) return "third_party";
   return "villager";

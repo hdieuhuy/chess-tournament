@@ -23,6 +23,7 @@ import {
   GiMusket,
   GiBowieKnife,
   GiMagicSwirl,
+  GiMusicalNotes,
 } from "react-icons/gi";
 import { RoleConfig, ActionLog, ChatMessage } from "./types";
 import { defaultRoles, RoleIcon, getRoleColor } from "./utils";
@@ -105,6 +106,7 @@ type GameState = {
     | "headhunter"
     | "assassin"
     | "lovers"
+    | "pied_piper"
     | null;
   extraLives: Record<string, number>;
   cursedWolfUsed: boolean;
@@ -115,6 +117,7 @@ type GameState = {
   cupidTargets: [string, string] | null;
   mediumUsed: boolean;
   mediumResurrect: string | null;
+  hypnotizedPlayers: string[];
 };
 
 type GameAction =
@@ -167,6 +170,7 @@ const initialGameState: GameState = {
   cupidTargets: null,
   mediumUsed: false,
   mediumResurrect: null,
+  hypnotizedPlayers: [],
 };
 
 function gameReducer(state: GameState, action: GameAction): GameState {
@@ -184,13 +188,28 @@ const checkWinCondition = (
   alivePlayers: string[],
   playerRoles: Record<string, RoleConfig>,
   cupidTargets: [string, string] | null,
+  hypnotizedPlayers: string[],
 ): GameState["winner"] => {
   const getFaction = (p: string) => {
     const rId = playerRoles[p]?.id || "";
     if (["werewolf", "cursed_wolf", "fog_wolf"].includes(rId)) return "wolf";
-    if (["assassin", "fool", "headhunter"].includes(rId)) return "third_party";
+    if (["assassin", "fool", "headhunter", "pied_piper"].includes(rId))
+      return "third_party";
     return "villager";
   };
+
+  const piedPipers = alivePlayers.filter(
+    (p) => playerRoles[p]?.id === "pied_piper",
+  );
+  if (piedPipers.length > 0) {
+    const unhypnotizedAlive = alivePlayers.filter(
+      (p) =>
+        playerRoles[p]?.id !== "pied_piper" && !hypnotizedPlayers.includes(p),
+    );
+    if (unhypnotizedAlive.length === 0) {
+      return "pied_piper";
+    }
+  }
 
   if (cupidTargets) {
     const [l1, l2] = cupidTargets;
@@ -289,7 +308,7 @@ const BodyguardNightUI = ({
       <button
         onClick={() => {
           executeAction(
-            `Bạn đã bảo vệ ${nightSelection}`,
+            `${playerName} đã bảo vệ ${nightSelection}`,
             { lastProtected: nightSelection as string | null },
             {
               name: "night-action",
@@ -432,7 +451,7 @@ const WerewolfNightUI = ({
       <button
         onClick={() => {
           executeAction(
-            `Bạn đã vote cắn ${myVote === "none" ? "Không ai" : myVote}`,
+            `${playerName} đã vote cắn ${myVote === "none" ? "Không ai" : myVote}`,
             {},
           );
         }}
@@ -472,7 +491,7 @@ const CursedWolfNightUI = ({
         <button
           onClick={() =>
             executeAction(
-              "Sói Nguyền bỏ qua lượt.",
+              `${playerName} bỏ qua lượt.`,
               {},
               {
                 name: "night-action",
@@ -500,7 +519,7 @@ const CursedWolfNightUI = ({
         <button
           onClick={() =>
             executeAction(
-              `Sói Nguyền đã chọn nguyền ${wolfVictim}`,
+              `${playerName} đã chọn nguyền ${wolfVictim}`,
               {
                 cursedWolfUsed: true,
                 infectedPlayer: wolfVictim,
@@ -523,7 +542,7 @@ const CursedWolfNightUI = ({
         <button
           onClick={() =>
             executeAction(
-              `Sói Nguyền không dùng kỹ năng`,
+              `${playerName} không dùng kỹ năng`,
               { infectedPlayer: null },
               {
                 name: "night-action",
@@ -591,7 +610,7 @@ const SeerNightUI = ({
           const isWolf =
             playerRoles[nightSelection as string]?.id === "werewolf";
           executeAction(
-            `Bạn đã soi ${nightSelection} ${isWolf ? "LÀ SÓI" : "KHÔNG PHẢI là sói"}`,
+            `${playerName} đã soi ${nightSelection} ${isWolf ? "LÀ SÓI" : "KHÔNG PHẢI là Sói"}`,
             { seerResult: { name: nightSelection as string, isWolf } },
             {
               name: "night-action",
@@ -730,11 +749,11 @@ const WitchNightUI = ({
         onClick={() => {
           let content = "";
           if (witchAction.heal)
-            content += `Bạn đã dùng bình cứu lên ${wolfVictim === "none" ? "Không ai" : wolfVictim}. `;
+            content += `${playerName} đã dùng bình cứu lên ${wolfVictim === "none" ? "Không ai" : wolfVictim}. `;
           if (witchAction.poison)
-            content += `Bạn đã ném bình độc vào ${witchAction.poison}.`;
+            content += `${playerName} đã ném bình độc vào ${witchAction.poison}.`;
           if (!witchAction.heal && !witchAction.poison)
-            content += "Bạn đã không dùng bình nào.";
+            content += `${playerName} đã không dùng bình nào.`;
           executeAction(
             content.trim(),
             {},
@@ -811,7 +830,7 @@ const HunterNightUI = ({
         <button
           onClick={() => {
             executeAction(
-              `Bạn đã ghim mục tiêu ${nightSelection || "Không có ai"}`,
+              `${playerName} đã ghim mục tiêu ${nightSelection || "Không có ai"}`,
               { hunterTarget: nightSelection as string | null },
               {
                 name: "night-action",
@@ -828,7 +847,7 @@ const HunterNightUI = ({
           <button
             onClick={() => {
               executeAction(
-                `Bạn đã giữ nguyên mục tiêu ${hunterTarget || "Không có ai"}`,
+                `${playerName} đã giữ nguyên mục tiêu ${hunterTarget || "Không có ai"}`,
                 {},
                 {
                   name: "night-action",
@@ -907,8 +926,8 @@ const AssassinNightUI = ({
         onClick={() => {
           executeAction(
             nightSelection === "none"
-              ? "Bạn đã quyết định không ám sát ai"
-              : `Bạn đã ám sát ${nightSelection}`,
+              ? `${playerName} đã quyết định không ám sát ai`
+              : `${playerName} đã ám sát ${nightSelection}`,
             {
               assassinTarget:
                 nightSelection === "none" ? null : (nightSelection as string),
@@ -983,7 +1002,7 @@ const CupidNightUI = ({
       <button
         onClick={() =>
           executeAction(
-            `Bạn đã ghép đôi ${selected[0]} và ${selected[1]}`,
+            `${playerName} đã ghép đôi ${selected[0]} và ${selected[1]}`,
             { cupidTargets: selected as [string, string] },
             {
               name: "night-action",
@@ -1035,7 +1054,7 @@ const MediumNightUI = ({
         <button
           onClick={() => {
             executeAction(
-              "Thầy Đồng không còn quyền năng.",
+              `${playerName} không còn quyền năng.`,
               {},
               {
                 name: "night-action",
@@ -1080,7 +1099,7 @@ const MediumNightUI = ({
         <button
           onClick={() =>
             executeAction(
-              `Bạn đã dùng quyền năng hồi sinh ${nightSelection}`,
+              `${playerName} đã dùng quyền năng hồi sinh ${nightSelection}`,
               { mediumResurrect: nightSelection as string },
               {
                 name: "night-action",
@@ -1096,7 +1115,7 @@ const MediumNightUI = ({
         <button
           onClick={() =>
             executeAction(
-              "Bạn đã quyết định không hồi sinh ai đêm nay.",
+              `${playerName} đã quyết định không hồi sinh ai đêm nay.`,
               { mediumResurrect: null },
               {
                 name: "night-action",
@@ -1113,6 +1132,103 @@ const MediumNightUI = ({
   );
 };
 
+const PiedPiperNightUI = ({
+  gameState,
+  dispatch,
+  playerName,
+  executeAction,
+}: RoleUIProps) => {
+  const { alivePlayers, hypnotizedPlayers, nightSelection, actionConfirmed } =
+    gameState;
+
+  if (actionConfirmed) {
+    return (
+      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
+        <p className="text-sm font-medium text-emerald-400">
+          <GiMusicalNotes className="mr-1 inline text-emerald-400" />
+          Bạn đã quyết định thôi miên:
+          <span className="ml-1 font-bold">
+            {nightSelection === "none" ? "Không ai" : nightSelection}
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4 w-full mt-2">
+      <p className="text-sm font-medium text-indigo-300">
+        Chọn 1 người để thôi miên đêm nay. Bạn sẽ thắng nếu tất cả những người
+        còn sống đều bị thôi miên.
+      </p>
+      <div className="grid grid-cols-2 gap-3 w-full">
+        {alivePlayers
+          .filter((p) => p !== playerName)
+          .map((p) => {
+            const isHypnotized = hypnotizedPlayers.includes(p);
+            return (
+              <button
+                key={p}
+                disabled={isHypnotized}
+                onClick={() =>
+                  dispatch({ type: "UPDATE", payload: { nightSelection: p } })
+                }
+                className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  nightSelection === p
+                    ? "border-emerald-500 bg-emerald-600 text-white"
+                    : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"
+                }`}
+              >
+                {p} {isHypnotized && "(Đã thôi miên)"}
+              </button>
+            );
+          })}
+        <button
+          onClick={() =>
+            dispatch({ type: "UPDATE", payload: { nightSelection: "none" } })
+          }
+          className={`col-span-2 cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            nightSelection === "none"
+              ? "border-slate-500 bg-slate-600 text-white"
+              : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"
+          }`}
+        >
+          Không thôi miên ai
+        </button>
+      </div>
+      <button
+        onClick={() => {
+          executeAction(
+            nightSelection === "none"
+              ? `${playerName} đã không thôi miên ai đêm nay.`
+              : `${playerName} đã thôi miên ${nightSelection}.`,
+            {
+              hypnotizedPlayers:
+                nightSelection !== "none" && nightSelection
+                  ? Array.from(
+                      new Set([...hypnotizedPlayers, nightSelection as string]),
+                    )
+                  : hypnotizedPlayers,
+            },
+            {
+              name: "night-action",
+              payload: {
+                role: "pied_piper",
+                target: nightSelection === "none" ? null : nightSelection,
+                playerName,
+              },
+            },
+          );
+        }}
+        disabled={!nightSelection}
+        className="w-full cursor-pointer rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:opacity-50"
+      >
+        Xác nhận
+      </button>
+    </div>
+  );
+};
+
 const ROLE_STRATEGIES: Record<string, React.FC<RoleUIProps>> = {
   bodyguard: BodyguardNightUI,
   werewolf: WerewolfNightUI,
@@ -1124,6 +1240,7 @@ const ROLE_STRATEGIES: Record<string, React.FC<RoleUIProps>> = {
   assassin: AssassinNightUI,
   cupid: CupidNightUI,
   medium: MediumNightUI,
+  pied_piper: PiedPiperNightUI,
 };
 
 function WerewolfGame() {
@@ -1300,6 +1417,7 @@ function WerewolfGame() {
               cupidTargets: state.cupidTargets,
               mediumUsed: state.mediumUsed,
               mediumResurrect: state.mediumResurrect,
+              hypnotizedPlayers: state.hypnotizedPlayers,
             },
           });
         }
@@ -1361,6 +1479,8 @@ function WerewolfGame() {
         if (data.mediumUsed !== undefined) updates.mediumUsed = data.mediumUsed;
         if (data.mediumResurrect !== undefined)
           updates.mediumResurrect = data.mediumResurrect;
+        if (data.hypnotizedPlayers)
+          updates.hypnotizedPlayers = data.hypnotizedPlayers;
         dispatch({ type: "UPDATE", payload: updates });
       })
       .on("broadcast", { event: "game-start" }, (payload) => {
@@ -1413,6 +1533,7 @@ function WerewolfGame() {
               data.cupidTargets !== undefined ? data.cupidTargets : null,
             mediumUsed: false,
             mediumResurrect: null,
+            hypnotizedPlayers: [],
           },
         });
       })
@@ -1493,6 +1614,8 @@ function WerewolfGame() {
         if (data.fogWolfUsed !== undefined)
           updates.fogWolfUsed = data.fogWolfUsed;
         updates.mediumResurrect = null;
+        if (data.hypnotizedPlayers)
+          updates.hypnotizedPlayers = data.hypnotizedPlayers;
         dispatch({ type: "UPDATE", payload: updates });
       })
       .on("broadcast", { event: "day-phase-change" }, (payload) => {
@@ -1556,7 +1679,10 @@ function WerewolfGame() {
           payload: (prev) => {
             const role = prev.playerRoles[playerName]?.id;
             const keepConfirmed =
-              role === "seer" || role === "hunter" || role === "medium";
+              role === "seer" ||
+              role === "hunter" ||
+              role === "medium" ||
+              role === "pied_piper";
             return {
               nightPhase: payload.payload.nightPhase,
               nightTimeLeft: payload.payload.nightTimeLeft,
@@ -1628,6 +1754,10 @@ function WerewolfGame() {
             assassinTarget: role === "assassin" ? target : prev.assassinTarget,
             cupidTargets: role === "cupid" ? target : prev.cupidTargets,
             mediumResurrect: role === "medium" ? target : prev.mediumResurrect,
+            hypnotizedPlayers:
+              role === "pied_piper" && target
+                ? [...new Set([...prev.hypnotizedPlayers, target])]
+                : prev.hypnotizedPlayers,
           }),
         });
       })
@@ -1944,6 +2074,7 @@ function WerewolfGame() {
         newAlive,
         state.playerRoles,
         state.cupidTargets,
+        state.hypnotizedPlayers,
       );
 
       // Kẻ Ngốc chiến thắng nếu bị treo cổ
@@ -2019,7 +2150,9 @@ function WerewolfGame() {
                     ? "Trò chơi kết thúc! Kẻ Ngốc đã đánh lừa được cả làng và bị treo cổ. Kẻ Ngốc giành chiến thắng!"
                     : newWinner === "wolves"
                       ? "Trò chơi kết thúc! Phe Sói đã chiến thắng."
-                      : "Trò chơi kết thúc! Phe Dân làng đã chiến thắng.",
+                      : newWinner === "pied_piper"
+                        ? "Trò chơi kết thúc! Người Thổi Sáo đã thôi miên toàn bộ dân làng và giành chiến thắng!"
+                        : "Trò chơi kết thúc! Phe Dân làng đã chiến thắng.",
         };
         newLogs.push(endLog);
       }
@@ -2368,6 +2501,7 @@ function WerewolfGame() {
       newAlive,
       newPlayerRoles,
       state.cupidTargets,
+      state.hypnotizedPlayers,
     );
     const newPhase = newWinner ? "game_over" : "day";
 
@@ -2411,7 +2545,9 @@ function WerewolfGame() {
               ? "Trò chơi kết thúc! Sát Thủ đã tiêu diệt hầu hết làng và giành chiến thắng."
               : newWinner === "wolves"
                 ? "Trò chơi kết thúc! Phe Sói đã chiến thắng."
-                : "Trò chơi kết thúc! Phe Dân làng đã chiến thắng.",
+                : newWinner === "pied_piper"
+                  ? "Trò chơi kết thúc! Người Thổi Sáo đã thôi miên toàn bộ dân làng và giành chiến thắng!"
+                  : "Trò chơi kết thúc! Phe Dân làng đã chiến thắng.",
       };
       newLogs.push(endLog);
     }
@@ -2503,7 +2639,10 @@ function WerewolfGame() {
         payload: (prev) => {
           const role = prev.playerRoles[playerName]?.id;
           const keepConfirmed =
-            role === "seer" || role === "hunter" || role === "medium";
+            role === "seer" ||
+            role === "hunter" ||
+            role === "medium" ||
+            role === "pied_piper";
           return {
             nightPhase: nextNightPhase,
             nightTimeLeft: timeLimit,
@@ -2777,6 +2916,7 @@ function WerewolfGame() {
             "assassin",
             "thief",
             "tanner",
+            "pied_piper",
           ];
           return (
             !wolves.includes(rId as string) &&
@@ -2796,7 +2936,7 @@ function WerewolfGame() {
           dayCount: 1,
           roleId: "headhunter",
           playerName: headhunterPlayer,
-          content: `Hệ thống đã chọn ${initialHeadhunterTarget} làm mục tiêu săn thưởng của bạn. Hãy tìm cách để Làng treo cổ người này!`,
+          content: `Hệ thống đã chọn ${initialHeadhunterTarget} làm mục tiêu săn thưởng của ${headhunterPlayer}. Hãy tìm cách để Làng treo cổ người này!`,
         });
       }
 
@@ -2841,6 +2981,7 @@ function WerewolfGame() {
           cupidTargets: null,
           mediumUsed: false,
           mediumResurrect: null,
+          hypnotizedPlayers: [],
         },
       });
 
@@ -2882,6 +3023,7 @@ function WerewolfGame() {
           cupidTargets: null,
           mediumUsed: false,
           mediumResurrect: null,
+          hypnotizedPlayers: [],
         },
       });
     }
@@ -2930,6 +3072,7 @@ function WerewolfGame() {
           cupidTargets: null,
           mediumUsed: false,
           mediumResurrect: null,
+          hypnotizedPlayers: [],
         },
       });
 
@@ -3154,7 +3297,7 @@ function WerewolfGame() {
 
       <Modal
         isOpen={showGameSummaryModal}
-        title="Trạng thái phòng & Lịch sử"
+        title="Lịch sử"
         styleClassWrapper={"max-w-full"}
       >
         <div className="flex w-full flex-col space-y-6 lg:min-w-[850px] xl:min-w-[950px]">
@@ -3179,6 +3322,7 @@ function WerewolfGame() {
                     "assassin",
                     "thief",
                     "tanner",
+                    "pied_piper",
                   ];
                   if (wolves.includes(roleId)) return "wolf";
                   if (thirdParties.includes(roleId)) return "third_party";
@@ -3325,6 +3469,35 @@ function WerewolfGame() {
                     {} as Record<number, ActionLog[]>,
                   );
 
+                  const formatLogContentModal = (content: string) => {
+                    const playerNames = Object.keys(playerRoles);
+                    if (!playerNames.length) return content;
+                    const sortedNames = [...playerNames].sort(
+                      (a, b) => b.length - a.length,
+                    );
+                    const escapeRegExp = (str: string) =>
+                      str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                    const regex = new RegExp(
+                      `(${sortedNames.map(escapeRegExp).join("|")})`,
+                      "g",
+                    );
+                    return content.split(regex).map((part, i) => {
+                      if (playerNames.includes(part)) {
+                        return (
+                          <span key={i} className="font-bold text-zinc-900">
+                            {part}
+                            {part === playerName && (
+                              <span className="ml-1 text-[11px] font-normal italic opacity-80">
+                                (Bạn)
+                              </span>
+                            )}
+                          </span>
+                        );
+                      }
+                      return part;
+                    });
+                  };
+
                   return Object.keys(groupedLogs)
                     .sort((a, b) => Number(a) - Number(b))
                     .map((dayKey) => {
@@ -3363,11 +3536,11 @@ function WerewolfGame() {
                                   >
                                     {roleName}{" "}
                                     {log.playerName !== "system"
-                                      ? `(${log.playerName})`
+                                      ? `(${log.playerName}${log.playerName === playerName ? " - Bạn" : ""})`
                                       : ""}
                                   </span>
                                   <p className="mt-1 text-zinc-700">
-                                    {log.content}
+                                    {formatLogContentModal(log.content)}
                                   </p>
                                 </div>
                               );
@@ -3492,7 +3665,7 @@ function WerewolfGame() {
                     {phase === "game_over" && (
                       <>
                         <div
-                          className={`w-full mb-4 flex flex-col items-center justify-center py-4 rounded-xl border ${winner === "wolves" ? "bg-red-50 border-red-200 text-red-700" : winner === "lovers" ? "bg-pink-50 border-pink-200 text-pink-700" : winner === "fool" ? "bg-pink-50 border-pink-200 text-pink-700" : winner === "headhunter" ? "bg-cyan-50 border-cyan-200 text-cyan-700" : winner === "assassin" ? "bg-red-950 border-red-900 text-red-900" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}
+                          className={`w-full mb-4 flex flex-col items-center justify-center py-4 rounded-xl border ${winner === "wolves" ? "bg-red-50 border-red-200 text-red-700" : winner === "lovers" ? "bg-pink-50 border-pink-200 text-pink-700" : winner === "fool" ? "bg-pink-50 border-pink-200 text-pink-700" : winner === "headhunter" ? "bg-cyan-50 border-cyan-200 text-cyan-700" : winner === "assassin" ? "bg-red-950 border-red-900 text-red-900" : winner === "pied_piper" ? "bg-emerald-100 border-emerald-300 text-emerald-800" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}
                         >
                           <h3 className="text-lg font-bold mb-1">
                             Trò chơi kết thúc!
@@ -3508,14 +3681,16 @@ function WerewolfGame() {
                                     ? "Thợ Săn Người thắng!"
                                     : winner === "assassin"
                                       ? "Sát Thủ thắng!"
-                                      : "Phe Dân Làng thắng!"}
+                                      : winner === "pied_piper"
+                                        ? "Người Thổi Sáo thắng!"
+                                        : "Phe Dân Làng thắng!"}
                           </span>
                         </div>
                         <button
                           onClick={() => setShowGameSummaryModal(true)}
                           className={`w-full mb-4 cursor-pointer rounded-lg px-4 py-3 text-sm font-medium transition-colors ${isNight ? "bg-slate-700 text-slate-200 hover:bg-slate-600" : "bg-zinc-800 text-white hover:bg-zinc-900"}`}
                         >
-                          Xem Trạng thái phòng & Lịch sử
+                          Lịch sử
                         </button>
                       </>
                     )}
@@ -3599,6 +3774,7 @@ function WerewolfGame() {
             phase={phase}
             headhunterTarget={headhunterTarget}
             cupidTargets={cupidTargets}
+            hypnotizedPlayers={gameState.hypnotizedPlayers}
             isNight={isNight}
             onKickPlayer={handleKickPlayer}
           />
@@ -3700,7 +3876,8 @@ function WerewolfGame() {
                 ) : nightPhase !== playerRoles[playerName]?.id &&
                   playerRoles[playerName]?.id !== "seer" &&
                   playerRoles[playerName]?.id !== "hunter" &&
-                  playerRoles[playerName]?.id !== "medium" ? (
+                  playerRoles[playerName]?.id !== "medium" &&
+                  playerRoles[playerName]?.id !== "pied_piper" ? (
                   <p className="w-full animate-pulse py-4 text-center text-sm font-medium text-indigo-300">
                     Hãy nhắm mắt lại. Đang chờ các vai trò khác hành động...
                   </p>
