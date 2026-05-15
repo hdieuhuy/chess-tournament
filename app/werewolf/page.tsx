@@ -21,8 +21,8 @@ import {
   GiShield,
   GiWitchFlight,
   GiMusket,
-  GiBullseye,
   GiBowieKnife,
+  GiMagicSwirl,
 } from "react-icons/gi";
 import { RoleConfig, ActionLog, ChatMessage } from "./types";
 import { defaultRoles, RoleIcon, getRoleColor } from "./utils";
@@ -37,13 +37,13 @@ const getNextNightPhase = (
   dayCount: number,
 ) => {
   const nightPhaseOrder = [
+    "cupid",
     "bodyguard",
     "werewolf",
     "cursed_wolf",
     "assassin",
     "seer",
     "witch",
-    "cupid",
     "hunter",
   ];
   const startIndex = currentPhase
@@ -111,6 +111,8 @@ type GameState = {
   headhunterTarget: string | null;
   assassinTarget: string | null;
   cupidTargets: [string, string] | null;
+  mediumUsed: boolean;
+  mediumResurrect: string | null;
 };
 
 type GameAction =
@@ -159,6 +161,8 @@ const initialGameState: GameState = {
   headhunterTarget: null,
   assassinTarget: null,
   cupidTargets: null,
+  mediumUsed: false,
+  mediumResurrect: null,
 };
 
 function gameReducer(state: GameState, action: GameAction): GameState {
@@ -439,7 +443,6 @@ const WerewolfNightUI = ({
 
 const CursedWolfNightUI = ({
   gameState,
-  dispatch,
   playerName,
   executeAction,
 }: RoleUIProps) => {
@@ -993,6 +996,119 @@ const CupidNightUI = ({
   );
 };
 
+const MediumNightUI = ({
+  gameState,
+  dispatch,
+  playerName,
+  executeAction,
+}: RoleUIProps) => {
+  const { players, alivePlayers, nightSelection, actionConfirmed, mediumUsed } =
+    gameState;
+
+  if (actionConfirmed) {
+    return (
+      <div className="rounded-lg border border-indigo-900/50 bg-slate-800 p-3 text-center">
+        <p className="text-sm font-medium text-teal-400">
+          <GiMagicSwirl className="mr-1 inline text-teal-400" />
+          Bạn đã hoàn tất hành động đêm nay.
+          {nightSelection && nightSelection !== "none" && (
+            <>
+              {" "}
+              Màn hồi sinh: <span className="font-bold">{nightSelection}</span>
+            </>
+          )}
+        </p>
+      </div>
+    );
+  }
+
+  if (mediumUsed) {
+    return (
+      <div className="flex flex-col gap-4 w-full mt-2">
+        <p className="text-sm font-medium text-teal-300">
+          Bạn đã sử dụng quyền năng hồi sinh. Đêm nay bạn không thể làm gì thêm.
+        </p>
+        <button
+          onClick={() => {
+            executeAction(
+              "Thầy Đồng không còn quyền năng.",
+              {},
+              {
+                name: "night-action",
+                payload: { role: "medium", target: null, playerName },
+              },
+            );
+          }}
+          className="w-full cursor-pointer rounded-lg bg-teal-700 px-4 py-3 text-sm font-bold text-white hover:bg-teal-800"
+        >
+          Xác nhận
+        </button>
+      </div>
+    );
+  }
+
+  const deadPlayers = players.filter((p) => !alivePlayers.includes(p));
+
+  return (
+    <div className="flex flex-col gap-4 w-full mt-2">
+      <p className="text-sm font-medium text-indigo-300">
+        Bạn có thể chọn 1 người đã chết để hồi sinh (chỉ dùng 1 lần/trận):
+      </p>
+      {deadPlayers.length === 0 ? (
+        <p className="text-sm italic text-slate-400">Chưa có ai chết.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 w-full">
+          {deadPlayers.map((p) => (
+            <button
+              key={p}
+              onClick={() =>
+                dispatch({ type: "UPDATE", payload: { nightSelection: p } })
+              }
+              className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${nightSelection === p ? "border-teal-600 bg-teal-600 text-white" : "border-teal-900/50 bg-slate-700 text-teal-300 hover:bg-teal-900/50"}`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-3 w-full">
+        <button
+          onClick={() =>
+            executeAction(
+              `Bạn đã dùng quyền năng hồi sinh ${nightSelection}`,
+              { mediumResurrect: nightSelection as string },
+              {
+                name: "night-action",
+                payload: { role: "medium", target: nightSelection, playerName },
+              },
+            )
+          }
+          disabled={!nightSelection || nightSelection === "none"}
+          className="w-full cursor-pointer rounded-lg bg-teal-600 px-4 py-3 text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-50"
+        >
+          Hồi sinh
+        </button>
+        <button
+          onClick={() =>
+            executeAction(
+              "Bạn đã quyết định không hồi sinh ai đêm nay.",
+              { mediumResurrect: null },
+              {
+                name: "night-action",
+                payload: { role: "medium", target: null, playerName },
+              },
+            )
+          }
+          className="w-full cursor-pointer rounded-lg bg-slate-600 px-4 py-3 text-sm font-bold text-white hover:bg-slate-700"
+        >
+          Không dùng
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const ROLE_STRATEGIES: Record<string, React.FC<RoleUIProps>> = {
   bodyguard: BodyguardNightUI,
   werewolf: WerewolfNightUI,
@@ -1003,6 +1119,7 @@ const ROLE_STRATEGIES: Record<string, React.FC<RoleUIProps>> = {
   hunter: HunterNightUI,
   assassin: AssassinNightUI,
   cupid: CupidNightUI,
+  medium: MediumNightUI,
 };
 
 function WerewolfGame() {
@@ -1031,15 +1148,8 @@ function WerewolfGame() {
     executionVotes,
     dayCount,
     alivePlayers,
-    lastProtected,
-    witchPotions,
     wolfVotes,
     wolfVictim,
-    hunterTarget,
-    witchAction,
-    nightSelection,
-    actionConfirmed,
-    seerResult,
     actionLogs,
     nightPhase,
     nightTimeLeft,
@@ -1047,12 +1157,8 @@ function WerewolfGame() {
     wolfChat,
     loversChat,
     winner,
-    extraLives,
-    cursedWolfUsed,
-    infectedPlayer,
     fogWolfUsed,
     headhunterTarget,
-    assassinTarget,
     cupidTargets,
   } = gameState;
 
@@ -1125,6 +1231,18 @@ function WerewolfGame() {
 
           if (!isAlreadyPlayer && !isAlreadySpec) {
             if (role === "player") {
+              if (state.gameStarted) {
+                roomChannel.send({
+                  type: "broadcast",
+                  event: "join-rejected",
+                  payload: {
+                    playerName: newPlayer,
+                    reason:
+                      "Trò chơi đang diễn ra, bạn không thể tham gia với tư cách Người chơi (hãy chọn Người xem)!",
+                  },
+                });
+                return;
+              }
               newPlayers.push(newPlayer);
               stateRef.current.players = newPlayers;
               dispatch({ type: "UPDATE", payload: { players: newPlayers } });
@@ -1174,6 +1292,8 @@ function WerewolfGame() {
               headhunterTarget: state.headhunterTarget,
               assassinTarget: state.assassinTarget,
               cupidTargets: state.cupidTargets,
+              mediumUsed: state.mediumUsed,
+              mediumResurrect: state.mediumResurrect,
             },
           });
         }
@@ -1230,6 +1350,9 @@ function WerewolfGame() {
           updates.assassinTarget = data.assassinTarget;
         if (data.cupidTargets !== undefined)
           updates.cupidTargets = data.cupidTargets;
+        if (data.mediumUsed !== undefined) updates.mediumUsed = data.mediumUsed;
+        if (data.mediumResurrect !== undefined)
+          updates.mediumResurrect = data.mediumResurrect;
         dispatch({ type: "UPDATE", payload: updates });
       })
       .on("broadcast", { event: "game-start" }, (payload) => {
@@ -1278,6 +1401,8 @@ function WerewolfGame() {
               data.assassinTarget !== undefined ? data.assassinTarget : null,
             cupidTargets:
               data.cupidTargets !== undefined ? data.cupidTargets : null,
+            mediumUsed: false,
+            mediumResurrect: null,
           },
         });
       })
@@ -1357,6 +1482,7 @@ function WerewolfGame() {
           updates.executionVotes = data.executionVotes;
         if (data.fogWolfUsed !== undefined)
           updates.fogWolfUsed = data.fogWolfUsed;
+        updates.mediumResurrect = null;
         dispatch({ type: "UPDATE", payload: updates });
       })
       .on("broadcast", { event: "day-phase-change" }, (payload) => {
@@ -1416,14 +1542,19 @@ function WerewolfGame() {
       })
       .on("broadcast", { event: "night-phase-change" }, (payload) => {
         dispatch({
-          type: "UPDATE",
-          payload: {
-            nightPhase: payload.payload.nightPhase,
-            nightTimeLeft: payload.payload.nightTimeLeft,
-            confirmedPlayers: payload.payload.confirmedPlayers,
-            nightSelection: null,
-            actionConfirmed: false,
-            seerResult: null,
+          type: "UPDATE_FUNCTION",
+          payload: (prev) => {
+            const role = prev.playerRoles[playerName]?.id;
+            const keepConfirmed =
+              role === "seer" || role === "hunter" || role === "medium";
+            return {
+              nightPhase: payload.payload.nightPhase,
+              nightTimeLeft: payload.payload.nightTimeLeft,
+              confirmedPlayers: payload.payload.confirmedPlayers,
+              nightSelection: keepConfirmed ? prev.nightSelection : null,
+              actionConfirmed: keepConfirmed ? prev.actionConfirmed : false,
+              seerResult: keepConfirmed ? prev.seerResult : null,
+            };
           },
         });
       })
@@ -1486,6 +1617,7 @@ function WerewolfGame() {
               role === "headhunter" ? target : prev.headhunterTarget,
             assassinTarget: role === "assassin" ? target : prev.assassinTarget,
             cupidTargets: role === "cupid" ? target : prev.cupidTargets,
+            mediumResurrect: role === "medium" ? target : prev.mediumResurrect,
           }),
         });
       })
@@ -1801,7 +1933,7 @@ function WerewolfGame() {
     if (state.dayPhase === "discussion") {
       dispatch({
         type: "UPDATE",
-        payload: { dayPhase: "voting", dayTimeLeft: 60 },
+        payload: { dayPhase: "voting", dayTimeLeft: 45 },
       });
       if (channel) {
         channel.send({
@@ -1809,7 +1941,7 @@ function WerewolfGame() {
           event: "day-phase-change",
           payload: {
             dayPhase: "voting",
-            dayTimeLeft: 60,
+            dayTimeLeft: 45,
             dayVotes: {},
             accusedPlayer: null,
             executionVotes: {},
@@ -1869,7 +2001,7 @@ function WerewolfGame() {
           type: "UPDATE",
           payload: {
             dayPhase: "defense",
-            dayTimeLeft: 180,
+            dayTimeLeft: 90,
             accusedPlayer: accused,
             actionLogs: newLogs,
           },
@@ -1881,7 +2013,7 @@ function WerewolfGame() {
             event: "day-phase-change",
             payload: {
               dayPhase: "defense",
-              dayTimeLeft: 180,
+              dayTimeLeft: 90,
               accusedPlayer: accused,
               actionLogs: newLogs,
             },
@@ -1925,13 +2057,13 @@ function WerewolfGame() {
     } else if (state.dayPhase === "defense") {
       dispatch({
         type: "UPDATE",
-        payload: { dayPhase: "execution", dayTimeLeft: 60 },
+        payload: { dayPhase: "execution", dayTimeLeft: 45 },
       });
       if (channel) {
         channel.send({
           type: "broadcast",
           event: "day-phase-change",
-          payload: { dayPhase: "execution", dayTimeLeft: 60 },
+          payload: { dayPhase: "execution", dayTimeLeft: 45 },
         });
       }
     } else if (state.dayPhase === "execution") {
@@ -2089,7 +2221,20 @@ function WerewolfGame() {
       }
     }
 
+    let currentMediumUsed = state.mediumUsed;
+    if (state.mediumResurrect) {
+      currentMediumUsed = true;
+      actualDeaths.delete(state.mediumResurrect); // Tránh người được cứu chết nếu họ bị Sói cắn đêm nay
+    }
+
     const newAlive = state.alivePlayers.filter((p) => !actualDeaths.has(p));
+    if (
+      state.mediumResurrect &&
+      !newAlive.includes(state.mediumResurrect) &&
+      state.players.includes(state.mediumResurrect)
+    ) {
+      newAlive.push(state.mediumResurrect); // Đưa người chết từ ngày trước trở lại danh sách sống
+    }
 
     const newWinner = checkWinCondition(
       newAlive,
@@ -2114,6 +2259,16 @@ function WerewolfGame() {
           : "Báo cáo buổi sáng: Đêm qua là một đêm bình yên, không có ai chết!",
     };
     newLogs.push(sysLog);
+
+    if (state.mediumResurrect) {
+      newLogs.push({
+        id: Math.random().toString(36).substring(2, 9),
+        dayCount: state.dayCount,
+        roleId: "system",
+        playerName: "system",
+        content: `✨ Người chơi ${state.mediumResurrect} đã được hồi sinh từ cõi âm!`,
+      });
+    }
 
     if (newWinner) {
       const endLog: ActionLog = {
@@ -2160,6 +2315,8 @@ function WerewolfGame() {
         executionVotes: {},
         infectedPlayer: null,
         assassinTarget: null,
+        mediumUsed: currentMediumUsed,
+        mediumResurrect: null,
       },
     });
 
@@ -2187,6 +2344,8 @@ function WerewolfGame() {
           accusedPlayer: null,
           executionVotes: {},
           assassinTarget: null,
+          mediumUsed: currentMediumUsed,
+          mediumResurrect: null,
         },
       });
     }
@@ -2203,15 +2362,28 @@ function WerewolfGame() {
     if (nextNightPhase) {
       const timeLimit =
         nextNightPhase === "hunter" && state.dayCount > 1 ? 15 : 120;
+
+      const newConfirmedPlayers = state.confirmedPlayers.filter(
+        (p) =>
+          state.playerRoles[p]?.id === "seer" ||
+          state.playerRoles[p]?.id === "hunter" ||
+          state.playerRoles[p]?.id === "medium",
+      );
+
       dispatch({
-        type: "UPDATE",
-        payload: {
-          nightPhase: nextNightPhase,
-          nightTimeLeft: timeLimit,
-          confirmedPlayers: [],
-          nightSelection: null,
-          actionConfirmed: false,
-          seerResult: null,
+        type: "UPDATE_FUNCTION",
+        payload: (prev) => {
+          const role = prev.playerRoles[playerName]?.id;
+          const keepConfirmed =
+            role === "seer" || role === "hunter" || role === "medium";
+          return {
+            nightPhase: nextNightPhase,
+            nightTimeLeft: timeLimit,
+            confirmedPlayers: newConfirmedPlayers,
+            nightSelection: keepConfirmed ? prev.nightSelection : null,
+            actionConfirmed: keepConfirmed ? prev.actionConfirmed : false,
+            seerResult: keepConfirmed ? prev.seerResult : null,
+          };
         },
       });
 
@@ -2222,14 +2394,14 @@ function WerewolfGame() {
           payload: {
             nightPhase: nextNightPhase,
             nightTimeLeft: timeLimit,
-            confirmedPlayers: [],
+            confirmedPlayers: newConfirmedPlayers,
           },
         });
       }
     } else {
       executeNightResolution();
     }
-  }, [channel, executeNightResolution]);
+  }, [channel, executeNightResolution, playerName]);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
@@ -2537,6 +2709,8 @@ function WerewolfGame() {
           headhunterTarget: initialHeadhunterTarget,
           assassinTarget: null,
           cupidTargets: null,
+          mediumUsed: false,
+          mediumResurrect: null,
         },
       });
 
@@ -2574,6 +2748,8 @@ function WerewolfGame() {
           headhunterTarget: initialHeadhunterTarget,
           assassinTarget: null,
           cupidTargets: null,
+          mediumUsed: false,
+          mediumResurrect: null,
         },
       });
     }
@@ -2618,6 +2794,8 @@ function WerewolfGame() {
           headhunterTarget: null,
           assassinTarget: null,
           cupidTargets: null,
+          mediumUsed: false,
+          mediumResurrect: null,
         },
       });
 
@@ -3374,7 +3552,10 @@ function WerewolfGame() {
                     playerName={playerName}
                     executeAction={executeAction}
                   />
-                ) : nightPhase !== playerRoles[playerName]?.id ? (
+                ) : nightPhase !== playerRoles[playerName]?.id &&
+                  playerRoles[playerName]?.id !== "seer" &&
+                  playerRoles[playerName]?.id !== "hunter" &&
+                  playerRoles[playerName]?.id !== "medium" ? (
                   <p className="w-full animate-pulse py-4 text-center text-sm font-medium text-indigo-300">
                     Hãy nhắm mắt lại. Đang chờ các vai trò khác hành động...
                   </p>
@@ -3587,6 +3768,40 @@ function WerewolfGame() {
                       {Math.floor(dayTimeLeft / 60)}:
                       {(dayTimeLeft % 60).toString().padStart(2, "0")}
                     </div>
+
+                    {(() => {
+                      let killVotes = 0;
+                      let saveVotes = 0;
+                      Object.entries(executionVotes).forEach(
+                        ([voter, vote]) => {
+                          const weight =
+                            playerRoles[voter]?.id === "mayor" ? 2 : 1;
+                          if (vote === "kill") killVotes += weight;
+                          else if (vote === "save") saveVotes += weight;
+                        },
+                      );
+                      return (
+                        <div className="mb-6 flex justify-center gap-12 text-sm font-medium rounded-lg bg-white/50 py-3 border border-amber-200/50">
+                          <div className="flex flex-col items-center">
+                            <span className="text-purple-700 mb-1">
+                              💀 Treo cổ
+                            </span>
+                            <span className="text-2xl font-bold text-purple-600">
+                              {killVotes}
+                            </span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-emerald-700 mb-1">
+                              🕊️ Tha bổng
+                            </span>
+                            <span className="text-2xl font-bold text-emerald-600">
+                              {saveVotes}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {alivePlayers.includes(playerName) &&
                     playerName !== accusedPlayer ? (
                       <div className="flex justify-center gap-4">

@@ -10,6 +10,7 @@ import {
   GiJesterHat,
   GiBullseye,
   GiBowieKnife,
+  GiMagicSwirl,
 } from "react-icons/gi";
 import { RoleConfig } from "./types";
 
@@ -47,6 +48,8 @@ export const RoleIcon = ({
       return <GiBowieKnife className={className} />;
     case "cupid":
       return <FaHeart className={className} />;
+    case "medium":
+      return <GiMagicSwirl className={className} />;
     default:
       return null;
   }
@@ -80,6 +83,8 @@ export const getRoleColor = (id?: string) => {
       return "text-red-900";
     case "cupid":
       return "text-pink-500";
+    case "medium":
+      return "text-teal-600";
     default:
       return "text-zinc-500";
   }
@@ -113,6 +118,8 @@ export const getRoleDescription = (id?: string) => {
       return "Phe thứ 3. Mỗi đêm được chọn 1 người để giết. Chiến thắng khi làng chỉ còn 2 người (bao gồm cả bạn).";
     case "cupid":
       return "Đêm đầu tiên được chọn 2 người để ghép đôi. Hai người này sẽ sống chết có nhau. Nếu thuộc 2 phe khác nhau, cặp đôi phải sống đến cuối cùng để giành chiến thắng.";
+    case "medium":
+      return "Mỗi trận được phép dùng phép thuật hồi sinh 1 người đã chết. Không cần chờ đến lượt để hành động.";
     default:
       return "";
   }
@@ -132,4 +139,5 @@ export const defaultRoles: RoleConfig[] = [
   { id: "headhunter", name: "Thợ Săn Người", count: 0 },
   { id: "assassin", name: "Sát Thủ", count: 0 },
   { id: "cupid", name: "Thần Tình Yêu", count: 0 },
+  { id: "medium", name: "Thầy Đồng", count: 0 },
 ];
