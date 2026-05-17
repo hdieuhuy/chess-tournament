@@ -8,6 +8,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Modal } from "@/components/Modal";
 import confetti from "canvas-confetti";
 import { FaCrown } from "react-icons/fa";
+import toast from "react-hot-toast";
 
 const INITIAL_BOARD: (string | null)[][] = [
   [null, "r", null, "r", null, "r", null, "r"],
@@ -371,7 +372,7 @@ function CheckersGame() {
       })
       .on("broadcast", { event: "join-rejected" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert(payload.payload.reason || "Không thể tham gia phòng!");
+          toast.error(payload.payload.reason || "Không thể tham gia phòng!");
           setHasInitialized(false);
           setShowNameModal(true);
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
@@ -379,7 +380,7 @@ function CheckersGame() {
       })
       .on("broadcast", { event: "kick-player" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert("Bạn đã bị chủ phòng kích khỏi phòng!");
+          toast.error("Bạn đã bị chủ phòng kích khỏi phòng!");
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
           router.replace("/");
         }
@@ -410,7 +411,7 @@ function CheckersGame() {
       .on("broadcast", { event: "reject-undo" }, () => {
         const state = stateRef.current;
         if (playerName === state.undoRequestedBy) {
-          alert("Đối thủ đã từ chối yêu cầu đi lại.");
+          toast.error("Đối thủ đã từ chối yêu cầu đi lại.");
         }
         setUndoRequestedBy(null);
       })

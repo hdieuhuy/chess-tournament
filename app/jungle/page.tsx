@@ -19,6 +19,7 @@ import {
   GiElephant,
 } from "react-icons/gi";
 import { FaPaw } from "react-icons/fa6";
+import toast from "react-hot-toast";
 
 // Mảng 9 hàng x 7 cột của Cờ Thú
 // Uppercase (Đỏ - Người chơi 1), Lowercase (Xanh - Người chơi 2)
@@ -465,7 +466,7 @@ function JungleGame() {
       })
       .on("broadcast", { event: "join-rejected" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert(payload.payload.reason || "Không thể tham gia phòng!");
+          toast.error(payload.payload.reason || "Không thể tham gia phòng!");
           setHasInitialized(false);
           setShowNameModal(true);
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
@@ -473,7 +474,7 @@ function JungleGame() {
       })
       .on("broadcast", { event: "kick-player" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert("Bạn đã bị chủ phòng kích khỏi phòng!");
+          toast.error("Bạn đã bị chủ phòng kích khỏi phòng!");
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
           router.replace("/");
         }
@@ -514,7 +515,7 @@ function JungleGame() {
       .on("broadcast", { event: "reject-undo" }, () => {
         const state = stateRef.current;
         if (playerName === state.undoRequestedBy) {
-          alert("Đối thủ đã từ chối yêu cầu đi lại.");
+          toast.error("Đối thủ đã từ chối yêu cầu đi lại.");
         }
         setUndoRequestedBy(null);
       })

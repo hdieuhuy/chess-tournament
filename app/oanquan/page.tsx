@@ -18,6 +18,7 @@ import {
   FaTrophy,
   FaStar,
 } from "react-icons/fa";
+import toast from "react-hot-toast";
 
 type Cell = { stones: number; quan: number };
 
@@ -585,7 +586,7 @@ function OAnQuanGame() {
       })
       .on("broadcast", { event: "join-rejected" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert(payload.payload.reason || "Không thể tham gia phòng!");
+          toast.error(payload.payload.reason || "Không thể tham gia phòng!");
           setHasInitialized(false);
           setShowNameModal(true);
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
@@ -593,7 +594,7 @@ function OAnQuanGame() {
       })
       .on("broadcast", { event: "kick-player" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert("Bạn đã bị chủ phòng kích khỏi phòng!");
+          toast.error("Bạn đã bị chủ phòng kích khỏi phòng!");
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
           router.replace("/");
         }

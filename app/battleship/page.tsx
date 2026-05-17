@@ -8,6 +8,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Modal } from "@/components/Modal";
 import confetti from "canvas-confetti";
 import { motion, AnimatePresence } from "framer-motion";
+import toast from "react-hot-toast";
 
 const BOARD_SIZE = 10;
 const ROWS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -328,7 +329,7 @@ function BattleshipGame() {
       })
       .on("broadcast", { event: "join-rejected" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert(payload.payload.reason || "Không thể tham gia phòng!");
+          toast.error(payload.payload.reason || "Không thể tham gia phòng!");
           setHasInitialized(false);
           setShowNameModal(true);
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
@@ -336,7 +337,7 @@ function BattleshipGame() {
       })
       .on("broadcast", { event: "kick-player" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert("Bạn đã bị chủ phòng kích khỏi phòng!");
+          toast.error("Bạn đã bị chủ phòng kích khỏi phòng!");
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
           router.replace("/");
         }
@@ -367,7 +368,7 @@ function BattleshipGame() {
       .on("broadcast", { event: "reject-undo" }, () => {
         const state = stateRef.current;
         if (playerName === state.undoRequestedBy) {
-          alert("Đối thủ đã từ chối yêu cầu đi lại.");
+          toast.error("Đối thủ đã từ chối yêu cầu đi lại.");
         }
         setUndoRequestedBy(null);
       })

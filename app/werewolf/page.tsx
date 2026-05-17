@@ -31,6 +31,7 @@ import PlayerGrid from "./PlayerGrid";
 import PrivateChat from "./WolfChat";
 import RoleConfigPanel from "./RoleConfigPanel";
 import ActionLogsArea from "./ActionLogsArea";
+import toast from "react-hot-toast";
 
 const getNextNightPhase = (
   currentPhase: string | null,
@@ -1938,8 +1939,8 @@ function WerewolfGame() {
               actionConfirmed: false,
               seerResult: null,
               wolfVotes: {},
-              wolfVictim: null,
-              witchAction: { heal: false, poison: null },
+              wolfVictim: [],
+              witchAction: { heal: [], poison: null },
               actionLogs: newLogs,
               dayPhase: null,
               dayTimeLeft: 0,
@@ -1962,7 +1963,7 @@ function WerewolfGame() {
       })
       .on("broadcast", { event: "kick-player" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert("Bạn đã bị chủ phòng kích khỏi phòng!");
+          toast.error("Bạn đã bị chủ phòng kích khỏi phòng!");
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
           router.replace("/");
         }
@@ -3019,7 +3020,7 @@ function WerewolfGame() {
     if (channel && hostName === playerName) {
       const totalRoles = roleConfig.reduce((acc, r) => acc + r.count, 0);
       if (totalRoles !== players.length) {
-        alert(
+        toast.error(
           `Số lượng vai trò (${totalRoles}) đang khác với số người chơi (${players.length} - đã tính cả chủ phòng). Vui lòng cấu hình lại cho bằng nhau!`,
         );
         return;

@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Modal } from "@/components/Modal";
 import confetti from "canvas-confetti";
+import toast from "react-hot-toast";
 
 const BOARD_SIZE = 19;
 const INITIAL_TIME = 1800; // Thời gian thi đấu: 30 phút mỗi người
@@ -315,7 +316,7 @@ function GoGame() {
       })
       .on("broadcast", { event: "join-rejected" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert(payload.payload.reason || "Không thể tham gia phòng!");
+          toast.error(payload.payload.reason || "Không thể tham gia phòng!");
           setHasInitialized(false);
           setShowNameModal(true);
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
@@ -323,7 +324,7 @@ function GoGame() {
       })
       .on("broadcast", { event: "kick-player" }, (payload) => {
         if (payload.payload.playerName === playerName) {
-          alert("Bạn đã bị chủ phòng kích khỏi phòng!");
+          toast.error("Bạn đã bị chủ phòng kích khỏi phòng!");
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
           router.replace("/");
         }
@@ -375,7 +376,7 @@ function GoGame() {
       .on("broadcast", { event: "reject-undo" }, () => {
         const state = stateRef.current;
         if (playerName === state.undoRequestedBy) {
-          alert("Đối thủ đã từ chối yêu cầu đi lại.");
+          toast.error("Đối thủ đã từ chối yêu cầu đi lại.");
         }
         setUndoRequestedBy(null);
       })
@@ -707,14 +708,14 @@ function GoGame() {
         currentTurnColor,
       );
       if (liberties === 0) {
-        alert("Luật cấm tự sát: Không thể đánh vào ô không còn khí!");
+        toast.error("Luật cấm tự sát: Không thể đánh vào ô không còn khí!");
         return;
       }
 
       // 3. Kiểm tra Positional Superko (Cấm lặp lại trạng thái cũ)
       const serializedBoard = serializeBoard(newBoard);
       if (boardHistory.includes(serializedBoard)) {
-        alert(
+        toast.error(
           "Luật Superko: Nước đi này làm bàn cờ lặp lại cục diện cũ (Kiếp)!",
         );
         return;
