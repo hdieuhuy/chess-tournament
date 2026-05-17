@@ -480,7 +480,7 @@ function JungleGame() {
         }
       })
       .on("broadcast", { event: "request-role-change" }, (payload) => {
-        const { playerName: reqPlayer, newRole } = payload.payload;
+        const { playerName: reqPlayer, newRole, targetSlot } = payload.payload;
         const state = stateRef.current;
         if (state.hostName === playerName) {
           if (newRole === "player") {
@@ -494,27 +494,43 @@ function JungleGame() {
             let newP2 =
               state.player2Name === reqPlayer ? null : state.player2Name;
 
-            if (!newP1) {
+            let success = false;
+
+            if (targetSlot === 1 && !newP1) {
               newP1 = reqPlayer;
-            } else if (!newP2) {
+              success = true;
+            } else if (targetSlot === 2 && !newP2) {
               newP2 = reqPlayer;
+              success = true;
             }
 
-            setPlayer1Name(newP1);
-            setPlayer2Name(newP2);
-            setSpectators(newSpecs);
-            setReadyPlayers(newReadyPlayers);
+            if (!success && !targetSlot) {
+              if (!newP1) {
+                newP1 = reqPlayer;
+                success = true;
+              } else if (!newP2) {
+                newP2 = reqPlayer;
+                success = true;
+              }
+            }
 
-            stateRef.current.player1Name = newP1;
-            stateRef.current.player2Name = newP2;
-            stateRef.current.spectators = newSpecs;
-            stateRef.current.readyPlayers = newReadyPlayers;
+            if (success) {
+              setPlayer1Name(newP1);
+              setPlayer2Name(newP2);
+              setSpectators(newSpecs);
+              setReadyPlayers(newReadyPlayers);
 
-            roomChannel.send({
-              type: "broadcast",
-              event: "room-sync",
-              payload: { ...stateRef.current },
-            });
+              stateRef.current.player1Name = newP1;
+              stateRef.current.player2Name = newP2;
+              stateRef.current.spectators = newSpecs;
+              stateRef.current.readyPlayers = newReadyPlayers;
+
+              roomChannel.send({
+                type: "broadcast",
+                event: "room-sync",
+                payload: { ...stateRef.current },
+              });
+            }
           } else if (newRole === "spectator") {
             const newP1 =
               state.player1Name === reqPlayer ? null : state.player1Name;
@@ -806,14 +822,35 @@ function JungleGame() {
 
   const handleKickPlayer = (targetName: string) => {
     if (playerName !== hostName || !channel) return;
-    if (targetName === player2Name && gameStarted) return;
+    if (
+      (targetName === player1Name || targetName === player2Name) &&
+      gameStarted
+    )
+      return;
 
     channel.send({
       type: "broadcast",
       event: "kick-player",
       payload: { playerName: targetName },
     });
-    if (targetName === player2Name) {
+    if (targetName === player1Name) {
+      setPlayer1Name(null);
+      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
+      if (gameStarted) resetGame();
+      setTimeout(() => {
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: {
+            ...stateRef.current,
+            player1Name: null,
+            readyPlayers: stateRef.current.readyPlayers.filter(
+              (p) => p !== targetName,
+            ),
+          },
+        });
+      }, 50);
+    } else if (targetName === player2Name) {
       setPlayer2Name(null);
       setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
       if (gameStarted) resetGame();
@@ -841,8 +878,11 @@ function JungleGame() {
     }
   };
 
-  const handleBecomePlayer = () => {
+  const handleSlotClick = (targetSlot: 1 | 2) => {
     if (!channel || gameStarted) return;
+
+    if (targetSlot === 1 && player1Name) return;
+    if (targetSlot === 2 && player2Name) return;
 
     if (playerName === hostName) {
       const state = stateRef.current;
@@ -853,32 +893,39 @@ function JungleGame() {
       let newP1 = state.player1Name === playerName ? null : state.player1Name;
       let newP2 = state.player2Name === playerName ? null : state.player2Name;
 
-      if (!newP1) newP1 = playerName;
-      else if (!newP2) newP2 = playerName;
+      let success = false;
 
-      setPlayer1Name(newP1);
-      setPlayer2Name(newP2);
-      setSpectators(newSpecs);
-      setReadyPlayers(newReadyPlayers);
+      if (targetSlot === 1 && !newP1) {
+        newP1 = playerName;
+        success = true;
+      } else if (targetSlot === 2 && !newP2) {
+        newP2 = playerName;
+        success = true;
+      }
 
-      stateRef.current.player1Name = newP1;
-      stateRef.current.player2Name = newP2;
-      stateRef.current.spectators = newSpecs;
-      stateRef.current.readyPlayers = newReadyPlayers;
+      if (success) {
+        setPlayer1Name(newP1);
+        setPlayer2Name(newP2);
+        setSpectators(newSpecs);
+        setReadyPlayers(newReadyPlayers);
 
-      channel.send({
-        type: "broadcast",
-        event: "room-sync",
-        payload: { ...stateRef.current },
-      });
-    } else {
-      if (isSpectator && (!player1Name || !player2Name)) {
+        stateRef.current.player1Name = newP1;
+        stateRef.current.player2Name = newP2;
+        stateRef.current.spectators = newSpecs;
+        stateRef.current.readyPlayers = newReadyPlayers;
+
         channel.send({
           type: "broadcast",
-          event: "request-role-change",
-          payload: { playerName, newRole: "player" },
+          event: "room-sync",
+          payload: { ...stateRef.current },
         });
       }
+    } else {
+      channel.send({
+        type: "broadcast",
+        event: "request-role-change",
+        payload: { playerName, newRole: "player", targetSlot },
+      });
     }
     setRequestedRole("player");
     if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
@@ -1145,21 +1192,28 @@ function JungleGame() {
           {!showNameModal && (
             <>
               {player2Name ? (
-                <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 xl:justify-start justify-center">
-                  <span>Trận đấu:</span>
-                  <span className="font-semibold text-red-600">
-                    {player1Name} (Đỏ)
-                  </span>{" "}
-                  vs{" "}
-                  <span className="font-semibold text-blue-600">
-                    {player2Name} (Xanh)
-                  </span>
+                <div className="flex flex-col items-center gap-2 text-sm text-zinc-500 xl:items-start justify-center">
+                  <span className="font-semibold text-zinc-700">Trận đấu:</span>
+                  <div className="flex flex-col gap-1 items-center xl:items-start">
+                    <span className="font-semibold text-red-600">
+                      {player1Name || "..."} (Đỏ)
+                    </span>
+                    <span className="font-bold text-zinc-400">VS</span>
+                    <span className="font-semibold text-blue-600">
+                      {player2Name || "..."} (Xanh)
+                    </span>
+                  </div>
                   {playerName === hostName && !gameStarted && (
                     <button
-                      onClick={() => handleKickPlayer(player2Name)}
-                      className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
+                      onClick={() => {
+                        if (player1Name && player1Name !== hostName)
+                          handleKickPlayer(player1Name);
+                        if (player2Name && player2Name !== hostName)
+                          handleKickPlayer(player2Name);
+                      }}
+                      className="mt-2 rounded bg-red-100 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
                     >
-                      Kick
+                      Kick All (Trừ Host)
                     </button>
                   )}
                 </div>
@@ -1185,21 +1239,10 @@ function JungleGame() {
                       {linkCopied ? "Đã copy!" : "Copy Link"}
                     </button>
                   </div>
-                  {isSpectator && (
-                    <button
-                      onClick={handleBecomePlayer}
-                      className="mt-4 w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
-                    >
-                      Tham gia làm người chơi
-                    </button>
-                  )}
-                  {!isSpectator && (!gameStarted || winner) && (
-                    <button
-                      onClick={handleBecomeSpectator}
-                      className="mt-4 w-full cursor-pointer rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
-                    >
-                      Rời ghế, trở thành khán giả
-                    </button>
+                  {isSpectator && !gameStarted && (
+                    <div className="mt-4 w-full rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700 text-center">
+                      Vui lòng chọn ghế Người chơi ở khung bên phải để tham gia.
+                    </div>
                   )}
                 </div>
               )}
@@ -1437,7 +1480,84 @@ function JungleGame() {
         </div>
 
         {/* Cột phải: Thông tin người xem */}
-        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8">
+        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8 flex flex-col">
+          {/* Khung người chơi */}
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col mb-8">
+            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
+              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+                <span className="text-lg">🎮</span> Người chơi
+              </h3>
+              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
+                {[player1Name, player2Name].filter(Boolean).length}/2
+              </span>
+            </div>
+
+            <div className="p-4 sm:p-6 flex flex-col gap-4">
+              {/* Player 1 */}
+              <div className="flex flex-col gap-2">
+                <h4 className="text-sm font-bold text-red-600">
+                  Đỏ (Đi trước)
+                </h4>
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                  {player1Name ? (
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700">
+                        {player1Name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800 truncate">
+                        {player1Name} {playerName === player1Name && "(Bạn)"}{" "}
+                        {hostName === player1Name && "👑"}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleSlotClick(1)}
+                      className="text-sm text-zinc-500 hover:text-red-600 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-red-400 w-full text-left transition-colors"
+                    >
+                      + Tham gia (Người chơi 1)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Player 2 */}
+              <div className="flex flex-col gap-2 mt-2">
+                <h4 className="text-sm font-bold text-blue-600">
+                  Xanh (Đi sau)
+                </h4>
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                  {player2Name ? (
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+                        {player2Name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800 truncate">
+                        {player2Name} {playerName === player2Name && "(Bạn)"}{" "}
+                        {hostName === player2Name && "👑"}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleSlotClick(2)}
+                      className="text-sm text-zinc-500 hover:text-blue-600 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-blue-400 w-full text-left transition-colors"
+                    >
+                      + Tham gia (Người chơi 2)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {!isSpectator && (!gameStarted || winner) && (
+                <button
+                  onClick={handleBecomeSpectator}
+                  className="mt-2 text-sm text-zinc-500 hover:text-zinc-700 underline text-center w-full"
+                >
+                  Rời ghế, trở thành khán giả
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
             <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
               <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">

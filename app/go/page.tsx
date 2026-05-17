@@ -244,7 +244,8 @@ function GoGame() {
                   event: "join-rejected",
                   payload: {
                     playerName: newPlayer,
-                    reason: "Phòng đã đủ 2 người chơi!",
+                    reason:
+                      "Phòng đã đủ 2 người chơi, vui lòng tham gia với tư cách Người xem!",
                   },
                 });
                 return;
@@ -327,6 +328,89 @@ function GoGame() {
           toast.error("Bạn đã bị chủ phòng kích khỏi phòng!");
           if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
           router.replace("/");
+        }
+      })
+      .on("broadcast", { event: "request-role-change" }, (payload) => {
+        const { playerName: reqPlayer, newRole, targetSlot } = payload.payload;
+        const state = stateRef.current;
+        if (state.hostName === playerName) {
+          if (newRole === "player") {
+            const newSpecs = state.spectators.filter((s) => s !== reqPlayer);
+            const newReadyPlayers = state.readyPlayers.filter(
+              (p) => p !== reqPlayer,
+            );
+
+            let newP1 =
+              state.player1Name === reqPlayer ? null : state.player1Name;
+            let newP2 =
+              state.player2Name === reqPlayer ? null : state.player2Name;
+
+            let success = false;
+
+            if (targetSlot === 1 && !newP1) {
+              newP1 = reqPlayer;
+              success = true;
+            } else if (targetSlot === 2 && !newP2) {
+              newP2 = reqPlayer;
+              success = true;
+            }
+
+            if (!success && !targetSlot) {
+              if (!newP1) {
+                newP1 = reqPlayer;
+                success = true;
+              } else if (!newP2) {
+                newP2 = reqPlayer;
+                success = true;
+              }
+            }
+
+            if (success) {
+              setPlayer1Name(newP1);
+              setPlayer2Name(newP2);
+              setSpectators(newSpecs);
+              setReadyPlayers(newReadyPlayers);
+
+              stateRef.current.player1Name = newP1;
+              stateRef.current.player2Name = newP2;
+              stateRef.current.spectators = newSpecs;
+              stateRef.current.readyPlayers = newReadyPlayers;
+
+              roomChannel.send({
+                type: "broadcast",
+                event: "room-sync",
+                payload: { ...stateRef.current },
+              });
+            }
+          } else if (newRole === "spectator") {
+            const newP1 =
+              state.player1Name === reqPlayer ? null : state.player1Name;
+            const newP2 =
+              state.player2Name === reqPlayer ? null : state.player2Name;
+            const newSpecs = [...state.spectators];
+            if (!newSpecs.includes(reqPlayer)) {
+              newSpecs.push(reqPlayer);
+            }
+            const newReadyPlayers = state.readyPlayers.filter(
+              (p) => p !== reqPlayer,
+            );
+
+            setPlayer1Name(newP1);
+            setPlayer2Name(newP2);
+            setSpectators(newSpecs);
+            setReadyPlayers(newReadyPlayers);
+
+            stateRef.current.player1Name = newP1;
+            stateRef.current.player2Name = newP2;
+            stateRef.current.spectators = newSpecs;
+            stateRef.current.readyPlayers = newReadyPlayers;
+
+            roomChannel.send({
+              type: "broadcast",
+              event: "room-sync",
+              payload: { ...stateRef.current },
+            });
+          }
         }
       })
       .on("broadcast", { event: "leave-room" }, (payload) => {
@@ -936,6 +1020,103 @@ function GoGame() {
     }
   };
 
+  const handleSlotClick = (targetSlot: 1 | 2) => {
+    if (!channel || gameStarted) return;
+
+    if (targetSlot === 1 && player1Name) return;
+    if (targetSlot === 2 && player2Name) return;
+
+    if (playerName === hostName) {
+      const state = stateRef.current;
+      const newSpecs = state.spectators.filter((s) => s !== playerName);
+      const newReadyPlayers = state.readyPlayers.filter(
+        (p) => p !== playerName,
+      );
+
+      let newP1 = state.player1Name === playerName ? null : state.player1Name;
+      let newP2 = state.player2Name === playerName ? null : state.player2Name;
+
+      let success = false;
+
+      if (targetSlot === 1 && !newP1) {
+        newP1 = playerName;
+        success = true;
+      } else if (targetSlot === 2 && !newP2) {
+        newP2 = playerName;
+        success = true;
+      }
+
+      if (success) {
+        setPlayer1Name(newP1);
+        setPlayer2Name(newP2);
+        setSpectators(newSpecs);
+        setReadyPlayers(newReadyPlayers);
+
+        stateRef.current.player1Name = newP1;
+        stateRef.current.player2Name = newP2;
+        stateRef.current.spectators = newSpecs;
+        stateRef.current.readyPlayers = newReadyPlayers;
+
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: { ...stateRef.current },
+        });
+      }
+    } else {
+      channel.send({
+        type: "broadcast",
+        event: "request-role-change",
+        payload: { playerName, newRole: "player", targetSlot },
+      });
+    }
+
+    setRequestedRole("player");
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
+  };
+
+  const handleBecomeSpectator = () => {
+    if (!channel || (gameStarted && !winner)) return;
+
+    if (playerName === hostName) {
+      const state = stateRef.current;
+      const newP1 = state.player1Name === playerName ? null : state.player1Name;
+      const newP2 = state.player2Name === playerName ? null : state.player2Name;
+      const newSpecs = [...state.spectators];
+      if (!newSpecs.includes(playerName)) {
+        newSpecs.push(playerName);
+      }
+      const newReadyPlayers = state.readyPlayers.filter(
+        (p) => p !== playerName,
+      );
+
+      setPlayer1Name(newP1);
+      setPlayer2Name(newP2);
+      setSpectators(newSpecs);
+      setReadyPlayers(newReadyPlayers);
+
+      stateRef.current.player1Name = newP1;
+      stateRef.current.player2Name = newP2;
+      stateRef.current.spectators = newSpecs;
+      stateRef.current.readyPlayers = newReadyPlayers;
+
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: { ...stateRef.current },
+      });
+    } else {
+      channel.send({
+        type: "broadcast",
+        event: "request-role-change",
+        payload: { playerName, newRole: "spectator" },
+      });
+    }
+
+    setRequestedRole("spectator");
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "spectator");
+  };
+
   const handleRequestUndo = () => {
     if (channel && !isSpectator) {
       setUndoRequestedBy(playerName);
@@ -1159,29 +1340,38 @@ function GoGame() {
 
           {!showNameModal && (
             <>
-              {player2Name ? (
-                <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 xl:justify-start justify-center mb-4">
-                  <span>Trận đấu:</span>
-                  <span className="font-semibold text-zinc-800">
-                    {player1Name} (Đen)
-                  </span>{" "}
-                  vs{" "}
-                  <span className="font-semibold text-zinc-800">
-                    {player2Name} (Trắng)
-                  </span>
+              {(player1Name || player2Name) && (
+                <div className="flex flex-col items-center gap-2 text-sm text-zinc-500 xl:items-start justify-center mb-4">
+                  <span className="font-semibold text-zinc-700">Trận đấu:</span>
+                  <div className="flex flex-col gap-1 items-center xl:items-start">
+                    <span className="font-semibold text-zinc-800">
+                      {player1Name || "..."} (Đen)
+                    </span>
+                    <span className="font-bold text-zinc-400">VS</span>
+                    <span className="font-semibold text-zinc-800">
+                      {player2Name || "..."} (Trắng)
+                    </span>
+                  </div>
                   {playerName === hostName && !gameStarted && (
                     <button
-                      onClick={() => handleKickPlayer(player2Name)}
-                      className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
+                      onClick={() => {
+                        if (player1Name && player1Name !== hostName)
+                          handleKickPlayer(player1Name);
+                        if (player2Name && player2Name !== hostName)
+                          handleKickPlayer(player2Name);
+                      }}
+                      className="mt-2 rounded bg-red-100 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
                     >
-                      Kick
+                      Kick All (Trừ Host)
                     </button>
                   )}
                 </div>
-              ) : (
+              )}
+
+              {(!player1Name || !player2Name) && (
                 <div className="mt-4 flex w-full flex-col items-center xl:items-start">
                   <p className="mb-3 text-sm text-zinc-500">
-                    Đang chờ đối thủ tham gia...
+                    Đang chờ người chơi tham gia...
                   </p>
                   <div className="flex w-full items-center space-x-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm">
                     <span className="flex-1 select-all truncate text-left text-xs text-zinc-500">
@@ -1200,127 +1390,130 @@ function GoGame() {
                       {linkCopied ? "Đã copy!" : "Copy Link"}
                     </button>
                   </div>
-                </div>
-              )}
-
-              {player2Name && (
-                <div className="w-full mt-2">
-                  {gameStarted ? (
-                    <div className="w-full space-y-4 text-left xl:text-left text-center">
-                      <div
-                        className={`rounded-lg border-2 p-3 transition-colors ${isBlackNext && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
-                      >
-                        <div className="flex justify-between items-baseline">
-                          <span className="font-semibold text-zinc-800">
-                            {player1Name} (Đen)
-                          </span>
-                          <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
-                            {formatTime(player1Time)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div
-                        className={`rounded-lg border-2 p-3 transition-colors ${!isBlackNext && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
-                      >
-                        <div className="flex justify-between items-baseline">
-                          <span className="font-semibold text-zinc-800">
-                            {player2Name} (Trắng)
-                          </span>
-                          <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
-                            {formatTime(player2Time)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="pt-2 text-center xl:text-left flex flex-col space-y-4">
-                        <p className="text-sm font-medium text-zinc-800 bg-zinc-100 py-2 rounded-md">
-                          {winner === "Draw"
-                            ? "🤝 Hòa cờ!"
-                            : winner === "End"
-                              ? "🤝 Trận đấu kết thúc! Vui lòng xem điểm."
-                              : winner
-                                ? `🎉 Chiến thắng: ${winner === "B" ? player1Name : player2Name}!`
-                                : `Lượt đi: ${isBlackNext ? "Đen" : "Trắng"}`}
-                        </p>
-
-                        {/* Hiển thị đếm số tù binh */}
-                        <div className="flex gap-4 w-full justify-center xl:justify-start mt-2">
-                          <div className="flex flex-col items-center bg-zinc-100 p-2 rounded-lg min-w-[80px]">
-                            <span className="text-xs text-zinc-500 uppercase font-bold">
-                              Đen bắt
-                            </span>
-                            <span className="text-xl font-bold text-zinc-800">
-                              {captures.B}
-                            </span>
-                          </div>
-                          <div className="flex flex-col items-center bg-zinc-100 p-2 rounded-lg min-w-[80px]">
-                            <span className="text-xs text-zinc-500 uppercase font-bold">
-                              Trắng bắt
-                            </span>
-                            <span className="text-xl font-bold text-zinc-800">
-                              {captures.W}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Bảng điểm kết quả nếu đã đếm đất */}
-                        {finalScore && (
-                          <div className="mt-4 flex flex-col w-full bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                            <div className="flex w-full justify-between items-center mb-2">
-                              <div className="text-center">
-                                <span className="block text-xs text-zinc-500 font-bold uppercase">
-                                  Điểm Đen
-                                </span>
-                                <span className="text-xl font-bold text-zinc-800">
-                                  {finalScore.black}
-                                </span>
-                              </div>
-                              <div className="text-sm font-bold text-zinc-400 px-4">
-                                VS
-                              </div>
-                              <div className="text-center">
-                                <span className="block text-xs text-zinc-500 font-bold uppercase">
-                                  Điểm Trắng
-                                </span>
-                                <span className="text-xl font-bold text-zinc-800">
-                                  {finalScore.white}
-                                </span>
-                              </div>
-                            </div>
-                            <p className="text-[10px] text-zinc-500 italic text-center">
-                              *Đếm theo luật Trung Quốc (Komi {KOMI}).
-                              <br />
-                              Tự động tính điểm giả định các quân còn trên bàn
-                              đều sống.
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                  {isSpectator && !gameStarted && (
+                    <div className="mt-4 w-full rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700 text-center">
+                      Vui lòng chọn ghế Người chơi ở khung bên phải để tham gia.
                     </div>
-                  ) : (
-                    !isSpectator && (
-                      <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
-                        <h3 className="text-base font-semibold text-zinc-800">
-                          Trận đấu sắp bắt đầu!
-                        </h3>
-                        <p className="text-sm text-zinc-500">
-                          {readyPlayers.length}/2 người chơi đã sẵn sàng.
-                        </p>
-                        <button
-                          onClick={handleStartClick}
-                          disabled={readyPlayers.includes(playerName || "")}
-                          className="mt-2 w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
-                        >
-                          {readyPlayers.includes(playerName || "")
-                            ? "Đã sẵn sàng, chờ đối thủ..."
-                            : "Sẵn sàng bắt đầu"}
-                        </button>
-                      </div>
-                    )
                   )}
                 </div>
               )}
+
+              <div className="w-full mt-2">
+                {gameStarted ? (
+                  <div className="w-full space-y-4 text-left xl:text-left text-center">
+                    <div
+                      className={`rounded-lg border-2 p-3 transition-colors ${isBlackNext && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
+                    >
+                      <div className="flex justify-between items-baseline">
+                        <span className="font-semibold text-zinc-800">
+                          {player1Name} (Đen)
+                        </span>
+                        <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
+                          {formatTime(player1Time)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div
+                      className={`rounded-lg border-2 p-3 transition-colors ${!isBlackNext && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
+                    >
+                      <div className="flex justify-between items-baseline">
+                        <span className="font-semibold text-zinc-800">
+                          {player2Name} (Trắng)
+                        </span>
+                        <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
+                          {formatTime(player2Time)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 text-center xl:text-left flex flex-col space-y-4">
+                      <p className="text-sm font-medium text-zinc-800 bg-zinc-100 py-2 rounded-md">
+                        {winner === "Draw"
+                          ? "🤝 Hòa cờ!"
+                          : winner === "End"
+                            ? "🤝 Trận đấu kết thúc! Vui lòng xem điểm."
+                            : winner
+                              ? `🎉 Chiến thắng: ${winner === "B" ? player1Name : player2Name}!`
+                              : `Lượt đi: ${isBlackNext ? "Đen" : "Trắng"}`}
+                      </p>
+
+                      {/* Hiển thị đếm số tù binh */}
+                      <div className="flex gap-4 w-full justify-center xl:justify-start mt-2">
+                        <div className="flex flex-col items-center bg-zinc-100 p-2 rounded-lg min-w-[80px]">
+                          <span className="text-xs text-zinc-500 uppercase font-bold">
+                            Đen bắt
+                          </span>
+                          <span className="text-xl font-bold text-zinc-800">
+                            {captures.B}
+                          </span>
+                        </div>
+                        <div className="flex flex-col items-center bg-zinc-100 p-2 rounded-lg min-w-[80px]">
+                          <span className="text-xs text-zinc-500 uppercase font-bold">
+                            Trắng bắt
+                          </span>
+                          <span className="text-xl font-bold text-zinc-800">
+                            {captures.W}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Bảng điểm kết quả nếu đã đếm đất */}
+                      {finalScore && (
+                        <div className="mt-4 flex flex-col w-full bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                          <div className="flex w-full justify-between items-center mb-2">
+                            <div className="text-center">
+                              <span className="block text-xs text-zinc-500 font-bold uppercase">
+                                Điểm Đen
+                              </span>
+                              <span className="text-xl font-bold text-zinc-800">
+                                {finalScore.black}
+                              </span>
+                            </div>
+                            <div className="text-sm font-bold text-zinc-400 px-4">
+                              VS
+                            </div>
+                            <div className="text-center">
+                              <span className="block text-xs text-zinc-500 font-bold uppercase">
+                                Điểm Trắng
+                              </span>
+                              <span className="text-xl font-bold text-zinc-800">
+                                {finalScore.white}
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-zinc-500 italic text-center">
+                            *Đếm theo luật Trung Quốc (Komi {KOMI}).
+                            <br />
+                            Tự động tính điểm giả định các quân còn trên bàn đều
+                            sống.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  !isSpectator && (
+                    <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
+                      <h3 className="text-base font-semibold text-zinc-800">
+                        Trận đấu sắp bắt đầu!
+                      </h3>
+                      <p className="text-sm text-zinc-500">
+                        {readyPlayers.length}/2 người chơi đã sẵn sàng.
+                      </p>
+                      <button
+                        onClick={handleStartClick}
+                        disabled={readyPlayers.includes(playerName || "")}
+                        className="mt-2 w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                      >
+                        {readyPlayers.includes(playerName || "")
+                          ? "Đã sẵn sàng, chờ đối thủ..."
+                          : "Sẵn sàng bắt đầu"}
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
             </>
           )}
 
@@ -1456,7 +1649,84 @@ function GoGame() {
         </div>
 
         {/* Cột phải: Thông tin người xem */}
-        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8">
+        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8 flex flex-col">
+          {/* Khung người chơi */}
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col mb-8">
+            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
+              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+                <span className="text-lg">🎮</span> Người chơi
+              </h3>
+              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
+                {[player1Name, player2Name].filter(Boolean).length}/2
+              </span>
+            </div>
+
+            <div className="p-4 sm:p-6 flex flex-col gap-4">
+              {/* Team Black (Player 1) */}
+              <div className="flex flex-col gap-2">
+                <h4 className="text-sm font-bold text-zinc-900">
+                  Đen (Đi trước)
+                </h4>
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                  {player1Name ? (
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-bold text-white">
+                        {player1Name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800 truncate">
+                        {player1Name} {playerName === player1Name && "(Bạn)"}{" "}
+                        {hostName === player1Name && "👑"}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleSlotClick(1)}
+                      className="text-sm text-zinc-500 hover:text-zinc-900 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-zinc-500 w-full text-left transition-colors"
+                    >
+                      + Tham gia (Người chơi 1)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Team White (Player 2) */}
+              <div className="flex flex-col gap-2 mt-2">
+                <h4 className="text-sm font-bold text-zinc-500">
+                  Trắng (Đi sau)
+                </h4>
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                  {player2Name ? (
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-bold text-zinc-700 border border-zinc-300">
+                        {player2Name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800 truncate">
+                        {player2Name} {playerName === player2Name && "(Bạn)"}{" "}
+                        {hostName === player2Name && "👑"}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleSlotClick(2)}
+                      className="text-sm text-zinc-500 hover:text-zinc-700 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-zinc-400 w-full text-left transition-colors"
+                    >
+                      + Tham gia (Người chơi 2)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {!isSpectator && (!gameStarted || winner) && (
+                <button
+                  onClick={handleBecomeSpectator}
+                  className="mt-2 text-sm text-zinc-500 hover:text-zinc-700 underline text-center w-full"
+                >
+                  Rời ghế, trở thành khán giả
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
             <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
               <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
