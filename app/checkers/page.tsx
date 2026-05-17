@@ -1291,27 +1291,51 @@ function CheckersGame() {
                               )}
                               {piece && (
                                 <div
-                                  className={`relative z-30 w-[80%] h-[80%] rounded-full shadow-md flex items-center justify-center border-4 ${
-                                    piece.toLowerCase() === "r"
-                                      ? "bg-red-600 border-red-800"
-                                      : "bg-zinc-800 border-zinc-950"
-                                  } ${isSelectable && !isSelected ? "hover:scale-105 transition-transform" : ""}`}
+                                  className={`relative z-30 w-[80%] h-[80%] flex items-center justify-center ${isSelectable && !isSelected ? "hover:scale-105 transition-transform" : ""}`}
                                 >
+                                  {/* Quân cờ cơ bản */}
                                   <div
-                                    className={`absolute inset-0 rounded-full border-2 m-1 ${
+                                    className={`absolute inset-0 rounded-full shadow-md border-4 ${
                                       piece.toLowerCase() === "r"
-                                        ? "border-red-500"
-                                        : "border-zinc-700"
+                                        ? "bg-red-600 border-red-800"
+                                        : "bg-zinc-800 border-zinc-950"
                                     }`}
-                                  />
-                                  {(piece === "R" || piece === "B") && (
-                                    <FaCrown
-                                      className={
-                                        piece === "R"
-                                          ? "text-yellow-400 text-xl"
-                                          : "text-yellow-500 text-xl"
-                                      }
+                                  >
+                                    <div
+                                      className={`absolute inset-0 rounded-full border-2 m-1 ${
+                                        piece.toLowerCase() === "r"
+                                          ? "border-red-500"
+                                          : "border-zinc-700"
+                                      }`}
                                     />
+                                  </div>
+
+                                  {/* Nếu là Vua, chồng thêm một quân cờ nữa lên trên */}
+                                  {(piece === "R" || piece === "B") && (
+                                    <div
+                                      className={`absolute inset-0 rounded-full shadow-lg border-4 -translate-y-2 ${
+                                        piece.toLowerCase() === "r"
+                                          ? "bg-red-600 border-red-800"
+                                          : "bg-zinc-800 border-zinc-950"
+                                      }`}
+                                    >
+                                      <div
+                                        className={`absolute inset-0 rounded-full border-2 m-1 ${
+                                          piece.toLowerCase() === "r"
+                                            ? "border-red-500"
+                                            : "border-zinc-700"
+                                        }`}
+                                      />
+                                      <div className="absolute inset-0 flex items-center justify-center">
+                                        <FaCrown
+                                          className={
+                                            piece === "R"
+                                              ? "text-yellow-400 text-xl drop-shadow-md"
+                                              : "text-yellow-500 text-xl drop-shadow-md"
+                                          }
+                                        />
+                                      </div>
+                                    </div>
                                   )}
                                 </div>
                               )}

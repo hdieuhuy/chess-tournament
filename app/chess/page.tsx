@@ -35,6 +35,21 @@ const PIECE_IMAGES: Record<string, string> = {
   p: "https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg",
 };
 
+const PIECE_VALUES: Record<string, number> = {
+  p: 1,
+  n: 3,
+  b: 3,
+  r: 5,
+  q: 9,
+  k: 0,
+  P: 1,
+  N: 3,
+  B: 3,
+  R: 5,
+  Q: 9,
+  K: 0,
+};
+
 // Kiểm tra quân cản đường chéo
 const getPiecesBetweenDiag = (
   board: (string | null)[][],
@@ -283,6 +298,10 @@ function ChessGame() {
   const [enPassantTarget, setEnPassantTarget] = useState<
     [number, number] | null
   >(null);
+  const [captures, setCaptures] = useState<{ w: string[]; b: string[] }>({
+    w: [],
+    b: [],
+  });
   const [winner, setWinner] = useState<string | null>(null);
   const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null);
   const [lastMove, setLastMove] = useState<{
@@ -297,6 +316,7 @@ function ChessGame() {
     board: (string | null)[][];
     epTarget: [number, number] | null;
     castlingRights: { wK: boolean; wQ: boolean; bK: boolean; bQ: boolean };
+    captures: { w: string[]; b: string[] };
     color: "W" | "B";
   } | null>(null);
   const [history, setHistory] = useState<any[]>([]);
@@ -318,6 +338,8 @@ function ChessGame() {
   const [readyPlayers, setReadyPlayers] = useState<string[]>([]);
   const [player1Time, setPlayer1Time] = useState<number>(INITIAL_TIME);
   const [player2Time, setPlayer2Time] = useState<number>(INITIAL_TIME);
+  const [initialTime, setInitialTime] = useState<number>(INITIAL_TIME);
+  const [customTimeMinutes, setCustomTimeMinutes] = useState<number>(15);
 
   const [hasInitialized, setHasInitialized] = useState<boolean>(false);
   const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
@@ -368,6 +390,7 @@ function ChessGame() {
     winner,
     castlingRights,
     enPassantTarget,
+    captures,
     lastMove,
     history,
     undoRequestedBy,
@@ -375,6 +398,7 @@ function ChessGame() {
     readyPlayers,
     player1Time,
     player2Time,
+    initialTime,
   });
 
   useEffect(() => {
@@ -388,6 +412,7 @@ function ChessGame() {
       winner,
       castlingRights,
       enPassantTarget,
+      captures,
       lastMove,
       history,
       undoRequestedBy,
@@ -395,6 +420,7 @@ function ChessGame() {
       readyPlayers,
       player1Time,
       player2Time,
+      initialTime,
     };
   }, [
     hostName,
@@ -406,6 +432,7 @@ function ChessGame() {
     winner,
     castlingRights,
     enPassantTarget,
+    captures,
     lastMove,
     history,
     undoRequestedBy,
@@ -413,6 +440,7 @@ function ChessGame() {
     readyPlayers,
     player1Time,
     player2Time,
+    initialTime,
   ]);
 
   useEffect(() => {
@@ -427,6 +455,7 @@ function ChessGame() {
         setWinner(data.winner);
         setCastlingRights(data.castlingRights);
         setEnPassantTarget(data.enPassantTarget);
+        if (data.captures) setCaptures(data.captures);
         setLastMove(data.lastMove);
         if (newHistory) setHistory(newHistory);
         setUndoRequestedBy(null);
@@ -439,10 +468,11 @@ function ChessGame() {
         setWinner(null);
         setCastlingRights({ wK: true, wQ: true, bK: true, bQ: true });
         setEnPassantTarget(null);
+        setCaptures({ w: [], b: [] });
         setSelectedPos(null);
         setLastMove(null);
-        setPlayer1Time(INITIAL_TIME);
-        setPlayer2Time(INITIAL_TIME);
+        setPlayer1Time(stateRef.current.initialTime);
+        setPlayer2Time(stateRef.current.initialTime);
         setGameStarted(false);
         setReadyPlayers([]);
       })
@@ -455,8 +485,8 @@ function ChessGame() {
       .on("broadcast", { event: "game-start" }, (payload) => {
         setGameStarted(true);
         // Reset timers for all clients
-        setPlayer1Time(INITIAL_TIME);
-        setPlayer2Time(INITIAL_TIME);
+        setPlayer1Time(stateRef.current.initialTime);
+        setPlayer2Time(stateRef.current.initialTime);
       })
       .on("broadcast", { event: "request-join" }, (payload) => {
         const { playerName: newPlayer, requestedRole: role } = payload.payload;
@@ -520,13 +550,19 @@ function ChessGame() {
               winner: state.winner,
               castlingRights: state.castlingRights,
               enPassantTarget: state.enPassantTarget,
+              captures: state.captures,
               lastMove: state.lastMove,
               history: state.history,
               undoRequestedBy: state.undoRequestedBy,
               gameStarted: state.gameStarted,
               readyPlayers: [],
-              player1Time: INITIAL_TIME,
-              player2Time: INITIAL_TIME,
+              player1Time: state.gameStarted
+                ? state.player1Time
+                : state.initialTime,
+              player2Time: state.gameStarted
+                ? state.player2Time
+                : state.initialTime,
+              initialTime: state.initialTime,
             },
           });
         }
@@ -542,6 +578,7 @@ function ChessGame() {
         setWinner(data.winner);
         setCastlingRights(data.castlingRights);
         setEnPassantTarget(data.enPassantTarget);
+        if (data.captures) setCaptures(data.captures);
         setLastMove(data.lastMove);
         if (data.history) setHistory(data.history);
         if (data.undoRequestedBy !== undefined)
@@ -550,6 +587,7 @@ function ChessGame() {
         if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
         if (data.player1Time !== undefined) setPlayer1Time(data.player1Time);
         if (data.player2Time !== undefined) setPlayer2Time(data.player2Time);
+        if (data.initialTime !== undefined) setInitialTime(data.initialTime);
       })
       .on("broadcast", { event: "update-name" }, (payload) => {
         const { oldName, newName } = payload.payload;
@@ -606,6 +644,11 @@ function ChessGame() {
         }
         setUndoRequestedBy(null);
       })
+      .on("broadcast", { event: "change-time" }, (payload) => {
+        setInitialTime(payload.payload.initialTime);
+        setPlayer1Time(payload.payload.initialTime);
+        setPlayer2Time(payload.payload.initialTime);
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           roomChannel.send({
@@ -632,8 +675,8 @@ function ChessGame() {
       if (playerName === hostName) {
         const startTime = Date.now();
         setGameStarted(true);
-        setPlayer1Time(INITIAL_TIME);
-        setPlayer2Time(INITIAL_TIME);
+        setPlayer1Time(initialTime);
+        setPlayer2Time(initialTime);
         channel.send({
           type: "broadcast",
           event: "game-start",
@@ -649,6 +692,7 @@ function ChessGame() {
     playerName,
     hostName,
     channel,
+    initialTime,
   ]);
 
   // Timer logic
@@ -756,11 +800,26 @@ function ChessGame() {
     }
   };
 
+  const handleTimeChange = (newTimeSeconds: number) => {
+    if (playerName !== hostName || gameStarted) return;
+    setInitialTime(newTimeSeconds);
+    setPlayer1Time(newTimeSeconds);
+    setPlayer2Time(newTimeSeconds);
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "change-time",
+        payload: { initialTime: newTimeSeconds },
+      });
+    }
+  };
+
   const executeMove = useCallback(
     (
       newBoard: (string | null)[][],
       newEpTarget: [number, number] | null,
       newCastlingRights: { wK: boolean; wQ: boolean; bK: boolean; bQ: boolean },
+      newCaptures: { w: string[]; b: string[] },
       fr: number,
       fc: number,
       r: number,
@@ -772,6 +831,7 @@ function ChessGame() {
         winner: stateRef.current.winner,
         castlingRights: stateRef.current.castlingRights,
         enPassantTarget: stateRef.current.enPassantTarget,
+        captures: stateRef.current.captures,
         lastMove: stateRef.current.lastMove,
         player1Time: stateRef.current.player1Time,
         player2Time: stateRef.current.player2Time,
@@ -829,6 +889,7 @@ function ChessGame() {
       setWinner(newWinner);
       setCastlingRights(newCastlingRights);
       setEnPassantTarget(newEpTarget);
+      setCaptures(newCaptures);
       setSelectedPos(null);
       setLastMove({ from: [fr, fc], to: [r, c] });
 
@@ -842,6 +903,7 @@ function ChessGame() {
             winner: newWinner,
             castlingRights: newCastlingRights,
             enPassantTarget: newEpTarget,
+            captures: newCaptures,
             lastMove: { from: [fr, fc], to: [r, c] },
             history: newHistory,
             player1Time: player1Time,
@@ -864,12 +926,13 @@ function ChessGame() {
         board: pBoard,
         epTarget,
         castlingRights,
+        captures: pCaptures,
       } = promotionPending;
       const newBoard = pBoard.map((row) => [...row]);
       newBoard[r][c] = promotedPiece;
 
       setPromotionPending(null);
-      executeMove(newBoard, epTarget, castlingRights, fr, fc, r, c);
+      executeMove(newBoard, epTarget, castlingRights, pCaptures, fr, fc, r, c);
     },
     [promotionPending, executeMove],
   );
@@ -909,6 +972,7 @@ function ChessGame() {
           )
         ) {
           const newBoard = board.map((row) => [...row]);
+          let capturedPiece = board[r][c];
           const p = board[fr][fc] as string;
           newBoard[r][c] = p;
           newBoard[fr][fc] = null;
@@ -923,9 +987,16 @@ function ChessGame() {
             !board[r][c]
           ) {
             newBoard[fr][c] = null;
+            capturedPiece = isWhiteTurn ? "p" : "P";
           }
           if (p.toLowerCase() === "p" && Math.abs(r - fr) === 2) {
             newEpTarget = [(r + fr) / 2, fc];
+          }
+
+          const newCaptures = { w: [...captures.w], b: [...captures.b] };
+          if (capturedPiece) {
+            if (isWhiteTurn) newCaptures.w.push(capturedPiece);
+            else newCaptures.b.push(capturedPiece);
           }
 
           // Castling logic (Di chuyển xe)
@@ -972,12 +1043,22 @@ function ChessGame() {
               board: newBoard,
               epTarget: newEpTarget,
               castlingRights: newCastlingRights,
+              captures: newCaptures,
               color: isWhiteTurn ? "W" : "B",
             });
             return;
           }
 
-          executeMove(newBoard, newEpTarget, newCastlingRights, fr, fc, r, c);
+          executeMove(
+            newBoard,
+            newEpTarget,
+            newCastlingRights,
+            newCaptures,
+            fr,
+            fc,
+            r,
+            c,
+          );
         } else {
           setSelectedPos(null);
         }
@@ -995,6 +1076,7 @@ function ChessGame() {
       isSpectator,
       castlingRights,
       enPassantTarget,
+      captures,
       gameStarted,
       promotionPending,
       executeMove,
@@ -1007,6 +1089,7 @@ function ChessGame() {
     setWinner(null);
     setCastlingRights({ wK: true, wQ: true, bK: true, bQ: true });
     setEnPassantTarget(null);
+    setCaptures({ w: [], b: [] });
     setSelectedPos(null);
     setLastMove(null);
     setHistory([]);
@@ -1014,8 +1097,8 @@ function ChessGame() {
     setPromotionPending(null);
     setGameStarted(false);
     setReadyPlayers([]);
-    setPlayer1Time(INITIAL_TIME);
-    setPlayer2Time(INITIAL_TIME);
+    setPlayer1Time(initialTime);
+    setPlayer2Time(initialTime);
     if (channel) {
       channel.send({ type: "broadcast", event: "reset-game" });
     }
@@ -1095,6 +1178,7 @@ function ChessGame() {
       setWinner(prevState.winner);
       setCastlingRights(prevState.castlingRights);
       setEnPassantTarget(prevState.enPassantTarget);
+      setCaptures(prevState.captures);
       setLastMove(prevState.lastMove);
       setPlayer1Time(prevState.player1Time);
       setPlayer2Time(prevState.player2Time);
@@ -1110,6 +1194,7 @@ function ChessGame() {
           winner: prevState.winner,
           castlingRights: prevState.castlingRights,
           enPassantTarget: prevState.enPassantTarget,
+          captures: prevState.captures,
           lastMove: prevState.lastMove,
           player1Time: prevState.player1Time,
           player2Time: prevState.player2Time,
@@ -1438,6 +1523,80 @@ function ChessGame() {
                         <p className="text-sm text-zinc-500">
                           {readyPlayers.length}/2 người chơi đã sẵn sàng.
                         </p>
+
+                        {playerName === hostName && (
+                          <div className="w-full mt-2 mb-2 p-3 bg-zinc-50 rounded-lg border border-zinc-200 text-left">
+                            <label className="block text-sm font-semibold text-zinc-700 mb-2">
+                              Thời gian mỗi bên:
+                            </label>
+                            <div className="flex flex-col gap-2">
+                              <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="timeOption"
+                                  checked={initialTime === 600}
+                                  onChange={() => handleTimeChange(600)}
+                                  className="accent-zinc-900"
+                                />
+                                10 phút
+                              </label>
+                              <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="timeOption"
+                                  checked={initialTime === 300}
+                                  onChange={() => handleTimeChange(300)}
+                                  className="accent-zinc-900"
+                                />
+                                5 phút
+                              </label>
+                              <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="timeOption"
+                                  checked={
+                                    initialTime !== 600 && initialTime !== 300
+                                  }
+                                  onChange={() =>
+                                    handleTimeChange(customTimeMinutes * 60)
+                                  }
+                                  className="accent-zinc-900"
+                                />
+                                Tùy chọn (phút):
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max="120"
+                                  value={
+                                    initialTime !== 600 && initialTime !== 300
+                                      ? Math.round(initialTime / 60)
+                                      : customTimeMinutes
+                                  }
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value) || 1;
+                                    setCustomTimeMinutes(val);
+                                    if (
+                                      initialTime !== 600 &&
+                                      initialTime !== 300
+                                    ) {
+                                      handleTimeChange(val * 60);
+                                    }
+                                  }}
+                                  className="w-16 px-2 py-1 text-sm border border-zinc-300 rounded focus:outline-none focus:ring-1 focus:ring-zinc-900"
+                                  disabled={
+                                    initialTime === 600 || initialTime === 300
+                                  }
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                        {playerName !== hostName && (
+                          <p className="text-sm font-medium text-zinc-700">
+                            Thời gian: {Math.round(initialTime / 60)} phút
+                          </p>
+                        )}
+
                         <button
                           onClick={handleStartClick}
                           disabled={readyPlayers.includes(playerName || "")}
@@ -1636,8 +1795,8 @@ function ChessGame() {
           </div>
         </div>
 
-        {/* Cột phải: Thông tin người xem */}
-        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8">
+        {/* Cột phải: Thông tin người xem và Điểm */}
+        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8 flex flex-col">
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
             <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
               <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
@@ -1686,6 +1845,108 @@ function ChessGame() {
                   ))}
                 </ul>
               )}
+            </div>
+          </div>
+
+          {/* Khung Tù binh & Điểm */}
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col mt-8">
+            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+                <span className="text-lg">⚔️</span> Tù binh & Điểm
+              </h3>
+            </div>
+            <div className="p-4 sm:p-6 flex flex-col gap-4">
+              {/* White side */}
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-zinc-800">
+                    Trắng (Đã ăn)
+                  </span>
+                  {(() => {
+                    const wScore = captures.w.reduce(
+                      (acc, p) => acc + (PIECE_VALUES[p] || 0),
+                      0,
+                    );
+                    const bScore = captures.b.reduce(
+                      (acc, p) => acc + (PIECE_VALUES[p] || 0),
+                      0,
+                    );
+                    const wAdvantage = wScore > bScore ? wScore - bScore : 0;
+                    return wAdvantage > 0 ? (
+                      <span className="text-xs font-bold text-green-600">
+                        +{wAdvantage}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+                <div className="flex flex-wrap gap-1 min-h-[32px] items-center bg-zinc-50 p-2 rounded-lg border border-zinc-100">
+                  {captures.w.length > 0 ? (
+                    [...captures.w]
+                      .sort(
+                        (a, b) =>
+                          (PIECE_VALUES[b] || 0) - (PIECE_VALUES[a] || 0),
+                      )
+                      .map((p, i) => (
+                        <img
+                          key={i}
+                          src={PIECE_IMAGES[p]}
+                          alt={p}
+                          className="w-6 h-6 drop-shadow-sm"
+                        />
+                      ))
+                  ) : (
+                    <span className="text-xs text-zinc-400 italic">
+                      Chưa ăn quân nào
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Black side */}
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-zinc-800">
+                    Đen (Đã ăn)
+                  </span>
+                  {(() => {
+                    const wScore = captures.w.reduce(
+                      (acc, p) => acc + (PIECE_VALUES[p] || 0),
+                      0,
+                    );
+                    const bScore = captures.b.reduce(
+                      (acc, p) => acc + (PIECE_VALUES[p] || 0),
+                      0,
+                    );
+                    const bAdvantage = bScore > wScore ? bScore - wScore : 0;
+                    return bAdvantage > 0 ? (
+                      <span className="text-xs font-bold text-green-600">
+                        +{bAdvantage}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+                <div className="flex flex-wrap gap-1 min-h-[32px] items-center bg-zinc-50 p-2 rounded-lg border border-zinc-100">
+                  {captures.b.length > 0 ? (
+                    [...captures.b]
+                      .sort(
+                        (a, b) =>
+                          (PIECE_VALUES[b] || 0) - (PIECE_VALUES[a] || 0),
+                      )
+                      .map((p, i) => (
+                        <img
+                          key={i}
+                          src={PIECE_IMAGES[p]}
+                          alt={p}
+                          className="w-6 h-6 drop-shadow-sm"
+                        />
+                      ))
+                  ) : (
+                    <span className="text-xs text-zinc-400 italic">
+                      Chưa ăn quân nào
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

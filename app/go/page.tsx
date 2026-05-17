@@ -10,7 +10,7 @@ import confetti from "canvas-confetti";
 
 const BOARD_SIZE = 19;
 const INITIAL_TIME = 1800; // Thời gian thi đấu: 30 phút mỗi người
-const KOMI = 7.5; // Điểm chấp (Komi) theo luật tính đất Trung Quốc (Area Scoring)
+const KOMI = 6.5; // Điểm chấp (Komi) theo luật tính đất Trung Quốc (Area Scoring)
 
 const createEmptyBoard = () =>
   Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(null));

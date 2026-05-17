@@ -38,6 +38,23 @@ const piecesMap: Record<string, { text: string; color: string }> = {
   p: { text: "卒", color: "text-zinc-900" },
 };
 
+const PIECE_VALUES: Record<string, number> = {
+  R: 9,
+  r: 9,
+  C: 8,
+  c: 8,
+  N: 7,
+  n: 7,
+  B: 6,
+  b: 6,
+  A: 5,
+  a: 5,
+  P: 4,
+  p: 4,
+  K: 0,
+  k: 0,
+};
+
 // Hàm tiện ích: tính tọa độ điểm giao trên bàn cờ cho SVG
 const X = (c: number) => `${(c + 0.5) * (100 / 9)}%`;
 const Y = (r: number) => `${(r + 0.5) * (100 / 10)}%`;
@@ -250,6 +267,10 @@ function XiangqiGame() {
     from: [number, number];
     to: [number, number];
   } | null>(null);
+  const [captures, setCaptures] = useState<{ r: string[]; b: string[] }>({
+    r: [],
+    b: [],
+  });
   const [history, setHistory] = useState<any[]>([]);
   const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
@@ -318,6 +339,7 @@ function XiangqiGame() {
     isRedTurn,
     winner,
     lastMove,
+    captures,
     history,
     undoRequestedBy,
     gameStarted,
@@ -335,6 +357,7 @@ function XiangqiGame() {
       isRedTurn,
       winner,
       lastMove,
+      captures,
       history,
       undoRequestedBy,
       gameStarted,
@@ -351,6 +374,7 @@ function XiangqiGame() {
     isRedTurn,
     winner,
     lastMove,
+    captures,
     history,
     undoRequestedBy,
     gameStarted,
@@ -370,6 +394,7 @@ function XiangqiGame() {
           isRedTurn,
           winner,
           lastMove,
+          captures,
           player1Time,
           player2Time,
           history: newHistory,
@@ -378,6 +403,7 @@ function XiangqiGame() {
         setIsRedTurn(isRedTurn);
         setWinner(winner);
         setLastMove(lastMove);
+        if (captures) setCaptures(captures);
         if (newHistory) setHistory(newHistory);
         setUndoRequestedBy(null);
         setPlayer1Time(player1Time);
@@ -389,6 +415,7 @@ function XiangqiGame() {
         setWinner(null);
         setSelectedPos(null);
         setLastMove(null);
+        setCaptures({ r: [], b: [] });
         setHistory([]);
         setUndoRequestedBy(null);
         setPlayer1Time(INITIAL_TIME);
@@ -472,6 +499,7 @@ function XiangqiGame() {
               isRedTurn: state.isRedTurn,
               winner: state.winner,
               lastMove: state.lastMove,
+              captures: state.captures,
               history: state.history,
               undoRequestedBy: state.undoRequestedBy,
               gameStarted: state.gameStarted,
@@ -492,6 +520,7 @@ function XiangqiGame() {
         setIsRedTurn(data.isRedTurn);
         setWinner(data.winner);
         setLastMove(data.lastMove);
+        if (data.captures) setCaptures(data.captures);
         if (data.history) setHistory(data.history);
         if (data.undoRequestedBy !== undefined)
           setUndoRequestedBy(data.undoRequestedBy);
@@ -818,6 +847,7 @@ function XiangqiGame() {
             isRedTurn: stateRef.current.isRedTurn,
             winner: stateRef.current.winner,
             lastMove: stateRef.current.lastMove,
+            captures: stateRef.current.captures,
             player1Time: stateRef.current.player1Time,
             player2Time: stateRef.current.player2Time,
           };
@@ -825,8 +855,15 @@ function XiangqiGame() {
           setHistory(newHistory);
 
           const newBoard = board.map((row) => [...row]);
+          const capturedPiece = newBoard[r][c];
           newBoard[r][c] = newBoard[fr][fc];
           newBoard[fr][fc] = null;
+
+          const newCaptures = { r: [...captures.r], b: [...captures.b] };
+          if (capturedPiece) {
+            if (isRedTurn) newCaptures.r.push(capturedPiece);
+            else newCaptures.b.push(capturedPiece);
+          }
 
           let newWinner = null;
           if (board[r][c] === "k") newWinner = "r";
@@ -864,6 +901,7 @@ function XiangqiGame() {
           setBoard(newBoard);
           setIsRedTurn(nextTurn);
           setWinner(newWinner);
+          setCaptures(newCaptures);
           setSelectedPos(null);
           setLastMove({ from: [fr, fc], to: [r, c] });
 
@@ -875,6 +913,7 @@ function XiangqiGame() {
                 board: newBoard,
                 isRedTurn: nextTurn,
                 winner: newWinner,
+                captures: newCaptures,
                 lastMove: { from: [fr, fc], to: [r, c] },
                 history: newHistory,
                 player1Time: player1Time,
@@ -907,6 +946,7 @@ function XiangqiGame() {
     setWinner(null);
     setSelectedPos(null);
     setLastMove(null);
+    setCaptures({ r: [], b: [] });
     setHistory([]);
     setUndoRequestedBy(null);
     setGameStarted(false);
@@ -991,6 +1031,7 @@ function XiangqiGame() {
       setIsRedTurn(prevState.isRedTurn);
       setWinner(prevState.winner);
       setLastMove(prevState.lastMove);
+      setCaptures(prevState.captures);
       setPlayer1Time(prevState.player1Time);
       setPlayer2Time(prevState.player2Time);
       setHistory(newHistory);
@@ -1003,6 +1044,7 @@ function XiangqiGame() {
           board: prevState.board,
           isRedTurn: prevState.isRedTurn,
           winner: prevState.winner,
+          captures: prevState.captures,
           lastMove: prevState.lastMove,
           player1Time: prevState.player1Time,
           player2Time: prevState.player2Time,
@@ -1555,8 +1597,8 @@ function XiangqiGame() {
           </div>
         </div>
 
-        {/* Cột phải: Thông tin người xem */}
-        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8">
+        {/* Cột phải: Thông tin người xem và Tù binh */}
+        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8 flex flex-col">
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
             <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
               <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
@@ -1605,6 +1647,76 @@ function XiangqiGame() {
                   ))}
                 </ul>
               )}
+            </div>
+          </div>
+
+          {/* Khung Tù binh */}
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col mt-8">
+            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+                <span className="text-lg">⚔️</span> Tù binh
+              </h3>
+            </div>
+            <div className="p-4 sm:p-6 flex flex-col gap-4">
+              {/* Red side */}
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-zinc-800">
+                    Đỏ (Đã ăn)
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1 min-h-[32px] items-center bg-zinc-50 p-2 rounded-lg border border-zinc-100">
+                  {captures.r.length > 0 ? (
+                    [...captures.r]
+                      .sort(
+                        (a, b) =>
+                          (PIECE_VALUES[b] || 0) - (PIECE_VALUES[a] || 0),
+                      )
+                      .map((p, i) => (
+                        <div
+                          key={i}
+                          className={`flex items-center justify-center w-6 h-6 rounded-full bg-[#FFE6B3] border border-[#8B5A2B] text-xs font-bold drop-shadow-sm ${piecesMap[p].color}`}
+                        >
+                          {piecesMap[p].text}
+                        </div>
+                      ))
+                  ) : (
+                    <span className="text-xs text-zinc-400 italic">
+                      Chưa ăn quân nào
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Black side */}
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-zinc-800">
+                    Đen (Đã ăn)
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1 min-h-[32px] items-center bg-zinc-50 p-2 rounded-lg border border-zinc-100">
+                  {captures.b.length > 0 ? (
+                    [...captures.b]
+                      .sort(
+                        (a, b) =>
+                          (PIECE_VALUES[b] || 0) - (PIECE_VALUES[a] || 0),
+                      )
+                      .map((p, i) => (
+                        <div
+                          key={i}
+                          className={`flex items-center justify-center w-6 h-6 rounded-full bg-[#FFE6B3] border border-[#8B5A2B] text-xs font-bold drop-shadow-sm ${piecesMap[p].color}`}
+                        >
+                          {piecesMap[p].text}
+                        </div>
+                      ))
+                  ) : (
+                    <span className="text-xs text-zinc-400 italic">
+                      Chưa ăn quân nào
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
