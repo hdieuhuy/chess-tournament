@@ -1090,79 +1090,77 @@ function CheckersGame() {
                 </div>
               )}
 
-              {player2Name && (
-                <div className="mt-6 w-full">
-                  {gameStarted ? (
-                    <div className="w-full space-y-4 text-left xl:text-left text-center">
-                      <div
-                        className={`rounded-lg border-2 p-3 transition-colors ${isBlackTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
-                      >
-                        <div className="flex justify-between items-baseline">
-                          <div className="flex flex-col items-start">
-                            <span className="font-semibold text-zinc-800">
-                              {player1Name} (Đen)
-                            </span>
-                          </div>
-                          <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
-                            {formatTime(player1Time)}
+              <div className="mt-6 w-full">
+                {gameStarted ? (
+                  <div className="w-full space-y-4 text-left xl:text-left text-center">
+                    <div
+                      className={`rounded-lg border-2 p-3 transition-colors ${isBlackTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
+                    >
+                      <div className="flex justify-between items-baseline">
+                        <div className="flex flex-col items-start">
+                          <span className="font-semibold text-zinc-800">
+                            {player1Name} (Đen)
                           </span>
                         </div>
+                        <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
+                          {formatTime(player1Time)}
+                        </span>
                       </div>
-                      <div
-                        className={`rounded-lg border-2 p-3 transition-colors ${!isBlackTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
-                      >
-                        <div className="flex justify-between items-baseline">
-                          <div className="flex flex-col items-start">
-                            <span className="font-semibold text-red-600">
-                              {player2Name} (Đỏ)
-                            </span>
-                          </div>
-                          <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
-                            {formatTime(player2Time)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="pt-2 text-center xl:text-left">
-                        <p className="text-sm font-medium text-zinc-800">
-                          {winner === "Draw"
-                            ? "🤝 Hòa cờ!"
-                            : winner
-                              ? `🎉 Chiến thắng: ${winner === "B" ? player1Name : player2Name}!`
-                              : `Lượt đi: ${isBlackTurn ? "Đen" : "Đỏ"}`}
-                        </p>
-                      </div>
-                      {gameStarted && !winner && !isSpectator && (
-                        <button
-                          onClick={handleResign}
-                          className="mt-2 w-full cursor-pointer rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
-                        >
-                          Bỏ cuộc
-                        </button>
-                      )}
                     </div>
-                  ) : (
-                    !isSpectator && (
-                      <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
-                        <h3 className="text-base font-semibold text-zinc-800">
-                          Trận đấu sắp bắt đầu!
-                        </h3>
-                        <p className="text-sm text-zinc-500">
-                          {readyPlayers.length}/2 người chơi đã sẵn sàng.
-                        </p>
-                        <button
-                          onClick={handleStartClick}
-                          disabled={readyPlayers.includes(playerName || "")}
-                          className="mt-2 w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
-                        >
-                          {readyPlayers.includes(playerName || "")
-                            ? "Đã sẵn sàng, chờ đối thủ..."
-                            : "Sẵn sàng bắt đầu"}
-                        </button>
+                    <div
+                      className={`rounded-lg border-2 p-3 transition-colors ${!isBlackTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
+                    >
+                      <div className="flex justify-between items-baseline">
+                        <div className="flex flex-col items-start">
+                          <span className="font-semibold text-red-600">
+                            {player2Name} (Đỏ)
+                          </span>
+                        </div>
+                        <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
+                          {formatTime(player2Time)}
+                        </span>
                       </div>
-                    )
-                  )}
-                </div>
-              )}
+                    </div>
+                    <div className="pt-2 text-center xl:text-left">
+                      <p className="text-sm font-medium text-zinc-800">
+                        {winner === "Draw"
+                          ? "🤝 Hòa cờ!"
+                          : winner
+                            ? `🎉 Chiến thắng: ${winner === "B" ? player1Name : player2Name}!`
+                            : `Lượt đi: ${isBlackTurn ? "Đen" : "Đỏ"}`}
+                      </p>
+                    </div>
+                    {gameStarted && !winner && !isSpectator && (
+                      <button
+                        onClick={handleResign}
+                        className="mt-2 w-full cursor-pointer rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+                      >
+                        Bỏ cuộc
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  !isSpectator && (
+                    <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
+                      <h3 className="text-base font-semibold text-zinc-800">
+                        Trận đấu sắp bắt đầu!
+                      </h3>
+                      <p className="text-sm text-zinc-500">
+                        {readyPlayers.length}/2 người chơi đã sẵn sàng.
+                      </p>
+                      <button
+                        onClick={handleStartClick}
+                        disabled={readyPlayers.includes(playerName || "")}
+                        className="mt-2 w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                      >
+                        {readyPlayers.includes(playerName || "")
+                          ? "Đã sẵn sàng, chờ đối thủ..."
+                          : "Sẵn sàng bắt đầu"}
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
             </>
           )}
 

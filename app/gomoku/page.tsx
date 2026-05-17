@@ -1036,45 +1036,43 @@ function GomokuGame() {
                 </div>
               )}
 
-              {player2Name && (
-                <div className="mt-6 flex w-full flex-col items-center space-y-3 xl:items-start">
-                  {gameStarted ? (
-                    <>
-                      <div className="inline-block rounded-full border border-zinc-100 bg-white px-6 py-3 shadow-sm">
-                        <p className="text-sm font-medium text-zinc-800">
-                          {winner
-                            ? `🎉 Người chiến thắng: ${winner === "B" ? player1Name : player2Name}!`
-                            : `Lượt đi: ${isBlackNext ? player1Name + " (X)" : player2Name + " (O)"}`}
-                        </p>
-                      </div>
+              <div className="mt-6 flex w-full flex-col items-center space-y-3 xl:items-start">
+                {gameStarted ? (
+                  <>
+                    <div className="inline-block rounded-full border border-zinc-100 bg-white px-6 py-3 shadow-sm">
+                      <p className="text-sm font-medium text-zinc-800">
+                        {winner
+                          ? `🎉 Người chiến thắng: ${winner === "B" ? player1Name : player2Name}!`
+                          : `Lượt đi: ${isBlackNext ? player1Name + " (X)" : player2Name + " (O)"}`}
+                      </p>
+                    </div>
 
-                      <div className="text-3xl font-mono font-medium tracking-wider text-zinc-800">
-                        {formatTime(elapsedTime)}
-                      </div>
-                    </>
-                  ) : (
-                    !isSpectator && (
-                      <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
-                        <h3 className="text-base font-semibold text-zinc-800">
-                          Trận đấu sắp bắt đầu!
-                        </h3>
-                        <p className="text-sm text-zinc-500">
-                          {readyPlayers.length}/2 người chơi đã sẵn sàng.
-                        </p>
-                        <button
-                          onClick={handleStartClick}
-                          disabled={readyPlayers.includes(playerName || "")}
-                          className="mt-2 w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
-                        >
-                          {readyPlayers.includes(playerName || "")
-                            ? "Đã sẵn sàng, chờ đối thủ..."
-                            : "Sẵn sàng bắt đầu"}
-                        </button>
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
+                    <div className="text-3xl font-mono font-medium tracking-wider text-zinc-800">
+                      {formatTime(elapsedTime)}
+                    </div>
+                  </>
+                ) : (
+                  !isSpectator && (
+                    <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
+                      <h3 className="text-base font-semibold text-zinc-800">
+                        Trận đấu sắp bắt đầu!
+                      </h3>
+                      <p className="text-sm text-zinc-500">
+                        {readyPlayers.length}/2 người chơi đã sẵn sàng.
+                      </p>
+                      <button
+                        onClick={handleStartClick}
+                        disabled={readyPlayers.includes(playerName || "")}
+                        className="mt-2 w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                      >
+                        {readyPlayers.includes(playerName || "")
+                          ? "Đã sẵn sàng, chờ đối thủ..."
+                          : "Sẵn sàng bắt đầu"}
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
             </>
           )}
 

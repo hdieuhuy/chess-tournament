@@ -485,27 +485,64 @@ function JungleGame() {
         if (state.hostName === playerName) {
           if (newRole === "player") {
             const newSpecs = state.spectators.filter((s) => s !== reqPlayer);
-            if (!state.player1Name) {
-              setPlayer1Name(reqPlayer);
-              setSpectators(newSpecs);
-              stateRef.current.player1Name = reqPlayer;
-              stateRef.current.spectators = newSpecs;
-              roomChannel.send({
-                type: "broadcast",
-                event: "room-sync",
-                payload: { ...stateRef.current },
-              });
-            } else if (!state.player2Name) {
-              setPlayer2Name(reqPlayer);
-              setSpectators(newSpecs);
-              stateRef.current.player2Name = reqPlayer;
-              stateRef.current.spectators = newSpecs;
-              roomChannel.send({
-                type: "broadcast",
-                event: "room-sync",
-                payload: { ...stateRef.current },
-              });
+            const newReadyPlayers = state.readyPlayers.filter(
+              (p) => p !== reqPlayer,
+            );
+
+            let newP1 =
+              state.player1Name === reqPlayer ? null : state.player1Name;
+            let newP2 =
+              state.player2Name === reqPlayer ? null : state.player2Name;
+
+            if (!newP1) {
+              newP1 = reqPlayer;
+            } else if (!newP2) {
+              newP2 = reqPlayer;
             }
+
+            setPlayer1Name(newP1);
+            setPlayer2Name(newP2);
+            setSpectators(newSpecs);
+            setReadyPlayers(newReadyPlayers);
+
+            stateRef.current.player1Name = newP1;
+            stateRef.current.player2Name = newP2;
+            stateRef.current.spectators = newSpecs;
+            stateRef.current.readyPlayers = newReadyPlayers;
+
+            roomChannel.send({
+              type: "broadcast",
+              event: "room-sync",
+              payload: { ...stateRef.current },
+            });
+          } else if (newRole === "spectator") {
+            const newP1 =
+              state.player1Name === reqPlayer ? null : state.player1Name;
+            const newP2 =
+              state.player2Name === reqPlayer ? null : state.player2Name;
+            const newSpecs = [...state.spectators];
+            if (!newSpecs.includes(reqPlayer)) {
+              newSpecs.push(reqPlayer);
+            }
+            const newReadyPlayers = state.readyPlayers.filter(
+              (p) => p !== reqPlayer,
+            );
+
+            setPlayer1Name(newP1);
+            setPlayer2Name(newP2);
+            setSpectators(newSpecs);
+            setReadyPlayers(newReadyPlayers);
+
+            stateRef.current.player1Name = newP1;
+            stateRef.current.player2Name = newP2;
+            stateRef.current.spectators = newSpecs;
+            stateRef.current.readyPlayers = newReadyPlayers;
+
+            roomChannel.send({
+              type: "broadcast",
+              event: "room-sync",
+              payload: { ...stateRef.current },
+            });
           }
         }
       })
@@ -805,15 +842,88 @@ function JungleGame() {
   };
 
   const handleBecomePlayer = () => {
-    if (channel && isSpectator && !player2Name) {
+    if (!channel || gameStarted) return;
+
+    if (playerName === hostName) {
+      const state = stateRef.current;
+      const newSpecs = state.spectators.filter((s) => s !== playerName);
+      const newReadyPlayers = state.readyPlayers.filter(
+        (p) => p !== playerName,
+      );
+      let newP1 = state.player1Name === playerName ? null : state.player1Name;
+      let newP2 = state.player2Name === playerName ? null : state.player2Name;
+
+      if (!newP1) newP1 = playerName;
+      else if (!newP2) newP2 = playerName;
+
+      setPlayer1Name(newP1);
+      setPlayer2Name(newP2);
+      setSpectators(newSpecs);
+      setReadyPlayers(newReadyPlayers);
+
+      stateRef.current.player1Name = newP1;
+      stateRef.current.player2Name = newP2;
+      stateRef.current.spectators = newSpecs;
+      stateRef.current.readyPlayers = newReadyPlayers;
+
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: { ...stateRef.current },
+      });
+    } else {
+      if (isSpectator && (!player1Name || !player2Name)) {
+        channel.send({
+          type: "broadcast",
+          event: "request-role-change",
+          payload: { playerName, newRole: "player" },
+        });
+      }
+    }
+    setRequestedRole("player");
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
+  };
+
+  const handleBecomeSpectator = () => {
+    if (!channel || gameStarted) return;
+
+    if (playerName === hostName) {
+      const state = stateRef.current;
+      const newP1 = state.player1Name === playerName ? null : state.player1Name;
+      const newP2 = state.player2Name === playerName ? null : state.player2Name;
+      const newSpecs = [...state.spectators];
+      if (!newSpecs.includes(playerName)) {
+        newSpecs.push(playerName);
+      }
+      const newReadyPlayers = state.readyPlayers.filter(
+        (p) => p !== playerName,
+      );
+
+      setPlayer1Name(newP1);
+      setPlayer2Name(newP2);
+      setSpectators(newSpecs);
+      setReadyPlayers(newReadyPlayers);
+
+      stateRef.current.player1Name = newP1;
+      stateRef.current.player2Name = newP2;
+      stateRef.current.spectators = newSpecs;
+      stateRef.current.readyPlayers = newReadyPlayers;
+
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: { ...stateRef.current },
+      });
+    } else {
       channel.send({
         type: "broadcast",
         event: "request-role-change",
-        payload: { playerName, newRole: "player" },
+        payload: { playerName, newRole: "spectator" },
       });
-      setRequestedRole("player");
-      if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
     }
+
+    setRequestedRole("spectator");
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "spectator");
   };
 
   const handleRequestUndo = () => {
@@ -1083,86 +1193,92 @@ function JungleGame() {
                       Tham gia làm người chơi
                     </button>
                   )}
-                </div>
-              )}
-
-              {player2Name && (
-                <div className="mt-6 w-full">
-                  {gameStarted ? (
-                    <div className="w-full space-y-4 text-left xl:text-left text-center">
-                      <div
-                        className={`rounded-lg border-2 p-3 transition-colors ${isRedTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
-                      >
-                        <div className="flex justify-between items-baseline">
-                          <div className="flex flex-col items-start">
-                            <span className="font-semibold text-red-600">
-                              {player1Name} (Đỏ)
-                            </span>
-                          </div>
-                          <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
-                            {formatTime(player1Time)}
-                          </span>
-                        </div>
-                      </div>
-                      <div
-                        className={`rounded-lg border-2 p-3 transition-colors ${!isRedTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
-                      >
-                        <div className="flex justify-between items-baseline">
-                          <div className="flex flex-col items-start">
-                            <span className="font-semibold text-blue-600">
-                              {player2Name} (Xanh)
-                            </span>
-                          </div>
-                          <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
-                            {formatTime(player2Time)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="pt-2 text-center xl:text-left">
-                        <p className="text-sm font-medium text-zinc-800 flex items-center justify-center xl:justify-start">
-                          {winner ? (
-                            <>
-                              <FaTrophy className="inline mr-2 text-yellow-500 text-lg" />
-                              Chiến thắng:{" "}
-                              {winner === "r" ? player1Name : player2Name}!
-                            </>
-                          ) : (
-                            `Lượt đi: ${isRedTurn ? "Đỏ" : "Xanh"}`
-                          )}
-                        </p>
-                      </div>
-                      {gameStarted && !winner && !isSpectator && (
-                        <button
-                          onClick={handleResign}
-                          className="mt-2 w-full cursor-pointer rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
-                        >
-                          Bỏ cuộc
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    !isSpectator && (
-                      <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
-                        <h3 className="text-base font-semibold text-zinc-800">
-                          Trận đấu sắp bắt đầu!
-                        </h3>
-                        <p className="text-sm text-zinc-500">
-                          {readyPlayers.length}/2 người chơi đã sẵn sàng.
-                        </p>
-                        <button
-                          onClick={handleStartClick}
-                          disabled={readyPlayers.includes(playerName || "")}
-                          className="mt-2 w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
-                        >
-                          {readyPlayers.includes(playerName || "")
-                            ? "Đã sẵn sàng, chờ đối thủ..."
-                            : "Sẵn sàng bắt đầu"}
-                        </button>
-                      </div>
-                    )
+                  {!isSpectator && !gameStarted && (
+                    <button
+                      onClick={handleBecomeSpectator}
+                      className="mt-4 w-full cursor-pointer rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+                    >
+                      Rời ghế, trở thành khán giả
+                    </button>
                   )}
                 </div>
               )}
+
+              <div className="mt-6 w-full">
+                {gameStarted ? (
+                  <div className="w-full space-y-4 text-left xl:text-left text-center">
+                    <div
+                      className={`rounded-lg border-2 p-3 transition-colors ${isRedTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
+                    >
+                      <div className="flex justify-between items-baseline">
+                        <div className="flex flex-col items-start">
+                          <span className="font-semibold text-red-600">
+                            {player1Name} (Đỏ)
+                          </span>
+                        </div>
+                        <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
+                          {formatTime(player1Time)}
+                        </span>
+                      </div>
+                    </div>
+                    <div
+                      className={`rounded-lg border-2 p-3 transition-colors ${!isRedTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"}`}
+                    >
+                      <div className="flex justify-between items-baseline">
+                        <div className="flex flex-col items-start">
+                          <span className="font-semibold text-blue-600">
+                            {player2Name} (Xanh)
+                          </span>
+                        </div>
+                        <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
+                          {formatTime(player2Time)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="pt-2 text-center xl:text-left">
+                      <p className="text-sm font-medium text-zinc-800 flex items-center justify-center xl:justify-start">
+                        {winner ? (
+                          <>
+                            <FaTrophy className="inline mr-2 text-yellow-500 text-lg" />
+                            Chiến thắng:{" "}
+                            {winner === "r" ? player1Name : player2Name}!
+                          </>
+                        ) : (
+                          `Lượt đi: ${isRedTurn ? "Đỏ" : "Xanh"}`
+                        )}
+                      </p>
+                    </div>
+                    {gameStarted && !winner && !isSpectator && (
+                      <button
+                        onClick={handleResign}
+                        className="mt-2 w-full cursor-pointer rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+                      >
+                        Bỏ cuộc
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  !isSpectator && (
+                    <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
+                      <h3 className="text-base font-semibold text-zinc-800">
+                        Trận đấu sắp bắt đầu!
+                      </h3>
+                      <p className="text-sm text-zinc-500">
+                        {readyPlayers.length}/2 người chơi đã sẵn sàng.
+                      </p>
+                      <button
+                        onClick={handleStartClick}
+                        disabled={readyPlayers.includes(playerName || "")}
+                        className="mt-2 w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                      >
+                        {readyPlayers.includes(playerName || "")
+                          ? "Đã sẵn sàng, chờ đối thủ..."
+                          : "Sẵn sàng bắt đầu"}
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
             </>
           )}
 
