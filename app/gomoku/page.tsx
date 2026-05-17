@@ -307,27 +307,80 @@ function GomokuGame() {
         if (state.hostName === playerName) {
           if (newRole === "player") {
             const newSpecs = state.spectators.filter((s) => s !== reqPlayer);
-            if (!state.player1Name) {
-              setPlayer1Name(reqPlayer);
+            const newReadyPlayers = state.readyPlayers.filter(
+              (p) => p !== reqPlayer,
+            );
+
+            let newP1 =
+              state.player1Name === reqPlayer ? null : state.player1Name;
+            let newP2 =
+              state.player2Name === reqPlayer ? null : state.player2Name;
+
+            let success = false;
+
+            if (targetSlot === 1 && !newP1) {
+              newP1 = reqPlayer;
+              success = true;
+            } else if (targetSlot === 2 && !newP2) {
+              newP2 = reqPlayer;
+              success = true;
+            }
+
+            if (!success && !targetSlot) {
+              if (!newP1) {
+                newP1 = reqPlayer;
+                success = true;
+              } else if (!newP2) {
+                newP2 = reqPlayer;
+                success = true;
+              }
+            }
+
+            if (success) {
+              setPlayer1Name(newP1);
+              setPlayer2Name(newP2);
               setSpectators(newSpecs);
-              stateRef.current.player1Name = reqPlayer;
+              setReadyPlayers(newReadyPlayers);
+
+              stateRef.current.player1Name = newP1;
+              stateRef.current.player2Name = newP2;
               stateRef.current.spectators = newSpecs;
-              roomChannel.send({
-                type: "broadcast",
-                event: "room-sync",
-                payload: { ...stateRef.current },
-              });
-            } else if (!state.player2Name) {
-              setPlayer2Name(reqPlayer);
-              setSpectators(newSpecs);
-              stateRef.current.player2Name = reqPlayer;
-              stateRef.current.spectators = newSpecs;
+              stateRef.current.readyPlayers = newReadyPlayers;
+
               roomChannel.send({
                 type: "broadcast",
                 event: "room-sync",
                 payload: { ...stateRef.current },
               });
             }
+          } else if (newRole === "spectator") {
+            const newP1 =
+              state.player1Name === reqPlayer ? null : state.player1Name;
+            const newP2 =
+              state.player2Name === reqPlayer ? null : state.player2Name;
+            const newSpecs = [...state.spectators];
+            if (!newSpecs.includes(reqPlayer)) {
+              newSpecs.push(reqPlayer);
+            }
+            const newReadyPlayers = state.readyPlayers.filter(
+              (p) => p !== reqPlayer,
+            );
+
+            setPlayer1Name(newP1);
+            setPlayer2Name(newP2);
+            setSpectators(newSpecs);
+            setReadyPlayers(newReadyPlayers);
+
+            stateRef.current.player1Name = newP1;
+            stateRef.current.player2Name = newP2;
+            stateRef.current.spectators = newSpecs;
+            stateRef.current.readyPlayers = newReadyPlayers;
+
+            roomChannel.send({
+              type: "broadcast",
+              event: "room-sync",
+              payload: { ...stateRef.current },
+            });
           }
         }
       })
@@ -685,7 +738,11 @@ function GomokuGame() {
 
   const handleKickPlayer = (targetName: string) => {
     if (playerName !== hostName || !channel) return;
-    if (targetName === player2Name && gameStarted) return;
+    if (
+      (targetName === player1Name || targetName === player2Name) &&
+      gameStarted
+    )
+      return;
 
     channel.send({
       type: "broadcast",
@@ -693,7 +750,24 @@ function GomokuGame() {
       payload: { playerName: targetName },
     });
 
-    if (targetName === player2Name) {
+    if (targetName === player1Name) {
+      setPlayer1Name(null);
+      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
+      if (gameStarted) resetGame();
+      setTimeout(() => {
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: {
+            ...stateRef.current,
+            player1Name: null,
+            readyPlayers: stateRef.current.readyPlayers.filter(
+              (p) => p !== targetName,
+            ),
+          },
+        });
+      }, 50);
+    } else if (targetName === player2Name) {
       setPlayer2Name(null);
       setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
       if (gameStarted) {
@@ -723,16 +797,101 @@ function GomokuGame() {
     }
   };
 
-  const handleBecomePlayer = () => {
-    if (channel && isSpectator && !player2Name) {
+  const handleSlotClick = (targetSlot: 1 | 2) => {
+    if (!channel || gameStarted) return;
+
+    if (targetSlot === 1 && player1Name) return;
+    if (targetSlot === 2 && player2Name) return;
+
+    if (playerName === hostName) {
+      const state = stateRef.current;
+      const newSpecs = state.spectators.filter((s) => s !== playerName);
+      const newReadyPlayers = state.readyPlayers.filter(
+        (p) => p !== playerName,
+      );
+
+      let newP1 = state.player1Name === playerName ? null : state.player1Name;
+      let newP2 = state.player2Name === playerName ? null : state.player2Name;
+
+      let success = false;
+
+      if (targetSlot === 1 && !newP1) {
+        newP1 = playerName;
+        success = true;
+      } else if (targetSlot === 2 && !newP2) {
+        newP2 = playerName;
+        success = true;
+      }
+
+      if (success) {
+        setPlayer1Name(newP1);
+        setPlayer2Name(newP2);
+        setSpectators(newSpecs);
+        setReadyPlayers(newReadyPlayers);
+
+        stateRef.current.player1Name = newP1;
+        stateRef.current.player2Name = newP2;
+        stateRef.current.spectators = newSpecs;
+        stateRef.current.readyPlayers = newReadyPlayers;
+
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: { ...stateRef.current },
+        });
+      }
+    } else {
       channel.send({
         type: "broadcast",
         event: "request-role-change",
-        payload: { playerName, newRole: "player" },
+        payload: { playerName, newRole: "player", targetSlot },
       });
-      setRequestedRole("player");
-      if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
     }
+
+    setRequestedRole("player");
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
+  };
+
+  const handleBecomeSpectator = () => {
+    if (!channel || (gameStarted && !winner)) return;
+
+    if (playerName === hostName) {
+      const state = stateRef.current;
+      const newP1 = state.player1Name === playerName ? null : state.player1Name;
+      const newP2 = state.player2Name === playerName ? null : state.player2Name;
+      const newSpecs = [...state.spectators];
+      if (!newSpecs.includes(playerName)) {
+        newSpecs.push(playerName);
+      }
+      const newReadyPlayers = state.readyPlayers.filter(
+        (p) => p !== playerName,
+      );
+
+      setPlayer1Name(newP1);
+      setPlayer2Name(newP2);
+      setSpectators(newSpecs);
+      setReadyPlayers(newReadyPlayers);
+
+      stateRef.current.player1Name = newP1;
+      stateRef.current.player2Name = newP2;
+      stateRef.current.spectators = newSpecs;
+      stateRef.current.readyPlayers = newReadyPlayers;
+
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: { ...stateRef.current },
+      });
+    } else {
+      channel.send({
+        type: "broadcast",
+        event: "request-role-change",
+        payload: { playerName, newRole: "spectator" },
+      });
+    }
+
+    setRequestedRole("spectator");
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "spectator");
   };
 
   // Logic hiển thị nút Đổi phe (Swap)
@@ -985,21 +1144,28 @@ function GomokuGame() {
           {!showNameModal && (
             <>
               {player2Name ? (
-                <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 xl:justify-start justify-center">
-                  <span>Trận đấu:</span>
-                  <span className="font-semibold text-zinc-800">
-                    {player1Name} (X)
-                  </span>{" "}
-                  vs{" "}
-                  <span className="font-semibold text-zinc-800">
-                    {player2Name} (O)
-                  </span>
+                <div className="flex flex-col items-center gap-2 text-sm text-zinc-500 xl:items-start justify-center">
+                  <span className="font-semibold text-zinc-700">Trận đấu:</span>
+                  <div className="flex flex-col gap-1 items-center xl:items-start">
+                    <span className="font-semibold text-zinc-800">
+                      {player1Name || "..."} (X)
+                    </span>
+                    <span className="font-bold text-zinc-400">VS</span>
+                    <span className="font-semibold text-zinc-800">
+                      {player2Name || "..."} (O)
+                    </span>
+                  </div>
                   {playerName === hostName && !gameStarted && (
                     <button
-                      onClick={() => handleKickPlayer(player2Name)}
-                      className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
+                      onClick={() => {
+                        if (player1Name && player1Name !== hostName)
+                          handleKickPlayer(player1Name);
+                        if (player2Name && player2Name !== hostName)
+                          handleKickPlayer(player2Name);
+                      }}
+                      className="mt-2 rounded bg-red-100 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
                     >
-                      Kick
+                      Kick All (Trừ Host)
                     </button>
                   )}
                 </div>
@@ -1025,13 +1191,10 @@ function GomokuGame() {
                       {linkCopied ? "Đã copy!" : "Copy Link"}
                     </button>
                   </div>
-                  {isSpectator && (
-                    <button
-                      onClick={handleBecomePlayer}
-                      className="mt-4 w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
-                    >
-                      Tham gia làm người chơi
-                    </button>
+                  {isSpectator && !gameStarted && (
+                    <div className="mt-4 w-full rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700 text-center">
+                      Vui lòng chọn ghế Người chơi ở khung bên phải để tham gia.
+                    </div>
                   )}
                 </div>
               )}
@@ -1165,7 +1328,82 @@ function GomokuGame() {
         </div>
 
         {/* Cột phải: Thông tin người xem */}
-        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8">
+        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8 flex flex-col">
+          {/* Khung người chơi */}
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col mb-8">
+            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
+              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+                <span className="text-lg">🎮</span> Người chơi
+              </h3>
+              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
+                {[player1Name, player2Name].filter(Boolean).length}/2
+              </span>
+            </div>
+
+            <div className="p-4 sm:p-6 flex flex-col gap-4">
+              {/* Team X (Black/Player 1) */}
+              <div className="flex flex-col gap-2">
+                <h4 className="text-sm font-bold text-green-600">
+                  X (Đi trước)
+                </h4>
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                  {player1Name ? (
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-700">
+                        {player1Name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800 truncate">
+                        {player1Name} {playerName === player1Name && "(Bạn)"}{" "}
+                        {hostName === player1Name && "👑"}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleSlotClick(1)}
+                      className="text-sm text-zinc-500 hover:text-green-600 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-green-400 w-full text-left transition-colors"
+                    >
+                      + Tham gia (Người chơi 1)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Team O (White/Player 2) */}
+              <div className="flex flex-col gap-2 mt-2">
+                <h4 className="text-sm font-bold text-red-500">O (Đi sau)</h4>
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                  {player2Name ? (
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-600">
+                        {player2Name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800 truncate">
+                        {player2Name} {playerName === player2Name && "(Bạn)"}{" "}
+                        {hostName === player2Name && "👑"}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleSlotClick(2)}
+                      className="text-sm text-zinc-500 hover:text-red-500 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-red-400 w-full text-left transition-colors"
+                    >
+                      + Tham gia (Người chơi 2)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {!isSpectator && (!gameStarted || winner) && (
+                <button
+                  onClick={handleBecomeSpectator}
+                  className="mt-2 text-sm text-zinc-500 hover:text-zinc-700 underline text-center w-full"
+                >
+                  Rời ghế, trở thành khán giả
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
             <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
               <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">

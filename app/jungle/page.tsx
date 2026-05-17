@@ -885,7 +885,7 @@ function JungleGame() {
   };
 
   const handleBecomeSpectator = () => {
-    if (!channel || gameStarted) return;
+    if (!channel || (gameStarted && !winner)) return;
 
     if (playerName === hostName) {
       const state = stateRef.current;
@@ -1193,7 +1193,7 @@ function JungleGame() {
                       Tham gia làm người chơi
                     </button>
                   )}
-                  {!isSpectator && !gameStarted && (
+                  {!isSpectator && (!gameStarted || winner) && (
                     <button
                       onClick={handleBecomeSpectator}
                       className="mt-4 w-full cursor-pointer rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"

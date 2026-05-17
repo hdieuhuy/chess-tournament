@@ -1460,7 +1460,7 @@ function ChessGame() {
   };
 
   const handleBecomeSpectator = () => {
-    if (!channel || gameStarted) return;
+    if (!channel || (gameStarted && !winner)) return;
 
     if (playerName === hostName) {
       const state = stateRef.current;

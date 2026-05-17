@@ -1280,7 +1280,7 @@ function XiangqiGame() {
   };
 
   const handleBecomeSpectator = () => {
-    if (!channel || gameStarted) return;
+    if (!channel || (gameStarted && !winner)) return;
 
     if (playerName === hostName) {
       const state = stateRef.current;
@@ -2170,7 +2170,7 @@ function XiangqiGame() {
                 )}
               </div>
 
-              {!isSpectator && !gameStarted && (
+              {!isSpectator && (!gameStarted || winner) && (
                 <button
                   onClick={handleBecomeSpectator}
                   className="mt-2 text-sm text-zinc-500 hover:text-zinc-700 underline text-center w-full"
