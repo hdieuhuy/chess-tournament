@@ -683,10 +683,13 @@ function GoGame() {
     return { group, liberties };
   };
 
-  // Area Scoring (Luật đếm đất Trung Quốc)
-  const calculateAreaScore = (finalBoard: (string | null)[][]) => {
-    let blackScore = 0;
-    let whiteScore = KOMI;
+  // Territory Scoring (Luật đếm lãnh thổ Nhật Bản/Hàn Quốc)
+  const calculateTerritoryScore = (
+    finalBoard: (string | null)[][],
+    currentCaptures: { B: number; W: number },
+  ) => {
+    let blackTerritory = 0;
+    let whiteTerritory = 0;
 
     const visited = Array.from({ length: BOARD_SIZE }, () =>
       Array(BOARD_SIZE).fill(false),
@@ -696,11 +699,7 @@ function GoGame() {
       for (let c = 0; c < BOARD_SIZE; c++) {
         if (visited[r][c]) continue;
 
-        if (finalBoard[r][c] === "B") {
-          blackScore++;
-          visited[r][c] = true;
-        } else if (finalBoard[r][c] === "W") {
-          whiteScore++;
+        if (finalBoard[r][c] !== null) {
           visited[r][c] = true;
         } else {
           // Đếm vùng đất trống
@@ -733,13 +732,18 @@ function GoGame() {
           }
 
           if (reachesBlack && !reachesWhite) {
-            blackScore += emptyGroup.length;
+            blackTerritory += emptyGroup.length;
           } else if (reachesWhite && !reachesBlack) {
-            whiteScore += emptyGroup.length;
+            whiteTerritory += emptyGroup.length;
           }
         }
       }
     }
+
+    // Điểm = Đất (Territory) + Tù binh (Captures) + Komi (dành cho Trắng)
+    const blackScore = blackTerritory + currentCaptures.B;
+    const whiteScore = whiteTerritory + currentCaptures.W + KOMI;
+
     return { blackScore, whiteScore };
   };
 
@@ -902,7 +906,10 @@ function GoGame() {
 
     // 2 người bỏ lượt liên tiếp thì kết thúc và tính điểm
     if (newPassCount >= 2) {
-      const { blackScore, whiteScore } = calculateAreaScore(board);
+      const { blackScore, whiteScore } = calculateTerritoryScore(
+        board,
+        captures,
+      );
       score = { black: blackScore, white: whiteScore };
       if (blackScore > whiteScore) {
         newWinner = "B";
@@ -1483,7 +1490,8 @@ function GoGame() {
                             </div>
                           </div>
                           <p className="text-[10px] text-zinc-500 italic text-center">
-                            *Đếm theo luật Trung Quốc (Komi {KOMI}).
+                            *Đếm theo luật lãnh thổ Nhật Bản (Komi {KOMI}). Điểm
+                            = Đất + Số quân bắt được.
                             <br />
                             Tự động tính điểm giả định các quân còn trên bàn đều
                             sống.
