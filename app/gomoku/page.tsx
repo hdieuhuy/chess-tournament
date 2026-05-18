@@ -44,6 +44,7 @@ function GomokuGame() {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [readyPlayers, setReadyPlayers] = useState<string[]>([]);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
 
   const [hasInitialized, setHasInitialized] = useState<boolean>(false);
   const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
@@ -82,6 +83,11 @@ function GomokuGame() {
     }
     setIsCheckingStorage(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("gomokuTheme");
+    if (savedTheme === "dark") setIsDarkMode(true);
   }, []);
 
   const stateRef = useRef({
@@ -147,13 +153,16 @@ function GomokuGame() {
           winner,
           winningCells,
           lastMove,
+          history: newHistory,
           gameStartTime: syncedStartTime,
         } = payload.payload;
         setBoard(board);
         setIsBlackNext(isBlackNext);
         setWinner(winner);
-        setWinningCells(winningCells);
+        if (winningCells !== undefined) setWinningCells(winningCells);
         setLastMove(lastMove);
+        if (newHistory) setHistory(newHistory);
+        setUndoRequestedBy(null);
         if (syncedStartTime) setGameStartTime(syncedStartTime);
       })
       .on("broadcast", { event: "reset-game" }, () => {
@@ -302,7 +311,7 @@ function GomokuGame() {
         }
       })
       .on("broadcast", { event: "request-role-change" }, (payload) => {
-        const { playerName: reqPlayer, newRole } = payload.payload;
+        const { playerName: reqPlayer, newRole, targetSlot } = payload.payload;
         const state = stateRef.current;
         if (state.hostName === playerName) {
           if (newRole === "player") {
@@ -925,8 +934,31 @@ function GomokuGame() {
   const handleAcceptUndo = () => {
     const state = stateRef.current;
     if (state.history.length > 0 && channel) {
-      const prevState = state.history[state.history.length - 1];
-      const newHistory = state.history.slice(0, -1);
+      let targetIndex = state.history.length - 1;
+      const requesterColor =
+        state.player1Name === state.undoRequestedBy ? "B" : "W";
+      const requesterTurn = requesterColor === "B";
+
+      while (targetIndex >= 0) {
+        if (state.history[targetIndex].isBlackNext === requesterTurn) {
+          break;
+        }
+        targetIndex--;
+      }
+
+      if (targetIndex < 0) {
+        toast.error("Không có nước cờ nào của bạn để đi lại.");
+        setUndoRequestedBy(null);
+        channel.send({
+          type: "broadcast",
+          event: "reject-undo",
+          payload: {},
+        });
+        return;
+      }
+
+      const prevState = state.history[targetIndex];
+      const newHistory = state.history.slice(0, targetIndex);
 
       setBoard(prevState.board);
       setIsBlackNext(prevState.isBlackNext);
@@ -1003,6 +1035,29 @@ function GomokuGame() {
     return `${m}:${s}`;
   };
 
+  const toggleTheme = () => {
+    setIsDarkMode((prev) => {
+      const newMode = !prev;
+      localStorage.setItem("gomokuTheme", newMode ? "dark" : "light");
+      return newMode;
+    });
+  };
+
+  const canUndo = () => {
+    if (isSpectator || history.length < 2) return false;
+    const requesterColor = isPlayer1 ? "B" : isPlayer2 ? "W" : null;
+    if (!requesterColor) return false;
+    const requesterTurn = requesterColor === "B";
+
+    // Chỉ cho phép xin đi lại khi ĐANG TỚI LƯỢT CỦA MÌNH
+    if (isBlackNext !== requesterTurn) return false;
+
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].isBlackNext === requesterTurn) return true;
+    }
+    return false;
+  };
+
   if (isCheckingStorage) {
     return (
       <div className="flex min-h-screen items-center justify-center font-medium text-zinc-500">
@@ -1012,15 +1067,21 @@ function GomokuGame() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12">
+    <main
+      className={`flex min-h-screen flex-col items-center justify-center px-4 py-12 transition-colors duration-300 ${isDarkMode ? "bg-slate-900" : "bg-zinc-50"}`}
+    >
       {undoRequestedBy && undoRequestedBy !== playerName && !isSpectator && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4 border border-zinc-200">
-            <p className="mb-6 text-lg font-medium text-zinc-800">
+          <div
+            className={`p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4 border transition-colors ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-200"}`}
+          >
+            <p
+              className={`mb-6 text-lg font-medium ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
+            >
               <span className="font-bold text-purple-600">
                 {undoRequestedBy}
               </span>{" "}
-              muốn xin đi lại 1 nước.
+              muốn xin đi lại.
             </p>
             <div className="flex justify-center gap-4">
               <button
@@ -1048,13 +1109,24 @@ function GomokuGame() {
 
       {/* Avatar Icon */}
       {hasInitialized && (
-        <div className="fixed left-4 top-4 z-50">
+        <div className="fixed left-4 top-4 z-50 flex gap-3">
           <button
             onClick={() => setShowNameModal(true)}
             className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-zinc-900 text-xl font-bold text-white shadow-lg transition-transform hover:scale-105 hover:bg-zinc-800"
             title="Chỉnh sửa tên"
           >
             {playerName ? playerName.charAt(0).toUpperCase() : "👤"}
+          </button>
+          <button
+            onClick={toggleTheme}
+            className={`flex h-12 w-12 cursor-pointer items-center justify-center rounded-full text-xl shadow-lg transition-transform hover:scale-105 ${
+              isDarkMode
+                ? "bg-slate-800 text-yellow-400"
+                : "bg-white text-slate-800 shadow-sm border border-zinc-200"
+            }`}
+            title="Giao diện sáng/tối"
+          >
+            {isDarkMode ? "🌙" : "☀️"}
           </button>
         </div>
       )}
@@ -1137,7 +1209,9 @@ function GomokuGame() {
       <div className="grid w-full max-w-[1600px] flex-1 grid-cols-1 place-items-center gap-8 xl:grid-cols-[1fr_auto_1fr]">
         {/* Cột trái: Thông tin hiển thị & Các nút chức năng */}
         <div className="mb-8 flex w-full max-w-md flex-col items-center text-center xl:mb-0 xl:items-start xl:justify-self-start xl:pl-8 xl:text-left">
-          <h1 className="mb-2 text-3xl font-light tracking-tight text-zinc-900">
+          <h1
+            className={`mb-2 text-3xl font-light tracking-tight transition-colors ${isDarkMode ? "text-slate-100" : "text-zinc-900"}`}
+          >
             Cờ Caro (Gomoku)
           </h1>
 
@@ -1145,13 +1219,21 @@ function GomokuGame() {
             <>
               {player2Name ? (
                 <div className="flex flex-col items-center gap-2 text-sm text-zinc-500 xl:items-start justify-center">
-                  <span className="font-semibold text-zinc-700">Trận đấu:</span>
+                  <span
+                    className={`font-semibold ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}
+                  >
+                    Trận đấu:
+                  </span>
                   <div className="flex flex-col gap-1 items-center xl:items-start">
-                    <span className="font-semibold text-zinc-800">
+                    <span
+                      className={`font-semibold ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
+                    >
                       {player1Name || "..."} (X)
                     </span>
                     <span className="font-bold text-zinc-400">VS</span>
-                    <span className="font-semibold text-zinc-800">
+                    <span
+                      className={`font-semibold ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
+                    >
                       {player2Name || "..."} (O)
                     </span>
                   </div>
@@ -1171,10 +1253,14 @@ function GomokuGame() {
                 </div>
               ) : (
                 <div className="mt-4 flex w-full flex-col items-center xl:items-start">
-                  <p className="mb-3 text-sm text-zinc-500">
+                  <p
+                    className={`mb-3 text-sm transition-colors ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}
+                  >
                     Đang chờ đối thủ tham gia...
                   </p>
-                  <div className="flex w-full items-center space-x-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm">
+                  <div
+                    className={`flex w-full items-center space-x-2 rounded-lg border px-3 py-2 shadow-sm transition-colors ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-200"}`}
+                  >
                     <span className="flex-1 select-all truncate text-left text-xs text-zinc-500">
                       {typeof window !== "undefined"
                         ? window.location.href
@@ -1192,7 +1278,9 @@ function GomokuGame() {
                     </button>
                   </div>
                   {isSpectator && !gameStarted && (
-                    <div className="mt-4 w-full rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700 text-center">
+                    <div
+                      className={`mt-4 w-full rounded-lg px-4 py-3 text-sm text-center transition-colors ${isDarkMode ? "bg-blue-900/30 border border-blue-800 text-blue-300" : "bg-blue-50 border border-blue-100 text-blue-700"}`}
+                    >
                       Vui lòng chọn ghế Người chơi ở khung bên phải để tham gia.
                     </div>
                   )}
@@ -1202,25 +1290,37 @@ function GomokuGame() {
               <div className="mt-6 flex w-full flex-col items-center space-y-3 xl:items-start">
                 {gameStarted ? (
                   <>
-                    <div className="inline-block rounded-full border border-zinc-100 bg-white px-6 py-3 shadow-sm">
-                      <p className="text-sm font-medium text-zinc-800">
+                    <div
+                      className={`inline-block rounded-full border px-6 py-3 shadow-sm transition-colors ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-100"}`}
+                    >
+                      <p
+                        className={`text-sm font-medium transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
+                      >
                         {winner
                           ? `🎉 Người chiến thắng: ${winner === "B" ? player1Name : player2Name}!`
                           : `Lượt đi: ${isBlackNext ? player1Name + " (X)" : player2Name + " (O)"}`}
                       </p>
                     </div>
 
-                    <div className="text-3xl font-mono font-medium tracking-wider text-zinc-800">
+                    <div
+                      className={`text-3xl font-mono font-medium tracking-wider transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
+                    >
                       {formatTime(elapsedTime)}
                     </div>
                   </>
                 ) : (
                   !isSpectator && (
-                    <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
-                      <h3 className="text-base font-semibold text-zinc-800">
+                    <div
+                      className={`flex w-full flex-col items-center space-y-3 rounded-lg border p-6 text-center shadow-sm transition-colors ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-200"}`}
+                    >
+                      <h3
+                        className={`text-base font-semibold transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
+                      >
                         Trận đấu sắp bắt đầu!
                       </h3>
-                      <p className="text-sm text-zinc-500">
+                      <p
+                        className={`text-sm transition-colors ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}
+                      >
                         {readyPlayers.length}/2 người chơi đã sẵn sàng.
                       </p>
                       <button
@@ -1242,7 +1342,7 @@ function GomokuGame() {
           <div className="mt-10 flex w-full flex-wrap justify-center gap-4 xl:justify-start">
             {gameStarted && !winner && !isSpectator && (
               <>
-                {history.length > 0 && (
+                {canUndo() && (
                   <button
                     onClick={handleRequestUndo}
                     disabled={!!undoRequestedBy}
@@ -1271,14 +1371,14 @@ function GomokuGame() {
               <button
                 onClick={resetGame}
                 disabled={!player2Name}
-                className="cursor-pointer rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`cursor-pointer rounded-full border px-6 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${isDarkMode ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700" : "bg-white border-zinc-200 text-zinc-600 hover:bg-zinc-50"}`}
               >
                 Chơi lại
               </button>
             )}
             <Link
               href="/"
-              className="cursor-pointer rounded-full bg-zinc-900 px-6 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+              className={`cursor-pointer rounded-full px-6 py-2 text-sm font-medium transition-colors ${isDarkMode ? "bg-slate-100 text-slate-900 hover:bg-slate-200" : "bg-zinc-900 text-white hover:bg-zinc-800"}`}
             >
               Đổi trò chơi
             </Link>
@@ -1287,10 +1387,10 @@ function GomokuGame() {
 
         {/* Cột giữa: Khu vực bàn cờ caro */}
         <div
-          className={`bg-white p-2 sm:p-4 rounded-sm shadow-xl transition-opacity ${!gameStarted || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
+          className={`p-2 sm:p-4 rounded-sm shadow-xl transition-all ${isDarkMode ? "bg-slate-800" : "bg-white"} ${!gameStarted || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
         >
           <div
-            className="grid gap-0 border border-zinc-800"
+            className={`grid gap-0 border transition-colors ${isDarkMode ? "border-slate-600" : "border-zinc-800"}`}
             style={{
               gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
             }}
@@ -1307,14 +1407,24 @@ function GomokuGame() {
                   <div
                     key={`${rowIndex}-${colIndex}`}
                     onClick={() => handleCellClick(rowIndex, colIndex)}
-                    className={`flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center border border-zinc-800/40 cursor-pointer transition-colors ${
-                      !cell && !winner ? "hover:bg-black/10" : ""
-                    } ${isWinningCell ? "bg-red-400/50" : isLastMove ? "bg-yellow-200" : ""}`}
+                    className={`flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center border cursor-pointer transition-colors ${isDarkMode ? "border-slate-600/40" : "border-zinc-800/40"} ${
+                      !cell && !winner
+                        ? isDarkMode
+                          ? "hover:bg-white/10"
+                          : "hover:bg-black/10"
+                        : ""
+                    } ${isWinningCell ? "bg-red-400/50" : isLastMove ? (isDarkMode ? "bg-yellow-400/30" : "bg-yellow-200") : ""}`}
                   >
                     {cell && (
                       <span
                         className={`font-bold text-xl sm:text-2xl leading-none ${
-                          cell === "B" ? "text-green-600" : "text-red-500"
+                          cell === "B"
+                            ? isDarkMode
+                              ? "text-green-400"
+                              : "text-green-600"
+                            : isDarkMode
+                              ? "text-red-400"
+                              : "text-red-500"
                         }`}
                       >
                         {cell === "B" ? "X" : "O"}
@@ -1330,12 +1440,20 @@ function GomokuGame() {
         {/* Cột phải: Thông tin người xem */}
         <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8 flex flex-col">
           {/* Khung người chơi */}
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col mb-8">
-            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+          <div
+            className={`rounded-2xl border shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col mb-8 transition-colors ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-200"}`}
+          >
+            <div
+              className={`px-6 py-4 border-b flex items-center justify-between sticky top-0 z-10 transition-colors ${isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-zinc-50 border-zinc-200"}`}
+            >
+              <h3
+                className={`text-base font-semibold flex items-center gap-2 transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-900"}`}
+              >
                 <span className="text-lg">🎮</span> Người chơi
               </h3>
-              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
+              <span
+                className={`py-1 px-2.5 rounded-full text-xs font-bold transition-colors ${isDarkMode ? "bg-slate-700 text-slate-300" : "bg-zinc-200 text-zinc-700"}`}
+              >
                 {[player1Name, player2Name].filter(Boolean).length}/2
               </span>
             </div>
@@ -1343,16 +1461,24 @@ function GomokuGame() {
             <div className="p-4 sm:p-6 flex flex-col gap-4">
               {/* Team X (Black/Player 1) */}
               <div className="flex flex-col gap-2">
-                <h4 className="text-sm font-bold text-green-600">
+                <h4
+                  className={`text-sm font-bold transition-colors ${isDarkMode ? "text-green-400" : "text-green-600"}`}
+                >
                   X (Đi trước)
                 </h4>
-                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                <div
+                  className={`flex items-center justify-between border p-2 rounded-lg transition-colors ${isDarkMode ? "bg-slate-700/50 border-slate-600" : "bg-zinc-50 border-zinc-200"}`}
+                >
                   {player1Name ? (
                     <div className="flex items-center gap-2 overflow-hidden">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-700">
+                      <div
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${isDarkMode ? "bg-green-900/50 text-green-300" : "bg-green-100 text-green-700"}`}
+                      >
                         {player1Name.charAt(0).toUpperCase()}
                       </div>
-                      <span className="text-sm font-medium text-zinc-800 truncate">
+                      <span
+                        className={`text-sm font-medium truncate transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
+                      >
                         {player1Name} {playerName === player1Name && "(Bạn)"}{" "}
                         {hostName === player1Name && "👑"}
                       </span>
@@ -1360,7 +1486,7 @@ function GomokuGame() {
                   ) : (
                     <button
                       onClick={() => handleSlotClick(1)}
-                      className="text-sm text-zinc-500 hover:text-green-600 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-green-400 w-full text-left transition-colors"
+                      className={`text-sm font-medium py-1 px-2 border border-dashed rounded w-full text-left transition-colors ${isDarkMode ? "text-slate-400 hover:text-green-400 border-slate-600 hover:border-green-500" : "text-zinc-500 hover:text-green-600 border-zinc-300 hover:border-green-400"}`}
                     >
                       + Tham gia (Người chơi 1)
                     </button>
@@ -1370,14 +1496,24 @@ function GomokuGame() {
 
               {/* Team O (White/Player 2) */}
               <div className="flex flex-col gap-2 mt-2">
-                <h4 className="text-sm font-bold text-red-500">O (Đi sau)</h4>
-                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                <h4
+                  className={`text-sm font-bold transition-colors ${isDarkMode ? "text-red-400" : "text-red-500"}`}
+                >
+                  O (Đi sau)
+                </h4>
+                <div
+                  className={`flex items-center justify-between border p-2 rounded-lg transition-colors ${isDarkMode ? "bg-slate-700/50 border-slate-600" : "bg-zinc-50 border-zinc-200"}`}
+                >
                   {player2Name ? (
                     <div className="flex items-center gap-2 overflow-hidden">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-600">
+                      <div
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${isDarkMode ? "bg-red-900/50 text-red-300" : "bg-red-100 text-red-600"}`}
+                      >
                         {player2Name.charAt(0).toUpperCase()}
                       </div>
-                      <span className="text-sm font-medium text-zinc-800 truncate">
+                      <span
+                        className={`text-sm font-medium truncate transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
+                      >
                         {player2Name} {playerName === player2Name && "(Bạn)"}{" "}
                         {hostName === player2Name && "👑"}
                       </span>
@@ -1385,7 +1521,7 @@ function GomokuGame() {
                   ) : (
                     <button
                       onClick={() => handleSlotClick(2)}
-                      className="text-sm text-zinc-500 hover:text-red-500 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-red-400 w-full text-left transition-colors"
+                      className={`text-sm font-medium py-1 px-2 border border-dashed rounded w-full text-left transition-colors ${isDarkMode ? "text-slate-400 hover:text-red-400 border-slate-600 hover:border-red-500" : "text-zinc-500 hover:text-red-500 border-zinc-300 hover:border-red-400"}`}
                     >
                       + Tham gia (Người chơi 2)
                     </button>
@@ -1404,12 +1540,20 @@ function GomokuGame() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
-            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+          <div
+            className={`rounded-2xl border shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px] transition-colors ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-200"}`}
+          >
+            <div
+              className={`px-6 py-4 border-b flex items-center justify-between sticky top-0 z-10 transition-colors ${isDarkMode ? "bg-slate-800/50 border-slate-700" : "bg-zinc-50 border-zinc-200"}`}
+            >
+              <h3
+                className={`text-base font-semibold flex items-center gap-2 transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-900"}`}
+              >
                 <span className="text-lg">👀</span> Người xem
               </h3>
-              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
+              <span
+                className={`py-1 px-2.5 rounded-full text-xs font-bold transition-colors ${isDarkMode ? "bg-slate-700 text-slate-300" : "bg-zinc-200 text-zinc-700"}`}
+              >
                 {spectators.length}/10
               </span>
             </div>
@@ -1417,7 +1561,9 @@ function GomokuGame() {
               {spectators.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center">
                   <span className="text-3xl mb-2 opacity-20">🪑</span>
-                  <p className="text-sm text-zinc-400 font-medium">
+                  <p
+                    className={`text-sm font-medium transition-colors ${isDarkMode ? "text-slate-500" : "text-zinc-400"}`}
+                  >
                     Chưa có người xem
                   </p>
                 </div>
@@ -1426,14 +1572,16 @@ function GomokuGame() {
                   {spectators.map((spec, idx) => (
                     <li
                       key={idx}
-                      className="group flex items-center justify-between space-x-3 rounded-xl border border-transparent p-2 transition-all hover:bg-zinc-50 hover:border-zinc-100"
+                      className={`group flex items-center justify-between space-x-3 rounded-xl border border-transparent p-2 transition-all ${isDarkMode ? "hover:bg-slate-700 hover:border-slate-600" : "hover:bg-zinc-50 hover:border-zinc-100"}`}
                     >
                       <div className="flex items-center space-x-3 overflow-hidden">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-sm font-bold text-indigo-700 shadow-inner">
+                        <div
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold shadow-inner transition-colors ${isDarkMode ? "bg-indigo-900/50 text-indigo-300" : "bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700"}`}
+                        >
                           {spec.charAt(0).toUpperCase()}
                         </div>
                         <span
-                          className="text-sm font-medium text-zinc-800 truncate"
+                          className={`text-sm font-medium truncate transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
                           title={spec}
                         >
                           {spec}
@@ -1442,7 +1590,7 @@ function GomokuGame() {
                       {playerName === hostName && (
                         <button
                           onClick={() => handleKickPlayer(spec)}
-                          className="shrink-0 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 opacity-100 xl:opacity-0 transition-all hover:bg-red-100 xl:group-hover:opacity-100 focus:opacity-100"
+                          className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-semibold opacity-100 xl:opacity-0 transition-all focus:opacity-100 xl:group-hover:opacity-100 ${isDarkMode ? "bg-red-900/30 text-red-400 hover:bg-red-900/50" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
                           title="Kích người xem"
                         >
                           Kick
