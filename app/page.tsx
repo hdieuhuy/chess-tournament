@@ -141,7 +141,7 @@ export default function LandingPage() {
             </Link>
 
             {/* Codenames */}
-            <Link
+            {/* <Link
               href="/codenames"
               className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
             >
@@ -150,7 +150,7 @@ export default function LandingPage() {
               </div>
               <h3 className="text-base font-medium text-zinc-900">Codenames</h3>
               <p className="mt-1 text-xs text-zinc-500">Mật danh</p>
-            </Link>
+            </Link> */}
           </div>
         </div>
       </main>

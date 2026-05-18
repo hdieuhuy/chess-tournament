@@ -56,6 +56,76 @@ const PIECE_VALUES: Record<string, number> = {
   k: 0,
 };
 
+const getFakeType = (r: number, c: number) => {
+  if ((r === 0 || r === 9) && (c === 0 || c === 8)) return "r";
+  if ((r === 0 || r === 9) && (c === 1 || c === 7)) return "n";
+  if ((r === 0 || r === 9) && (c === 2 || c === 6)) return "b";
+  if ((r === 0 || r === 9) && (c === 3 || c === 5)) return "a";
+  if ((r === 2 || r === 7) && (c === 1 || c === 7)) return "c";
+  if ((r === 3 || r === 6) && c % 2 === 0) return "p";
+  return "p";
+};
+
+const shuffleCoupBoard = () => {
+  const redPieces = [
+    "R",
+    "R",
+    "N",
+    "N",
+    "B",
+    "B",
+    "A",
+    "A",
+    "C",
+    "C",
+    "P",
+    "P",
+    "P",
+    "P",
+    "P",
+  ];
+  const blackPieces = [
+    "r",
+    "r",
+    "n",
+    "n",
+    "b",
+    "b",
+    "a",
+    "a",
+    "c",
+    "c",
+    "p",
+    "p",
+    "p",
+    "p",
+    "p",
+  ];
+
+  const shuffle = (array: string[]) => {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+  };
+  shuffle(redPieces);
+  shuffle(blackPieces);
+
+  const b = INITIAL_BOARD.map((row) => [...row]);
+  let rIdx = 0,
+    bIdx = 0;
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 9; c++) {
+      const p = b[r][c];
+      if (p && p !== "K" && p !== "k") {
+        if (p === p.toUpperCase()) b[r][c] = "?" + redPieces[rIdx++];
+        else b[r][c] = "?" + blackPieces[bIdx++];
+      }
+    }
+  }
+  return b;
+};
+
 // Hàm tiện ích: tính tọa độ điểm giao trên bàn cờ cho SVG
 const X = (c: number) => `${(c + 0.5) * (100 / 9)}%`;
 const Y = (r: number) => `${(r + 0.5) * (100 / 10)}%`;
@@ -88,18 +158,28 @@ const canPieceMoveBasic = (
   fc: number,
   tr: number,
   tc: number,
+  chessVariant: "standard" | "coup",
 ) => {
   const piece = board[fr][fc];
   if (!piece) return false;
 
-  const isRed = piece === piece.toUpperCase();
+  const isFaceDown = piece.startsWith("?");
+  const isRed = isFaceDown
+    ? piece[1] === piece[1].toUpperCase()
+    : piece === piece.toUpperCase();
+
   const target = board[tr][tc];
   if (target) {
-    const targetIsRed = target === target.toUpperCase();
+    const targetIsFaceDown = target.startsWith("?");
+    const targetIsRed = targetIsFaceDown
+      ? target[1] === target[1].toUpperCase()
+      : target === target.toUpperCase();
     if (isRed === targetIsRed) return false; // Không ăn quân mình
   }
 
-  const pType = piece.toLowerCase();
+  const pType = isFaceDown
+    ? getFakeType(fr, fc)
+    : piece.replace("?", "").toLowerCase();
   const dr = tr - fr;
   const dc = tc - fc;
   const adr = Math.abs(dr);
@@ -112,13 +192,17 @@ const canPieceMoveBasic = (
     if (!isRed && tr > 2) return false;
   } else if (pType === "a") {
     if (adr !== 1 || adc !== 1) return false;
-    if (tc < 3 || tc > 5) return false;
-    if (isRed && tr < 7) return false;
-    if (!isRed && tr > 2) return false;
+    if (chessVariant !== "coup") {
+      if (tc < 3 || tc > 5) return false;
+      if (isRed && tr < 7) return false;
+      if (!isRed && tr > 2) return false;
+    }
   } else if (pType === "b") {
     if (adr !== 2 || adc !== 2) return false;
-    if (isRed && tr < 5) return false; // Không qua sông
-    if (!isRed && tr > 4) return false;
+    if (chessVariant !== "coup") {
+      if (isRed && tr < 5) return false; // Không qua sông
+      if (!isRed && tr > 4) return false;
+    }
     if (board[fr + dr / 2][fc + dc / 2]) return false; // Cản mắt tượng
   } else if (pType === "n") {
     if (!((adr === 2 && adc === 1) || (adr === 1 && adc === 2))) return false;
@@ -139,7 +223,7 @@ const canPieceMoveBasic = (
     if (isRed) {
       if (dr > 0) return false; // Không đi lùi
       if (fr >= 5) {
-        if (dr !== -1 || dc !== 0) return false; // Chưa qua sông
+        if (dr !== -1 || dc !== 0) return false;
       } else {
         if (dr === -1 && dc === 0) return true;
         if (dr === 0 && adc === 1) return true; // Sang ngang
@@ -160,7 +244,11 @@ const canPieceMoveBasic = (
 };
 
 // Kiểm tra xem tướng có đang bị chiếu không
-const isKingInCheck = (board: (string | null)[][], isRed: boolean) => {
+const isKingInCheck = (
+  board: (string | null)[][],
+  isRed: boolean,
+  chessVariant: "standard" | "coup",
+) => {
   let kr = -1;
   let kc = -1;
   const kChar = isRed ? "K" : "k";
@@ -180,9 +268,12 @@ const isKingInCheck = (board: (string | null)[][], isRed: boolean) => {
     for (let c = 0; c < 9; c++) {
       const p = board[r][c];
       if (p) {
-        const pIsRed = p === p.toUpperCase();
+        const pIsFaceDown = p.startsWith("?");
+        const pIsRed = pIsFaceDown
+          ? p[1] === p[1].toUpperCase()
+          : p === p.toUpperCase();
         if (pIsRed !== isRed) {
-          if (canPieceMoveBasic(board, r, c, kr, kc)) {
+          if (canPieceMoveBasic(board, r, c, kr, kc, chessVariant)) {
             return true;
           }
         }
@@ -200,27 +291,35 @@ const isValidMove = (
   tr: number,
   tc: number,
   currentTurn: "r" | "b",
+  chessVariant: "standard" | "coup",
 ) => {
   const piece = board[fr][fc];
   if (!piece) return false;
 
-  const isRed = piece === piece.toUpperCase();
+  const isFaceDown = piece.startsWith("?");
+  const isRed = isFaceDown
+    ? piece[1] === piece[1].toUpperCase()
+    : piece === piece.toUpperCase();
+
   if ((isRed && currentTurn === "b") || (!isRed && currentTurn === "r"))
     return false;
 
-  if (!canPieceMoveBasic(board, fr, fc, tr, tc)) return false;
+  if (!canPieceMoveBasic(board, fr, fc, tr, tc, chessVariant)) return false;
 
-  // 1. Thử đi để kiểm tra xem tướng của mình có bị uy hiếp hay lộ mặt không (Tối ưu Zero-Allocation)
+  // 1. Thử đi để kiểm tra xem tướng của mình có bị uy hiếp hay lộ mặt không
   const targetPiece = board[tr][tc];
-  board[tr][tc] = piece;
-  board[fr][fc] = null;
+  const flippedPiece = isFaceDown ? piece[1] : piece;
+
+  const tempBoard = board.map((row) => [...row]);
+  tempBoard[tr][tc] = flippedPiece;
+  tempBoard[fr][fc] = null;
 
   let kPos: [number, number] | null = null;
   let KPos: [number, number] | null = null;
   for (let r = 0; r < 10; r++) {
     for (let c = 0; c < 9; c++) {
-      if (board[r][c] === "k") kPos = [r, c];
-      if (board[r][c] === "K") KPos = [r, c];
+      if (tempBoard[r][c] === "k") kPos = [r, c];
+      if (tempBoard[r][c] === "K") KPos = [r, c];
     }
     if (kPos && KPos) break;
   }
@@ -229,7 +328,7 @@ const isValidMove = (
 
   // Kiểm tra "lộ mặt tướng"
   if (kPos && KPos && kPos[1] === KPos[1]) {
-    if (getPiecesBetween(board, kPos[0], kPos[1], KPos[0], KPos[1]) === 0) {
+    if (getPiecesBetween(tempBoard, kPos[0], kPos[1], KPos[0], KPos[1]) === 0) {
       isValid = false; // Lỗi 2 tướng nhìn thấy nhau
     }
   }
@@ -240,11 +339,23 @@ const isValidMove = (
     if (myKPos) {
       for (let r = 0; r < 10; r++) {
         for (let c = 0; c < 9; c++) {
-          const p = board[r][c];
+          const p = tempBoard[r][c];
           if (p) {
-            const pIsRed = p === p.toUpperCase();
+            const pIsFaceDown = p.startsWith("?");
+            const pIsRed = pIsFaceDown
+              ? p[1] === p[1].toUpperCase()
+              : p === p.toUpperCase();
             if (pIsRed !== isRed) {
-              if (canPieceMoveBasic(board, r, c, myKPos[0], myKPos[1])) {
+              if (
+                canPieceMoveBasic(
+                  tempBoard,
+                  r,
+                  c,
+                  myKPos[0],
+                  myKPos[1],
+                  chessVariant,
+                )
+              ) {
                 isValid = false; // Nước cờ tự sát (bị chiếu)
                 break;
               }
@@ -255,10 +366,6 @@ const isValidMove = (
       }
     }
   }
-
-  // Hoàn tác bàn cờ
-  board[fr][fc] = piece;
-  board[tr][tc] = targetPiece;
 
   return isValid;
 };
@@ -287,6 +394,9 @@ function XiangqiGame() {
   const [player3Name, setPlayer3Name] = useState<string | null>(null);
   const [player4Name, setPlayer4Name] = useState<string | null>(null);
   const [turnIndex, setTurnIndex] = useState<number>(0); // 0: Đỏ 1, 1: Đen 1, 2: Đỏ 2, 3: Đen 2
+  const [chessVariant, setChessVariant] = useState<"standard" | "coup">(
+    "standard",
+  );
   const [history, setHistory] = useState<any[]>([]);
   const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
@@ -357,6 +467,7 @@ function XiangqiGame() {
     lastMove,
     captures,
     gameMode,
+    chessVariant,
     player3Name,
     player4Name,
     turnIndex,
@@ -379,6 +490,7 @@ function XiangqiGame() {
       lastMove,
       captures,
       gameMode,
+      chessVariant,
       player3Name,
       player4Name,
       turnIndex,
@@ -462,7 +574,10 @@ function XiangqiGame() {
       })
       .on("broadcast", { event: "game-start" }, (payload) => {
         setGameStarted(true);
-        // Reset timers on game start for all clients
+        if (payload.payload.board) {
+          setBoard(payload.payload.board);
+          stateRef.current.board = payload.payload.board;
+        }
         setPlayer1Time(INITIAL_TIME);
         setPlayer2Time(INITIAL_TIME);
       })
@@ -545,6 +660,7 @@ function XiangqiGame() {
               lastMove: state.lastMove,
               captures: state.captures,
               gameMode: state.gameMode,
+              chessVariant: state.chessVariant,
               turnIndex: state.turnIndex,
               history: state.history,
               undoRequestedBy: state.undoRequestedBy,
@@ -570,6 +686,7 @@ function XiangqiGame() {
         setLastMove(data.lastMove);
         if (data.captures) setCaptures(data.captures);
         if (data.gameMode !== undefined) setGameMode(data.gameMode);
+        if (data.chessVariant !== undefined) setChessVariant(data.chessVariant);
         if (data.turnIndex !== undefined) setTurnIndex(data.turnIndex);
         if (data.history) setHistory(data.history);
         if (data.undoRequestedBy !== undefined)
@@ -835,13 +952,16 @@ function XiangqiGame() {
       (gameMode === "1v1" || (player3Name && player4Name))
     ) {
       if (playerName === hostName) {
+        const newBoard =
+          chessVariant === "coup" ? shuffleCoupBoard() : INITIAL_BOARD;
         setGameStarted(true);
         setPlayer1Time(INITIAL_TIME);
         setPlayer2Time(INITIAL_TIME);
+        setBoard(newBoard);
         channel.send({
           type: "broadcast",
           event: "game-start",
-          payload: {},
+          payload: { board: newBoard },
         });
       }
     }
@@ -995,7 +1115,12 @@ function XiangqiGame() {
       const currentTurn = isRedTurn ? "r" : "b";
 
       const piece = board[r][c];
-      const isRedPiece = piece ? piece === piece.toUpperCase() : null;
+      const isFaceDown = piece?.startsWith("?");
+      const isRedPiece = piece
+        ? isFaceDown
+          ? piece[1] === piece[1].toUpperCase()
+          : piece === piece.toUpperCase()
+        : null;
 
       // Bấm vào quân của mình để thay đổi lựa chọn
       if (
@@ -1008,7 +1133,7 @@ function XiangqiGame() {
 
       if (selectedPos) {
         const [fr, fc] = selectedPos;
-        if (isValidMove(board, fr, fc, r, c, currentTurn)) {
+        if (isValidMove(board, fr, fc, r, c, currentTurn, chessVariant)) {
           const currentState = {
             board: stateRef.current.board,
             isRedTurn: stateRef.current.isRedTurn,
@@ -1024,13 +1149,20 @@ function XiangqiGame() {
 
           const newBoard = board.map((row) => [...row]);
           const capturedPiece = newBoard[r][c];
-          newBoard[r][c] = newBoard[fr][fc];
+
+          const movingPiece = newBoard[fr][fc] as string;
+          newBoard[r][c] = movingPiece.startsWith("?")
+            ? movingPiece[1]
+            : movingPiece;
           newBoard[fr][fc] = null;
 
           const newCaptures = { r: [...captures.r], b: [...captures.b] };
           if (capturedPiece) {
-            if (isRedTurn) newCaptures.r.push(capturedPiece);
-            else newCaptures.b.push(capturedPiece);
+            const trueCaptured = capturedPiece.startsWith("?")
+              ? capturedPiece[1]
+              : capturedPiece;
+            if (isRedTurn) newCaptures.r.push(trueCaptured);
+            else newCaptures.b.push(trueCaptured);
           }
 
           let newWinner = null;
@@ -1047,15 +1179,38 @@ function XiangqiGame() {
             for (let tr = 0; tr < 10 && !opponentHasValidMove; tr++) {
               for (let tc = 0; tc < 9 && !opponentHasValidMove; tc++) {
                 const p = newBoard[tr][tc];
-                if (
-                  p &&
-                  ((oppColor === "r" && p === p.toUpperCase()) ||
-                    (oppColor === "b" && p === p.toLowerCase()))
-                ) {
-                  for (let t_r = 0; t_r < 10 && !opponentHasValidMove; t_r++) {
-                    for (let t_c = 0; t_c < 9 && !opponentHasValidMove; t_c++) {
-                      if (isValidMove(newBoard, tr, tc, t_r, t_c, oppColor)) {
-                        opponentHasValidMove = true;
+                if (p) {
+                  const pIsFaceDown = p.startsWith("?");
+                  const pIsRed = pIsFaceDown
+                    ? p[1] === p[1].toUpperCase()
+                    : p === p.toUpperCase();
+                  if (
+                    (oppColor === "r" && pIsRed) ||
+                    (oppColor === "b" && !pIsRed)
+                  ) {
+                    for (
+                      let t_r = 0;
+                      t_r < 10 && !opponentHasValidMove;
+                      t_r++
+                    ) {
+                      for (
+                        let t_c = 0;
+                        t_c < 9 && !opponentHasValidMove;
+                        t_c++
+                      ) {
+                        if (
+                          isValidMove(
+                            newBoard,
+                            tr,
+                            tc,
+                            t_r,
+                            t_c,
+                            oppColor,
+                            chessVariant,
+                          )
+                        ) {
+                          opponentHasValidMove = true;
+                        }
                       }
                     }
                   }
@@ -1471,8 +1626,21 @@ function XiangqiGame() {
     }
   };
 
-  const isRedInCheck = isKingInCheck(board, true);
-  const isBlackInCheck = isKingInCheck(board, false);
+  const handleChangeChessVariant = (variant: "standard" | "coup") => {
+    if (playerName !== hostName || gameStarted) return;
+    setChessVariant(variant);
+    stateRef.current.chessVariant = variant;
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: { ...stateRef.current },
+      });
+    }
+  };
+
+  const isRedInCheck = isKingInCheck(board, true, chessVariant);
+  const isBlackInCheck = isKingInCheck(board, false, chessVariant);
 
   if (isCheckingStorage) {
     return (
@@ -1557,35 +1725,67 @@ function XiangqiGame() {
           />
 
           {!hasInitialized && !roomParam && (
-            <div className="flex flex-col space-y-2">
-              <label className="text-sm font-medium text-zinc-700">
-                Chế độ chơi:
-              </label>
-              <div className="flex flex-col gap-2 sm:gap-4">
-                <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
-                  <input
-                    type="radio"
-                    name="gameMode"
-                    value="1v1"
-                    checked={gameMode === "1v1"}
-                    onChange={() => setGameMode("1v1")}
-                    className="accent-zinc-900"
-                  />
-                  <span>1 vs 1</span>
+            <>
+              <div className="flex flex-col space-y-2">
+                <label className="text-sm font-medium text-zinc-700">
+                  Chế độ chơi:
                 </label>
-                <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
-                  <input
-                    type="radio"
-                    name="gameMode"
-                    value="2v2"
-                    checked={gameMode === "2v2"}
-                    onChange={() => setGameMode("2v2")}
-                    className="accent-zinc-900"
-                  />
-                  <span>2 vs 2 (Đồng đội)</span>
-                </label>
+                <div className="flex flex-col gap-2 sm:gap-4">
+                  <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="gameMode"
+                      value="1v1"
+                      checked={gameMode === "1v1"}
+                      onChange={() => setGameMode("1v1")}
+                      className="accent-zinc-900"
+                    />
+                    <span>1 vs 1</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="gameMode"
+                      value="2v2"
+                      checked={gameMode === "2v2"}
+                      onChange={() => setGameMode("2v2")}
+                      className="accent-zinc-900"
+                    />
+                    <span>2 vs 2 (Đồng đội)</span>
+                  </label>
+                </div>
               </div>
-            </div>
+
+              <div className="flex flex-col space-y-2">
+                <label className="text-sm font-medium text-zinc-700">
+                  Thể loại cờ:
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="chessVariant"
+                      value="standard"
+                      checked={chessVariant === "standard"}
+                      onChange={() => setChessVariant("standard")}
+                      className="accent-zinc-900"
+                    />
+                    <span>Truyền thống</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="chessVariant"
+                      value="coup"
+                      checked={chessVariant === "coup"}
+                      onChange={() => setChessVariant("coup")}
+                      className="accent-zinc-900"
+                    />
+                    <span>Cờ úp</span>
+                  </label>
+                </div>
+              </div>
+            </>
           )}
 
           {!hasInitialized && roomParam && (
@@ -1793,7 +1993,7 @@ function XiangqiGame() {
                           <label className="block text-sm font-semibold text-zinc-700 mb-2">
                             Chế độ chơi:
                           </label>
-                          <div className="flex flex-col gap-2 sm:gap-4">
+                          <div className="flex flex-col gap-2 sm:gap-4 mb-4 border-b border-zinc-200 pb-4">
                             <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
                               <input
                                 type="radio"
@@ -1815,12 +2015,46 @@ function XiangqiGame() {
                               2 vs 2 (Đồng đội)
                             </label>
                           </div>
+
+                          <label className="block text-sm font-semibold text-zinc-700 mb-2">
+                            Thể loại cờ:
+                          </label>
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="inRoomChessVariant"
+                                checked={chessVariant === "standard"}
+                                onChange={() =>
+                                  handleChangeChessVariant("standard")
+                                }
+                                className="accent-zinc-900"
+                              />
+                              Truyền thống
+                            </label>
+                            <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="inRoomChessVariant"
+                                checked={chessVariant === "coup"}
+                                onChange={() =>
+                                  handleChangeChessVariant("coup")
+                                }
+                                className="accent-zinc-900"
+                              />
+                              Cờ úp
+                            </label>
+                          </div>
                         </div>
                       )}
                       {playerName !== hostName && (
                         <p className="text-sm font-medium text-zinc-700">
                           Chế độ:{" "}
-                          {gameMode === "1v1" ? "1 vs 1" : "2 vs 2 (Đồng đội)"}
+                          {gameMode === "1v1" ? "1 vs 1" : "2 vs 2 (Đồng đội)"}{" "}
+                          -{" "}
+                          {chessVariant === "standard"
+                            ? "Truyền thống"
+                            : "Cờ úp"}
                         </p>
                       )}
 
@@ -1994,6 +2228,14 @@ function XiangqiGame() {
                             (lastMove?.from[0] === r &&
                               lastMove?.from[1] === c) ||
                             (lastMove?.to[0] === r && lastMove?.to[1] === c);
+
+                          const isFaceDown = piece?.startsWith("?");
+                          const displayPiece =
+                            isFaceDown && piece ? piece[1] : piece;
+                          const pIsRed = isFaceDown
+                            ? displayPiece === displayPiece?.toUpperCase()
+                            : piece === piece?.toUpperCase();
+
                           const canMoveTo =
                             selectedPos &&
                             !piece &&
@@ -2004,6 +2246,7 @@ function XiangqiGame() {
                               r,
                               c,
                               isRedTurn ? "r" : "b",
+                              chessVariant,
                             );
                           const canCapture =
                             selectedPos &&
@@ -2015,6 +2258,7 @@ function XiangqiGame() {
                               r,
                               c,
                               isRedTurn ? "r" : "b",
+                              chessVariant,
                             );
 
                           return (
@@ -2031,12 +2275,26 @@ function XiangqiGame() {
                             border-2 ${isLastMove ? "border-blue-400" : "border-[#8B5A2B]"} 
                             shadow-[1px_2px_4px_rgba(0,0,0,0.5)] 
                             font-bold text-2xl sm:text-3xl md:text-4xl leading-none
-                            ${piecesMap[piece].color}
+                            ${!isFaceDown ? (piece ? piecesMap[piece].color : "") : pIsRed ? "text-red-600" : "text-zinc-900"}
                             ${isSelected ? "ring-4 ring-blue-500 bg-blue-100" : ""}
                             ${canCapture ? "ring-4 ring-red-500/70" : ""}
                           `}
                                 >
-                                  {piecesMap[piece].text}
+                                  {isFaceDown ? (
+                                    <div
+                                      className={`w-full h-full rounded-full border-[3px] flex items-center justify-center shadow-inner ${pIsRed ? "bg-red-900/10 border-red-900/30" : "bg-zinc-800/10 border-zinc-800/30"}`}
+                                    >
+                                      <span
+                                        className={`text-lg sm:text-xl md:text-2xl opacity-40 font-serif ${pIsRed ? "text-red-900" : "text-zinc-900"}`}
+                                      >
+                                        ?
+                                      </span>
+                                    </div>
+                                  ) : piece ? (
+                                    piecesMap[piece].text
+                                  ) : (
+                                    ""
+                                  )}
                                 </div>
                               )}
                               {!piece && canMoveTo && (
