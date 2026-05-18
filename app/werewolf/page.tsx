@@ -2274,7 +2274,7 @@ function WerewolfGame() {
         alivePlayers: newAlive,
         extraLives: newExtraLives,
         dayPhase: null,
-        dayTimeLeft: 0,
+        dayTimeLeft: newWinner ? 0 : 5,
         actionLogs: newLogs,
         extraWolfKill: newExtraWolfKill,
       };
@@ -2294,7 +2294,7 @@ function WerewolfGame() {
             alivePlayers: newAlive,
             extraLives: newExtraLives,
             dayPhase: null,
-            dayTimeLeft: 0,
+            dayTimeLeft: newWinner ? 0 : 5,
             actionLogs: newLogs,
             extraWolfKill: newExtraWolfKill,
           },
@@ -2303,201 +2303,6 @@ function WerewolfGame() {
     },
     [channel],
   );
-
-  const advanceDayPhase = useCallback(() => {
-    const state = stateRef.current;
-    if (state.dayPhase === "discussion") {
-      dispatch({
-        type: "UPDATE",
-        payload: { dayPhase: "voting", dayTimeLeft: 45 },
-      });
-      if (channel) {
-        channel.send({
-          type: "broadcast",
-          event: "day-phase-change",
-          payload: {
-            dayPhase: "voting",
-            dayTimeLeft: 45,
-            dayVotes: {},
-            accusedPlayer: null,
-            executionVotes: {},
-          },
-        });
-      }
-    } else if (state.dayPhase === "voting") {
-      const voteCounts: Record<string, number> = {};
-      Object.entries(state.dayVotes).forEach(([voter, target]) => {
-        if (target !== "skip") {
-          const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
-          voteCounts[target] = (voteCounts[target] || 0) + weight;
-        }
-      });
-
-      const voteDetails = Object.entries(state.dayVotes)
-        .map(
-          ([voter, target]) =>
-            `${voter} ➔ ${target === "skip" ? "Bỏ qua" : target}`,
-        )
-        .join(", ");
-      const voteLog: ActionLog = {
-        id: Math.random().toString(36).substring(2, 9),
-        dayCount: state.dayCount,
-        roleId: "system",
-        playerName: "system",
-        content: voteDetails
-          ? `Chi tiết biểu quyết: ${voteDetails}`
-          : "Không có ai tham gia biểu quyết.",
-      };
-
-      let maxVotes = 0;
-      let accused: string | null = null;
-      let tie = false;
-
-      Object.entries(voteCounts).forEach(([target, count]) => {
-        if (count > maxVotes) {
-          maxVotes = count;
-          accused = target;
-          tie = false;
-        } else if (count === maxVotes) {
-          tie = true;
-        }
-      });
-
-      if (accused && !tie) {
-        const sysLog: ActionLog = {
-          id: Math.random().toString(36).substring(2, 9),
-          dayCount: state.dayCount,
-          roleId: "system",
-          playerName: "system",
-          content: `${accused} có nhiều phiếu nhất (${maxVotes} phiếu) và đang bị đưa lên giàn treo cổ để biện hộ.`,
-        };
-        const newLogs = [...state.actionLogs, voteLog, sysLog];
-
-        dispatch({
-          type: "UPDATE",
-          payload: {
-            dayPhase: "defense",
-            dayTimeLeft: 90,
-            accusedPlayer: accused,
-            actionLogs: newLogs,
-          },
-        });
-
-        if (channel) {
-          channel.send({
-            type: "broadcast",
-            event: "day-phase-change",
-            payload: {
-              dayPhase: "defense",
-              dayTimeLeft: 90,
-              accusedPlayer: accused,
-              actionLogs: newLogs,
-            },
-          });
-        }
-      } else {
-        const sysLog: ActionLog = {
-          id: Math.random().toString(36).substring(2, 9),
-          dayCount: state.dayCount,
-          roleId: "system",
-          playerName: "system",
-          content:
-            tie && maxVotes > 0
-              ? `Bầu cử hòa (${maxVotes} phiếu). Làng quyết định không treo cổ ai hôm nay.`
-              : `Làng quyết định không treo cổ ai hôm nay.`,
-        };
-        const newLogs = [...state.actionLogs, voteLog, sysLog];
-
-        dispatch({
-          type: "UPDATE",
-          payload: {
-            dayPhase: null,
-            dayTimeLeft: 0,
-            actionLogs: newLogs,
-          },
-        });
-
-        if (channel) {
-          channel.send({
-            type: "broadcast",
-            event: "day-phase-change",
-            payload: {
-              dayPhase: null,
-              dayTimeLeft: 0,
-              accusedPlayer: null,
-              actionLogs: newLogs,
-            },
-          });
-        }
-      }
-    } else if (state.dayPhase === "defense") {
-      dispatch({
-        type: "UPDATE",
-        payload: { dayPhase: "execution", dayTimeLeft: 45 },
-      });
-      if (channel) {
-        channel.send({
-          type: "broadcast",
-          event: "day-phase-change",
-          payload: { dayPhase: "execution", dayTimeLeft: 45 },
-        });
-      }
-    } else if (state.dayPhase === "execution") {
-      let killVotes = 0;
-      let saveVotes = 0;
-      Object.entries(state.executionVotes).forEach(([voter, vote]) => {
-        const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
-        if (vote === "kill") killVotes += weight;
-        else if (vote === "save") saveVotes += weight;
-      });
-
-      if (killVotes > saveVotes && state.accusedPlayer) {
-        executeDayExecution(state.accusedPlayer);
-      } else {
-        const execVoteDetails = Object.entries(state.executionVotes)
-          .map(
-            ([voter, vote]) =>
-              `${voter} ➔ ${vote === "kill" ? "Treo cổ" : "Tha bổng"}`,
-          )
-          .join(", ");
-        const execVoteLog: ActionLog = {
-          id: Math.random().toString(36).substring(2, 9),
-          dayCount: state.dayCount,
-          roleId: "system",
-          playerName: "system",
-          content: execVoteDetails
-            ? `Chi tiết phiếu sinh tử: ${execVoteDetails}`
-            : "Không có ai tham gia phiếu sinh tử.",
-        };
-
-        const sysLog: ActionLog = {
-          id: Math.random().toString(36).substring(2, 9),
-          dayCount: state.dayCount,
-          roleId: "system",
-          playerName: "system",
-          content: `${state.accusedPlayer} đã được tha bổng với ${saveVotes} phiếu cứu / ${killVotes} phiếu treo cổ.`,
-        };
-        const newLogs = [...state.actionLogs, execVoteLog, sysLog];
-
-        dispatch({
-          type: "UPDATE",
-          payload: {
-            dayPhase: null,
-            dayTimeLeft: 0,
-            actionLogs: newLogs,
-          },
-        });
-
-        if (channel) {
-          channel.send({
-            type: "broadcast",
-            event: "day-phase-change",
-            payload: { dayPhase: null, dayTimeLeft: 0, actionLogs: newLogs },
-          });
-        }
-      }
-    }
-  }, [channel, executeDayExecution]);
 
   const executeNightResolution = useCallback(() => {
     const state = stateRef.current;
@@ -2816,6 +2621,261 @@ function WerewolfGame() {
     }
   }, [channel, executeNightResolution, playerName]);
 
+  const handleNextPhase = useCallback(() => {
+    if (channel && hostName === playerName) {
+      if (phase === "role_reveal" || phase === "day") {
+        const nextDay = phase === "role_reveal" ? 1 : dayCount + 1;
+        const firstNightPhase = getNextNightPhase(null, playerRoles, nextDay);
+
+        if (firstNightPhase) {
+          const timeLimit =
+            firstNightPhase === "hunter" && nextDay > 1 ? 15 : 120;
+          dispatch({
+            type: "UPDATE",
+            payload: {
+              phase: "night",
+              dayCount: nextDay,
+              nightPhase: firstNightPhase,
+              nightTimeLeft: timeLimit,
+              confirmedPlayers: [],
+              nightSelection: null,
+              actionConfirmed: false,
+              seerResult: null,
+              wolfVotes: {},
+              wolfVictim: [],
+              witchAction: { heal: [], poison: null },
+              dayPhase: null,
+              dayTimeLeft: 0,
+              extraWolfKill: false,
+              activeExtraWolfKill: stateRef.current.extraWolfKill,
+            },
+          });
+
+          channel.send({
+            type: "broadcast",
+            event: "phase-change",
+            payload: {
+              phase: "night",
+              dayCount: nextDay,
+              nightPhase: firstNightPhase,
+              nightTimeLeft: timeLimit,
+              confirmedPlayers: [],
+              dayPhase: null,
+              dayTimeLeft: 0,
+              extraWolfKill: false,
+              activeExtraWolfKill: stateRef.current.extraWolfKill,
+            },
+          });
+        } else {
+          executeNightResolution();
+        }
+      }
+    }
+  }, [
+    channel,
+    hostName,
+    playerName,
+    phase,
+    dayCount,
+    playerRoles,
+    executeNightResolution,
+  ]);
+
+  const advanceDayPhase = useCallback(() => {
+    const state = stateRef.current;
+    if (state.dayPhase === "discussion") {
+      dispatch({
+        type: "UPDATE",
+        payload: { dayPhase: "voting", dayTimeLeft: 45 },
+      });
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "day-phase-change",
+          payload: {
+            dayPhase: "voting",
+            dayTimeLeft: 45,
+            dayVotes: {},
+            accusedPlayer: null,
+            executionVotes: {},
+          },
+        });
+      }
+    } else if (state.dayPhase === "voting") {
+      const voteCounts: Record<string, number> = {};
+      Object.entries(state.dayVotes).forEach(([voter, target]) => {
+        if (target !== "skip") {
+          const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
+          voteCounts[target] = (voteCounts[target] || 0) + weight;
+        }
+      });
+
+      const voteDetails = Object.entries(state.dayVotes)
+        .map(
+          ([voter, target]) =>
+            `${voter} ➔ ${target === "skip" ? "Bỏ qua" : target}`,
+        )
+        .join(", ");
+      const voteLog: ActionLog = {
+        id: Math.random().toString(36).substring(2, 9),
+        dayCount: state.dayCount,
+        roleId: "system",
+        playerName: "system",
+        content: voteDetails
+          ? `Chi tiết biểu quyết: ${voteDetails}`
+          : "Không có ai tham gia biểu quyết.",
+      };
+
+      let maxVotes = 0;
+      let accused: string | null = null;
+      let tie = false;
+
+      Object.entries(voteCounts).forEach(([target, count]) => {
+        if (count > maxVotes) {
+          maxVotes = count;
+          accused = target;
+          tie = false;
+        } else if (count === maxVotes) {
+          tie = true;
+        }
+      });
+
+      if (accused && !tie) {
+        const sysLog: ActionLog = {
+          id: Math.random().toString(36).substring(2, 9),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content: `${accused} có nhiều phiếu nhất (${maxVotes} phiếu) và đang bị đưa lên giàn treo cổ để biện hộ.`,
+        };
+        const newLogs = [...state.actionLogs, voteLog, sysLog];
+
+        dispatch({
+          type: "UPDATE",
+          payload: {
+            dayPhase: "defense",
+            dayTimeLeft: 90,
+            accusedPlayer: accused,
+            actionLogs: newLogs,
+          },
+        });
+
+        if (channel) {
+          channel.send({
+            type: "broadcast",
+            event: "day-phase-change",
+            payload: {
+              dayPhase: "defense",
+              dayTimeLeft: 90,
+              accusedPlayer: accused,
+              actionLogs: newLogs,
+            },
+          });
+        }
+      } else {
+        const sysLog: ActionLog = {
+          id: Math.random().toString(36).substring(2, 9),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content:
+            tie && maxVotes > 0
+              ? `Bầu cử hòa (${maxVotes} phiếu). Làng quyết định không treo cổ ai hôm nay.`
+              : `Làng quyết định không treo cổ ai hôm nay.`,
+        };
+        const newLogs = [...state.actionLogs, voteLog, sysLog];
+
+        dispatch({
+          type: "UPDATE",
+          payload: {
+            dayPhase: null,
+            dayTimeLeft: 5,
+            actionLogs: newLogs,
+          },
+        });
+
+        if (channel) {
+          channel.send({
+            type: "broadcast",
+            event: "day-phase-change",
+            payload: {
+              dayPhase: null,
+              dayTimeLeft: 5,
+              accusedPlayer: null,
+              actionLogs: newLogs,
+            },
+          });
+        }
+      }
+    } else if (state.dayPhase === "defense") {
+      dispatch({
+        type: "UPDATE",
+        payload: { dayPhase: "execution", dayTimeLeft: 45 },
+      });
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "day-phase-change",
+          payload: { dayPhase: "execution", dayTimeLeft: 45 },
+        });
+      }
+    } else if (state.dayPhase === "execution") {
+      let killVotes = 0;
+      let saveVotes = 0;
+      Object.entries(state.executionVotes).forEach(([voter, vote]) => {
+        const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
+        if (vote === "kill") killVotes += weight;
+        else if (vote === "save") saveVotes += weight;
+      });
+
+      if (killVotes > saveVotes && state.accusedPlayer) {
+        executeDayExecution(state.accusedPlayer);
+      } else {
+        const execVoteDetails = Object.entries(state.executionVotes)
+          .map(
+            ([voter, vote]) =>
+              `${voter} ➔ ${vote === "kill" ? "Treo cổ" : "Tha bổng"}`,
+          )
+          .join(", ");
+        const execVoteLog: ActionLog = {
+          id: Math.random().toString(36).substring(2, 9),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content: execVoteDetails
+            ? `Chi tiết phiếu sinh tử: ${execVoteDetails}`
+            : "Không có ai tham gia phiếu sinh tử.",
+        };
+
+        const sysLog: ActionLog = {
+          id: Math.random().toString(36).substring(2, 9),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content: `${state.accusedPlayer} đã được tha bổng với ${saveVotes} phiếu cứu / ${killVotes} phiếu treo cổ.`,
+        };
+        const newLogs = [...state.actionLogs, execVoteLog, sysLog];
+
+        dispatch({
+          type: "UPDATE",
+          payload: {
+            dayPhase: null,
+            dayTimeLeft: 5,
+            actionLogs: newLogs,
+          },
+        });
+
+        if (channel) {
+          channel.send({
+            type: "broadcast",
+            event: "day-phase-change",
+            payload: { dayPhase: null, dayTimeLeft: 5, actionLogs: newLogs },
+          });
+        }
+      }
+    }
+  }, [channel, executeDayExecution]);
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     if (phase === "night" && gameStarted) {
@@ -2856,7 +2916,7 @@ function WerewolfGame() {
 
   const dayTimerRef = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
-    if (phase === "day" && gameStarted && dayPhase) {
+    if (phase === "day" && gameStarted) {
       if (dayTimeLeft > 0) {
         dayTimerRef.current = setTimeout(() => {
           dispatch({
@@ -2876,7 +2936,11 @@ function WerewolfGame() {
           }
         }, 1000);
       } else if (dayTimeLeft === 0 && hostName === playerName) {
-        advanceDayPhase();
+        if (!dayPhase) {
+          handleNextPhase();
+        } else {
+          advanceDayPhase();
+        }
       }
     }
     return () => {
@@ -2891,6 +2955,8 @@ function WerewolfGame() {
     gameStarted,
     channel,
     advanceDayPhase,
+    dayCount,
+    handleNextPhase,
   ]);
 
   const deadRoleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -3240,56 +3306,6 @@ function WerewolfGame() {
         event: "reset-game",
         payload: {},
       });
-    }
-  };
-
-  const handleNextPhase = () => {
-    if (channel && hostName === playerName) {
-      if (phase === "role_reveal" || phase === "day") {
-        const nextDay = phase === "role_reveal" ? 1 : dayCount + 1;
-        const firstNightPhase = getNextNightPhase(null, playerRoles, nextDay);
-
-        if (firstNightPhase) {
-          const timeLimit =
-            firstNightPhase === "hunter" && nextDay > 1 ? 15 : 120;
-          dispatch({
-            type: "UPDATE",
-            payload: {
-              phase: "night",
-              dayCount: nextDay,
-              nightPhase: firstNightPhase,
-              nightTimeLeft: timeLimit,
-              confirmedPlayers: [],
-              nightSelection: null,
-              actionConfirmed: false,
-              seerResult: null,
-              wolfVotes: {},
-              wolfVictim: [],
-              witchAction: { heal: [], poison: null },
-              extraWolfKill: false,
-              activeExtraWolfKill: stateRef.current.extraWolfKill,
-            },
-          });
-
-          channel.send({
-            type: "broadcast",
-            event: "phase-change",
-            payload: {
-              phase: "night",
-              dayCount: nextDay,
-              nightPhase: firstNightPhase,
-              nightTimeLeft: timeLimit,
-              confirmedPlayers: [],
-              dayPhase: null,
-              dayTimeLeft: 0,
-              extraWolfKill: false,
-              activeExtraWolfKill: stateRef.current.extraWolfKill,
-            },
-          });
-        } else {
-          executeNightResolution();
-        }
-      }
     }
   };
 
@@ -4072,11 +4088,22 @@ function WerewolfGame() {
             )}
 
             {/* Day Action Area */}
-            {phase === "day" && gameStarted && dayPhase && (
+            {phase === "day" && gameStarted && (
               <div className="flex flex-col items-center rounded-xl border border-amber-200 bg-amber-50 p-6 shadow-sm md:items-start">
                 <h3 className="mb-4 flex items-center text-sm font-bold text-amber-900">
                   <FaSun className="mr-2 text-lg" /> Ban Ngày - Ngày {dayCount}
                 </h3>
+
+                {!dayPhase && (
+                  <div className="w-full text-center">
+                    <p className="mb-2 text-sm text-amber-800">
+                      Trời sắp tối. Tự động chuyển sang Đêm {dayCount + 1} sau:
+                    </p>
+                    <div className="text-4xl font-mono font-bold text-amber-900">
+                      {dayTimeLeft}s
+                    </div>
+                  </div>
+                )}
 
                 {dayPhase === "discussion" && (
                   <div className="w-full text-center">
