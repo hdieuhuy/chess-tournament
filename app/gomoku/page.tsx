@@ -206,11 +206,6 @@ function GomokuGame() {
         setGameStarted(true);
         setGameStartTime(payload.payload.gameStartTime);
       })
-      .on("broadcast", { event: "swap-roles" }, () => {
-        const state = stateRef.current;
-        setPlayer1Name(state.player2Name);
-        setPlayer2Name(state.player1Name);
-      })
       .on("broadcast", { event: "request-join" }, (payload) => {
         const { playerName: newPlayer, requestedRole: role } = payload.payload;
         const state = stateRef.current;
@@ -1094,23 +1089,6 @@ function GomokuGame() {
     if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "spectator");
   };
 
-  // Logic hiển thị nút Đổi phe (Swap)
-  const moveCount = board.flat().filter(Boolean).length;
-  const myColor = isPlayer1 ? "B" : isPlayer2 ? "W" : null;
-  const currentTurnColor = isBlackNext ? "B" : "W";
-  // Tăng khoảng thời gian (số nước cờ) cho phép đổi phe từ nước 3 kéo dài đến nước 7
-  // Người chơi đang đến lượt của mình có thể thoải mái suy nghĩ xem có nên đoạt lấy phe đối thủ không
-  const canSwap =
-    moveCount >= 3 && moveCount <= 7 && myColor === currentTurnColor && !winner;
-
-  const handleSwap = () => {
-    setPlayer1Name(player2Name);
-    setPlayer2Name(player1Name);
-    if (channel) {
-      channel.send({ type: "broadcast", event: "swap-roles" });
-    }
-  };
-
   const handleRequestUndo = () => {
     if (channel && !isSpectator) {
       setUndoRequestedBy(playerName);
@@ -1644,14 +1622,6 @@ function GomokuGame() {
                     className="cursor-pointer rounded-full border border-purple-300 bg-purple-50 px-6 py-2 text-sm font-medium text-purple-700 shadow-sm transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Xin đi lại
-                  </button>
-                )}
-                {canSwap && (
-                  <button
-                    onClick={handleSwap}
-                    className="cursor-pointer rounded-full border border-amber-300 bg-amber-50 px-6 py-2 text-sm font-medium text-amber-700 shadow-sm transition-colors hover:bg-amber-100"
-                  >
-                    Đổi phe (Swap)
                   </button>
                 )}
                 <button

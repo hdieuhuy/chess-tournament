@@ -44,6 +44,10 @@ function GoGame() {
   const [finalScore, setFinalScore] = useState<{
     black: number;
     white: number;
+    blackTerritory: number;
+    whiteTerritory: number;
+    blackStones: number;
+    whiteStones: number;
   } | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
@@ -683,13 +687,13 @@ function GoGame() {
     return { group, liberties };
   };
 
-  // Territory Scoring (Luật đếm lãnh thổ Nhật Bản/Hàn Quốc)
-  const calculateTerritoryScore = (
-    finalBoard: (string | null)[][],
-    currentCaptures: { B: number; W: number },
-  ) => {
+  // Area Scoring (Luật đếm đất Trung Quốc / Tromp-Taylor)
+  // Điểm = Vùng đất trống hoàn toàn bao quanh bởi 1 phe + Số quân cờ của phe đó trên bàn
+  const calculateScore = (finalBoard: (string | null)[][]) => {
     let blackTerritory = 0;
     let whiteTerritory = 0;
+    let blackStones = 0;
+    let whiteStones = 0;
 
     const visited = Array.from({ length: BOARD_SIZE }, () =>
       Array(BOARD_SIZE).fill(false),
@@ -697,6 +701,9 @@ function GoGame() {
 
     for (let r = 0; r < BOARD_SIZE; r++) {
       for (let c = 0; c < BOARD_SIZE; c++) {
+        if (finalBoard[r][c] === "B") blackStones++;
+        else if (finalBoard[r][c] === "W") whiteStones++;
+
         if (visited[r][c]) continue;
 
         if (finalBoard[r][c] !== null) {
@@ -740,11 +747,18 @@ function GoGame() {
       }
     }
 
-    // Điểm = Đất (Territory) + Tù binh (Captures) + Komi (dành cho Trắng)
-    const blackScore = blackTerritory + currentCaptures.B;
-    const whiteScore = whiteTerritory + currentCaptures.W + KOMI;
+    // Luật Trung Quốc không tính số quân bị bắt (captures)
+    const blackScore = blackTerritory + blackStones;
+    const whiteScore = whiteTerritory + whiteStones + KOMI;
 
-    return { blackScore, whiteScore };
+    return {
+      blackScore,
+      whiteScore,
+      blackTerritory,
+      whiteTerritory,
+      blackStones,
+      whiteStones,
+    };
   };
 
   const handleCellClick = useCallback(
@@ -906,14 +920,18 @@ function GoGame() {
 
     // 2 người bỏ lượt liên tiếp thì kết thúc và tính điểm
     if (newPassCount >= 2) {
-      const { blackScore, whiteScore } = calculateTerritoryScore(
-        board,
-        captures,
-      );
-      score = { black: blackScore, white: whiteScore };
-      if (blackScore > whiteScore) {
+      const scoreResult = calculateScore(board);
+      score = {
+        black: scoreResult.blackScore,
+        white: scoreResult.whiteScore,
+        blackTerritory: scoreResult.blackTerritory,
+        whiteTerritory: scoreResult.whiteTerritory,
+        blackStones: scoreResult.blackStones,
+        whiteStones: scoreResult.whiteStones,
+      };
+      if (scoreResult.blackScore > scoreResult.whiteScore) {
         newWinner = "B";
-      } else if (whiteScore > blackScore) {
+      } else if (scoreResult.whiteScore > scoreResult.blackScore) {
         newWinner = "W";
       } else {
         newWinner = "Draw";
@@ -1476,6 +1494,10 @@ function GoGame() {
                               <span className="text-xl font-bold text-zinc-800">
                                 {finalScore.black}
                               </span>
+                              <div className="text-[10px] text-zinc-500 mt-1">
+                                {finalScore.blackTerritory} đất +{" "}
+                                {finalScore.blackStones} quân
+                              </div>
                             </div>
                             <div className="text-sm font-bold text-zinc-400 px-4">
                               VS
@@ -1487,14 +1509,20 @@ function GoGame() {
                               <span className="text-xl font-bold text-zinc-800">
                                 {finalScore.white}
                               </span>
+                              <div className="text-[10px] text-zinc-500 mt-1">
+                                {finalScore.whiteTerritory} đất +{" "}
+                                {finalScore.whiteStones} quân + {KOMI} Komi
+                              </div>
                             </div>
                           </div>
-                          <p className="text-[10px] text-zinc-500 italic text-center">
-                            *Đếm theo luật lãnh thổ Nhật Bản (Komi {KOMI}). Điểm
-                            = Đất + Số quân bắt được.
+                          <p className="text-[11px] text-zinc-600 font-medium text-center mt-2 border-t border-yellow-200 pt-2">
+                            Lưu ý: Game sử dụng <strong>Luật Trung Quốc</strong>{" "}
+                            (Điểm = Đất + Quân sống trên bàn).
                             <br />
-                            Tự động tính điểm giả định các quân còn trên bàn đều
-                            sống.
+                            Để máy tính điểm chính xác, hai bên{" "}
+                            <strong>PHẢI bắt hết quân chết</strong> và{" "}
+                            <strong>đóng kín ranh giới đất</strong> trước khi bỏ
+                            lượt!
                           </p>
                         </div>
                       )}
