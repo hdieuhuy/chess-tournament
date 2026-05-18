@@ -27,6 +27,10 @@ function GomokuGame() {
   const [lastMove, setLastMove] = useState<[number, number] | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
+  const [gameMode, setGameMode] = useState<"1v1" | "2v2">("1v1");
+  const [player3Name, setPlayer3Name] = useState<string | null>(null);
+  const [player4Name, setPlayer4Name] = useState<string | null>(null);
+  const [turnIndex, setTurnIndex] = useState<number>(0); // 0: P1(B), 1: P2(W), 2: P3(B), 3: P4(W)
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
   const [roomId, setRoomId] = useState<string | null>(roomParam);
@@ -105,6 +109,10 @@ function GomokuGame() {
     gameStartTime,
     gameStarted,
     readyPlayers,
+    gameMode,
+    player3Name,
+    player4Name,
+    turnIndex,
   });
   useEffect(() => {
     stateRef.current = {
@@ -122,6 +130,10 @@ function GomokuGame() {
       gameStartTime,
       gameStarted,
       readyPlayers,
+      gameMode,
+      player3Name,
+      player4Name,
+      turnIndex,
     };
   }, [
     hostName,
@@ -138,6 +150,10 @@ function GomokuGame() {
     gameStartTime,
     gameStarted,
     readyPlayers,
+    gameMode,
+    player3Name,
+    player4Name,
+    turnIndex,
   ]);
 
   useEffect(() => {
@@ -155,6 +171,7 @@ function GomokuGame() {
           lastMove,
           history: newHistory,
           gameStartTime: syncedStartTime,
+          turnIndex: newTurnIndex,
         } = payload.payload;
         setBoard(board);
         setIsBlackNext(isBlackNext);
@@ -163,6 +180,7 @@ function GomokuGame() {
         setLastMove(lastMove);
         if (newHistory) setHistory(newHistory);
         setUndoRequestedBy(null);
+        if (newTurnIndex !== undefined) setTurnIndex(newTurnIndex);
         if (syncedStartTime) setGameStartTime(syncedStartTime);
       })
       .on("broadcast", { event: "reset-game" }, () => {
@@ -176,6 +194,7 @@ function GomokuGame() {
         setElapsedTime(0);
         setGameStarted(false);
         setReadyPlayers([]);
+        setTurnIndex(0);
       })
       .on("broadcast", { event: "player-ready" }, (payload) => {
         const { playerName: readyPlayer } = payload.payload;
@@ -202,7 +221,10 @@ function GomokuGame() {
 
           const isAlreadyPlayer =
             newPlayer === state.player1Name || newPlayer === newP2;
-          const isAlreadySpec = newSpecs.includes(newPlayer);
+          const isAlreadySpec =
+            newSpecs.includes(newPlayer) ||
+            newPlayer === state.player3Name ||
+            newPlayer === state.player4Name;
 
           if (!isAlreadyPlayer && !isAlreadySpec) {
             if (role === "player") {
@@ -213,6 +235,12 @@ function GomokuGame() {
                 newP2 = newPlayer;
                 setPlayer2Name(newP2);
                 stateRef.current.player2Name = newP2;
+              } else if (state.gameMode === "2v2" && !state.player3Name) {
+                setPlayer3Name(newPlayer);
+                stateRef.current.player3Name = newPlayer;
+              } else if (state.gameMode === "2v2" && !state.player4Name) {
+                setPlayer4Name(newPlayer);
+                stateRef.current.player4Name = newPlayer;
               } else {
                 roomChannel.send({
                   type: "broadcast",
@@ -220,7 +248,9 @@ function GomokuGame() {
                   payload: {
                     playerName: newPlayer,
                     reason:
-                      "Phòng đã đủ 2 người chơi, vui lòng tham gia với tư cách Người xem!",
+                      state.gameMode === "2v2"
+                        ? "Phòng đã đủ 4 người chơi!"
+                        : "Phòng đã đủ 2 người chơi!",
                   },
                 });
                 return;
@@ -251,6 +281,8 @@ function GomokuGame() {
               hostName: state.hostName,
               player1Name: state.player1Name,
               player2Name: newP2,
+              player3Name: state.player3Name,
+              player4Name: state.player4Name,
               spectators: newSpecs,
               board: state.board,
               isBlackNext: state.isBlackNext,
@@ -262,6 +294,8 @@ function GomokuGame() {
               gameStartTime: state.gameStartTime,
               gameStarted: state.gameStarted,
               readyPlayers: [], // Reset readiness when a new player joins
+              gameMode: state.gameMode,
+              turnIndex: state.turnIndex,
             },
           });
         }
@@ -271,6 +305,8 @@ function GomokuGame() {
         setHostName(data.hostName);
         setPlayer1Name(data.player1Name);
         setPlayer2Name(data.player2Name);
+        if (data.player3Name !== undefined) setPlayer3Name(data.player3Name);
+        if (data.player4Name !== undefined) setPlayer4Name(data.player4Name);
         setSpectators(data.spectators);
         setBoard(data.board);
         setIsBlackNext(data.isBlackNext);
@@ -284,6 +320,8 @@ function GomokuGame() {
           setGameStartTime(data.gameStartTime);
         if (data.gameStarted !== undefined) setGameStarted(data.gameStarted);
         if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
+        if (data.gameMode !== undefined) setGameMode(data.gameMode);
+        if (data.turnIndex !== undefined) setTurnIndex(data.turnIndex);
       })
       .on("broadcast", { event: "update-name" }, (payload) => {
         const { oldName, newName } = payload.payload;
@@ -291,6 +329,8 @@ function GomokuGame() {
         setPlayer1Name((prev) => (prev === oldName ? newName : prev));
         setPlayer2Name((prev) => (prev === oldName ? newName : prev));
         setSpectators((prev) => prev.map((s) => (s === oldName ? newName : s)));
+        setPlayer3Name((prev) => (prev === oldName ? newName : prev));
+        setPlayer4Name((prev) => (prev === oldName ? newName : prev));
         setReadyPlayers((prev) =>
           prev.map((p) => (p === oldName ? newName : p)),
         );
@@ -324,6 +364,10 @@ function GomokuGame() {
               state.player1Name === reqPlayer ? null : state.player1Name;
             let newP2 =
               state.player2Name === reqPlayer ? null : state.player2Name;
+            let newP3 =
+              state.player3Name === reqPlayer ? null : state.player3Name;
+            let newP4 =
+              state.player4Name === reqPlayer ? null : state.player4Name;
 
             let success = false;
 
@@ -332,6 +376,12 @@ function GomokuGame() {
               success = true;
             } else if (targetSlot === 2 && !newP2) {
               newP2 = reqPlayer;
+              success = true;
+            } else if (targetSlot === 3 && state.gameMode === "2v2" && !newP3) {
+              newP3 = reqPlayer;
+              success = true;
+            } else if (targetSlot === 4 && state.gameMode === "2v2" && !newP4) {
+              newP4 = reqPlayer;
               success = true;
             }
 
@@ -342,17 +392,27 @@ function GomokuGame() {
               } else if (!newP2) {
                 newP2 = reqPlayer;
                 success = true;
+              } else if (state.gameMode === "2v2" && !newP3) {
+                newP3 = reqPlayer;
+                success = true;
+              } else if (state.gameMode === "2v2" && !newP4) {
+                newP4 = reqPlayer;
+                success = true;
               }
             }
 
             if (success) {
               setPlayer1Name(newP1);
               setPlayer2Name(newP2);
+              setPlayer3Name(newP3);
+              setPlayer4Name(newP4);
               setSpectators(newSpecs);
               setReadyPlayers(newReadyPlayers);
 
               stateRef.current.player1Name = newP1;
               stateRef.current.player2Name = newP2;
+              stateRef.current.player3Name = newP3;
+              stateRef.current.player4Name = newP4;
               stateRef.current.spectators = newSpecs;
               stateRef.current.readyPlayers = newReadyPlayers;
 
@@ -367,6 +427,10 @@ function GomokuGame() {
               state.player1Name === reqPlayer ? null : state.player1Name;
             const newP2 =
               state.player2Name === reqPlayer ? null : state.player2Name;
+            const newP3 =
+              state.player3Name === reqPlayer ? null : state.player3Name;
+            const newP4 =
+              state.player4Name === reqPlayer ? null : state.player4Name;
             const newSpecs = [...state.spectators];
             if (!newSpecs.includes(reqPlayer)) {
               newSpecs.push(reqPlayer);
@@ -377,11 +441,15 @@ function GomokuGame() {
 
             setPlayer1Name(newP1);
             setPlayer2Name(newP2);
+            setPlayer3Name(newP3);
+            setPlayer4Name(newP4);
             setSpectators(newSpecs);
             setReadyPlayers(newReadyPlayers);
 
             stateRef.current.player1Name = newP1;
             stateRef.current.player2Name = newP2;
+            stateRef.current.player3Name = newP3;
+            stateRef.current.player4Name = newP4;
             stateRef.current.spectators = newSpecs;
             stateRef.current.readyPlayers = newReadyPlayers;
 
@@ -399,8 +467,12 @@ function GomokuGame() {
 
         let newP1 = state.player1Name;
         let newP2 = state.player2Name;
+        let newP3 = state.player3Name;
+        let newP4 = state.player4Name;
         if (newP1 === leavingPlayer) newP1 = null;
         if (newP2 === leavingPlayer) newP2 = null;
+        if (newP3 === leavingPlayer) newP3 = null;
+        if (newP4 === leavingPlayer) newP4 = null;
 
         const newSpecs = state.spectators.filter((s) => s !== leavingPlayer);
         const newReadyPlayers = state.readyPlayers.filter(
@@ -409,17 +481,21 @@ function GomokuGame() {
 
         let newHostName = state.hostName;
         if (state.hostName === leavingPlayer) {
-          newHostName = newP1 || newP2 || newSpecs[0] || null;
+          newHostName = newP1 || newP2 || newP3 || newP4 || newSpecs[0] || null;
         }
 
         setPlayer1Name(newP1);
         setPlayer2Name(newP2);
+        setPlayer3Name(newP3);
+        setPlayer4Name(newP4);
         setSpectators(newSpecs);
         setReadyPlayers(newReadyPlayers);
         setHostName(newHostName);
 
         stateRef.current.player1Name = newP1;
         stateRef.current.player2Name = newP2;
+        stateRef.current.player3Name = newP3;
+        stateRef.current.player4Name = newP4;
         stateRef.current.spectators = newSpecs;
         stateRef.current.readyPlayers = newReadyPlayers;
         stateRef.current.hostName = newHostName;
@@ -491,8 +567,18 @@ function GomokuGame() {
 
     const p1Ready = readyPlayers.includes(player1Name);
     const p2Ready = readyPlayers.includes(player2Name);
+    const p3Ready =
+      gameMode === "1v1" || (player3Name && readyPlayers.includes(player3Name));
+    const p4Ready =
+      gameMode === "1v1" || (player4Name && readyPlayers.includes(player4Name));
 
-    if (p1Ready && p2Ready) {
+    if (
+      p1Ready &&
+      p2Ready &&
+      p3Ready &&
+      p4Ready &&
+      (gameMode === "1v1" || (player3Name && player4Name))
+    ) {
       // Only host should initiate the start time to prevent desync
       if (playerName === hostName) {
         const startTime = Date.now();
@@ -509,6 +595,9 @@ function GomokuGame() {
     readyPlayers,
     player1Name,
     player2Name,
+    player3Name,
+    player4Name,
+    gameMode,
     gameStarted,
     playerName,
     hostName,
@@ -599,6 +688,48 @@ function GomokuGame() {
     }
   };
 
+  const handleChangeGameMode = (mode: "1v1" | "2v2") => {
+    if (playerName !== hostName || gameStarted) return;
+
+    const newSpecs = [...spectators];
+    let newP3 = player3Name;
+    let newP4 = player4Name;
+    let newReadyPlayers = [...readyPlayers];
+
+    if (mode === "1v1") {
+      if (newP3) {
+        newSpecs.push(newP3);
+        newReadyPlayers = newReadyPlayers.filter((p) => p !== newP3);
+        newP3 = null;
+      }
+      if (newP4) {
+        newSpecs.push(newP4);
+        newReadyPlayers = newReadyPlayers.filter((p) => p !== newP4);
+        newP4 = null;
+      }
+    }
+
+    setGameMode(mode);
+    setPlayer3Name(newP3);
+    setPlayer4Name(newP4);
+    setSpectators(newSpecs);
+    setReadyPlayers(newReadyPlayers);
+
+    stateRef.current.gameMode = mode;
+    stateRef.current.player3Name = newP3;
+    stateRef.current.player4Name = newP4;
+    stateRef.current.spectators = newSpecs;
+    stateRef.current.readyPlayers = newReadyPlayers;
+
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: { ...stateRef.current },
+      });
+    }
+  };
+
   const checkWinner = (
     currentBoard: (string | null)[][],
     row: number,
@@ -669,10 +800,19 @@ function GomokuGame() {
     (row: number, col: number) => {
       if (board[row][col] || winner || !gameStarted || isSpectator) return;
 
-      const myColor = isPlayer1 ? "B" : isPlayer2 ? "W" : null;
-      const currentTurnColor = isBlackNext ? "B" : "W";
-
-      if (myColor !== currentTurnColor) return;
+      const expectedPlayer =
+        gameMode === "2v2"
+          ? turnIndex === 0
+            ? player1Name
+            : turnIndex === 1
+              ? player2Name
+              : turnIndex === 2
+                ? player3Name
+                : player4Name
+          : isBlackNext
+            ? player1Name
+            : player2Name;
+      if (playerName !== expectedPlayer) return;
 
       const currentState = {
         board: stateRef.current.board,
@@ -689,12 +829,14 @@ function GomokuGame() {
       newBoard[row][col] = currentPlayer;
 
       const winCells = checkWinner(newBoard, row, col, currentPlayer);
-      const nextTurn = !isBlackNext;
+      const nextTurnIndex = (turnIndex + 1) % (gameMode === "2v2" ? 4 : 2);
+      const nextTurn = nextTurnIndex % 2 === 0;
       const newWinner = winCells ? currentPlayer : null;
       const newWinningCells = winCells ? winCells : [];
 
       setBoard(newBoard);
       setIsBlackNext(nextTurn);
+      setTurnIndex(nextTurnIndex);
       setWinner(newWinner);
       setWinningCells(newWinningCells);
       setLastMove([row, col]);
@@ -706,6 +848,7 @@ function GomokuGame() {
           payload: {
             board: newBoard,
             isBlackNext: nextTurn,
+            turnIndex: nextTurnIndex,
             winner: newWinner,
             winningCells: newWinningCells,
             lastMove: [row, col],
@@ -725,6 +868,13 @@ function GomokuGame() {
       gameStartTime,
       isSpectator,
       gameStarted,
+      gameMode,
+      turnIndex,
+      player1Name,
+      player2Name,
+      player3Name,
+      player4Name,
+      playerName,
     ],
   );
 
@@ -740,6 +890,7 @@ function GomokuGame() {
     setElapsedTime(0);
     setGameStarted(false);
     setReadyPlayers([]);
+    setTurnIndex(0);
     if (channel) {
       channel.send({ type: "broadcast", event: "reset-game" });
     }
@@ -748,7 +899,10 @@ function GomokuGame() {
   const handleKickPlayer = (targetName: string) => {
     if (playerName !== hostName || !channel) return;
     if (
-      (targetName === player1Name || targetName === player2Name) &&
+      (targetName === player1Name ||
+        targetName === player2Name ||
+        targetName === player3Name ||
+        targetName === player4Name) &&
       gameStarted
     )
       return;
@@ -759,24 +913,7 @@ function GomokuGame() {
       payload: { playerName: targetName },
     });
 
-    if (targetName === player1Name) {
-      setPlayer1Name(null);
-      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
-      if (gameStarted) resetGame();
-      setTimeout(() => {
-        channel.send({
-          type: "broadcast",
-          event: "room-sync",
-          payload: {
-            ...stateRef.current,
-            player1Name: null,
-            readyPlayers: stateRef.current.readyPlayers.filter(
-              (p) => p !== targetName,
-            ),
-          },
-        });
-      }, 50);
-    } else if (targetName === player2Name) {
+    if (targetName === player2Name) {
       setPlayer2Name(null);
       setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
       if (gameStarted) {
@@ -795,6 +932,40 @@ function GomokuGame() {
           },
         });
       }, 50);
+    } else if (targetName === player3Name) {
+      setPlayer3Name(null);
+      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
+      if (gameStarted) resetGame();
+      setTimeout(() => {
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: {
+            ...stateRef.current,
+            player3Name: null,
+            readyPlayers: stateRef.current.readyPlayers.filter(
+              (p) => p !== targetName,
+            ),
+          },
+        });
+      }, 50);
+    } else if (targetName === player4Name) {
+      setPlayer4Name(null);
+      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
+      if (gameStarted) resetGame();
+      setTimeout(() => {
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: {
+            ...stateRef.current,
+            player4Name: null,
+            readyPlayers: stateRef.current.readyPlayers.filter(
+              (p) => p !== targetName,
+            ),
+          },
+        });
+      }, 50);
     } else if (spectators.includes(targetName)) {
       const newSpecs = spectators.filter((s) => s !== targetName);
       setSpectators(newSpecs);
@@ -806,11 +977,13 @@ function GomokuGame() {
     }
   };
 
-  const handleSlotClick = (targetSlot: 1 | 2) => {
+  const handleSlotClick = (targetSlot: 1 | 2 | 3 | 4) => {
     if (!channel || gameStarted) return;
 
     if (targetSlot === 1 && player1Name) return;
     if (targetSlot === 2 && player2Name) return;
+    if (targetSlot === 3 && player3Name) return;
+    if (targetSlot === 4 && player4Name) return;
 
     if (playerName === hostName) {
       const state = stateRef.current;
@@ -821,6 +994,8 @@ function GomokuGame() {
 
       let newP1 = state.player1Name === playerName ? null : state.player1Name;
       let newP2 = state.player2Name === playerName ? null : state.player2Name;
+      let newP3 = state.player3Name === playerName ? null : state.player3Name;
+      let newP4 = state.player4Name === playerName ? null : state.player4Name;
 
       let success = false;
 
@@ -830,16 +1005,26 @@ function GomokuGame() {
       } else if (targetSlot === 2 && !newP2) {
         newP2 = playerName;
         success = true;
+      } else if (targetSlot === 3 && state.gameMode === "2v2" && !newP3) {
+        newP3 = playerName;
+        success = true;
+      } else if (targetSlot === 4 && state.gameMode === "2v2" && !newP4) {
+        newP4 = playerName;
+        success = true;
       }
 
       if (success) {
         setPlayer1Name(newP1);
         setPlayer2Name(newP2);
+        setPlayer3Name(newP3);
+        setPlayer4Name(newP4);
         setSpectators(newSpecs);
         setReadyPlayers(newReadyPlayers);
 
         stateRef.current.player1Name = newP1;
         stateRef.current.player2Name = newP2;
+        stateRef.current.player3Name = newP3;
+        stateRef.current.player4Name = newP4;
         stateRef.current.spectators = newSpecs;
         stateRef.current.readyPlayers = newReadyPlayers;
 
@@ -868,6 +1053,8 @@ function GomokuGame() {
       const state = stateRef.current;
       const newP1 = state.player1Name === playerName ? null : state.player1Name;
       const newP2 = state.player2Name === playerName ? null : state.player2Name;
+      const newP3 = state.player3Name === playerName ? null : state.player3Name;
+      const newP4 = state.player4Name === playerName ? null : state.player4Name;
       const newSpecs = [...state.spectators];
       if (!newSpecs.includes(playerName)) {
         newSpecs.push(playerName);
@@ -878,11 +1065,15 @@ function GomokuGame() {
 
       setPlayer1Name(newP1);
       setPlayer2Name(newP2);
+      setPlayer3Name(newP3);
+      setPlayer4Name(newP4);
       setSpectators(newSpecs);
       setReadyPlayers(newReadyPlayers);
 
       stateRef.current.player1Name = newP1;
       stateRef.current.player2Name = newP2;
+      stateRef.current.player3Name = newP3;
+      stateRef.current.player4Name = newP4;
       stateRef.current.spectators = newSpecs;
       stateRef.current.readyPlayers = newReadyPlayers;
 
@@ -1157,6 +1348,40 @@ function GomokuGame() {
             autoFocus
           />
 
+          {!hasInitialized && !roomParam && (
+            <>
+              <div className="flex flex-col space-y-2">
+                <label className="text-sm font-medium text-zinc-700">
+                  Chế độ chơi:
+                </label>
+                <div className="flex flex-col gap-2 sm:gap-4">
+                  <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="gameMode"
+                      value="1v1"
+                      checked={gameMode === "1v1"}
+                      onChange={() => setGameMode("1v1")}
+                      className="accent-zinc-900"
+                    />
+                    <span>1 vs 1</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
+                    <input
+                      type="radio"
+                      name="gameMode"
+                      value="2v2"
+                      checked={gameMode === "2v2"}
+                      onChange={() => setGameMode("2v2")}
+                      className="accent-zinc-900"
+                    />
+                    <span>2 vs 2 (Đồng đội)</span>
+                  </label>
+                </div>
+              </div>
+            </>
+          )}
+
           {!hasInitialized && roomParam && (
             <div className="flex flex-col space-y-2">
               <label className="text-sm font-medium text-zinc-700">
@@ -1228,22 +1453,34 @@ function GomokuGame() {
                     <span
                       className={`font-semibold ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
                     >
-                      {player1Name || "..."} (X)
+                      {gameMode === "2v2"
+                        ? `Đội X: ${player1Name || "..."} & ${player3Name || "..."}`
+                        : `${player1Name || "..."} (X)`}
                     </span>
                     <span className="font-bold text-zinc-400">VS</span>
                     <span
                       className={`font-semibold ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
                     >
-                      {player2Name || "..."} (O)
+                      {gameMode === "2v2"
+                        ? `Đội O: ${player2Name || "..."} & ${player4Name || "..."}`
+                        : `${player2Name || "..."} (O)`}
                     </span>
                   </div>
                   {playerName === hostName && !gameStarted && (
                     <button
                       onClick={() => {
-                        if (player1Name && player1Name !== hostName)
+                        if (player1Name && player1Name !== hostName) {
                           handleKickPlayer(player1Name);
-                        if (player2Name && player2Name !== hostName)
+                        }
+                        if (player2Name && player2Name !== hostName) {
                           handleKickPlayer(player2Name);
+                        }
+                        if (player3Name && player3Name !== hostName) {
+                          handleKickPlayer(player3Name);
+                        }
+                        if (player4Name && player4Name !== hostName) {
+                          handleKickPlayer(player4Name);
+                        }
                       }}
                       className="mt-2 rounded bg-red-100 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
                     >
@@ -1297,8 +1534,20 @@ function GomokuGame() {
                         className={`text-sm font-medium transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}
                       >
                         {winner
-                          ? `🎉 Người chiến thắng: ${winner === "B" ? player1Name : player2Name}!`
-                          : `Lượt đi: ${isBlackNext ? player1Name + " (X)" : player2Name + " (O)"}`}
+                          ? `🎉 Người chiến thắng: ${winner === "B" ? (gameMode === "2v2" ? "Đội X" : player1Name) : gameMode === "2v2" ? "Đội O" : player2Name}!`
+                          : `Lượt đi: ${
+                              gameMode === "2v2"
+                                ? turnIndex === 0
+                                  ? `${player1Name} (X)`
+                                  : turnIndex === 1
+                                    ? `${player2Name} (O)`
+                                    : turnIndex === 2
+                                      ? `${player3Name} (X)`
+                                      : `${player4Name} (O)`
+                                : isBlackNext
+                                  ? `${player1Name} (X)`
+                                  : `${player2Name} (O)`
+                            }`}
                       </p>
                     </div>
 
@@ -1321,8 +1570,54 @@ function GomokuGame() {
                       <p
                         className={`text-sm transition-colors ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}
                       >
-                        {readyPlayers.length}/2 người chơi đã sẵn sàng.
+                        {readyPlayers.length}/{gameMode === "2v2" ? 4 : 2} người
+                        chơi đã sẵn sàng.
                       </p>
+                      {playerName === hostName && (
+                        <div
+                          className={`w-full mt-2 mb-2 p-3 rounded-lg border text-left transition-colors ${isDarkMode ? "bg-slate-900/50 border-slate-700" : "bg-zinc-50 border-zinc-200"}`}
+                        >
+                          <label
+                            className={`block text-sm font-semibold mb-2 transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}
+                          >
+                            Chế độ chơi:
+                          </label>
+                          <div className="flex flex-col gap-2 sm:gap-4">
+                            <label
+                              className={`flex items-center gap-2 text-sm cursor-pointer transition-colors ${isDarkMode ? "text-slate-400" : "text-zinc-600"}`}
+                            >
+                              <input
+                                type="radio"
+                                name="inRoomGameMode"
+                                checked={gameMode === "1v1"}
+                                onChange={() => handleChangeGameMode("1v1")}
+                                className="accent-zinc-900"
+                              />
+                              1 vs 1
+                            </label>
+                            <label
+                              className={`flex items-center gap-2 text-sm cursor-pointer transition-colors ${isDarkMode ? "text-slate-400" : "text-zinc-600"}`}
+                            >
+                              <input
+                                type="radio"
+                                name="inRoomGameMode"
+                                checked={gameMode === "2v2"}
+                                onChange={() => handleChangeGameMode("2v2")}
+                                className="accent-zinc-900"
+                              />
+                              2 vs 2 (Đồng đội)
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                      {playerName !== hostName && (
+                        <p
+                          className={`text-sm font-medium transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}
+                        >
+                          Chế độ:{" "}
+                          {gameMode === "1v1" ? "1 vs 1" : "2 vs 2 (Đồng đội)"}
+                        </p>
+                      )}
                       <button
                         onClick={handleStartClick}
                         disabled={readyPlayers.includes(playerName || "")}
@@ -1454,7 +1749,11 @@ function GomokuGame() {
               <span
                 className={`py-1 px-2.5 rounded-full text-xs font-bold transition-colors ${isDarkMode ? "bg-slate-700 text-slate-300" : "bg-zinc-200 text-zinc-700"}`}
               >
-                {[player1Name, player2Name].filter(Boolean).length}/2
+                {gameMode === "1v1"
+                  ? [player1Name, player2Name].filter(Boolean).length + "/2"
+                  : [player1Name, player2Name, player3Name, player4Name].filter(
+                      Boolean,
+                    ).length + "/4"}
               </span>
             </div>
 
@@ -1464,7 +1763,7 @@ function GomokuGame() {
                 <h4
                   className={`text-sm font-bold transition-colors ${isDarkMode ? "text-green-400" : "text-green-600"}`}
                 >
-                  X (Đi trước)
+                  Đội X
                 </h4>
                 <div
                   className={`flex items-center justify-between border p-2 rounded-lg transition-colors ${isDarkMode ? "bg-slate-700/50 border-slate-600" : "bg-zinc-50 border-zinc-200"}`}
@@ -1493,13 +1792,35 @@ function GomokuGame() {
                   )}
                 </div>
               </div>
+              {gameMode === "2v2" && (
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                  {player3Name ? (
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-700">
+                        {player3Name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800 truncate">
+                        {player3Name} {playerName === player3Name && "(Bạn)"}{" "}
+                        {hostName === player3Name && "👑"}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleSlotClick(3)}
+                      className="text-sm text-zinc-500 hover:text-green-600 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-green-400 w-full text-left transition-colors"
+                    >
+                      + Tham gia (Người chơi 3)
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Team O (White/Player 2) */}
               <div className="flex flex-col gap-2 mt-2">
                 <h4
                   className={`text-sm font-bold transition-colors ${isDarkMode ? "text-red-400" : "text-red-500"}`}
                 >
-                  O (Đi sau)
+                  Đội O
                 </h4>
                 <div
                   className={`flex items-center justify-between border p-2 rounded-lg transition-colors ${isDarkMode ? "bg-slate-700/50 border-slate-600" : "bg-zinc-50 border-zinc-200"}`}
@@ -1528,6 +1849,28 @@ function GomokuGame() {
                   )}
                 </div>
               </div>
+              {gameMode === "2v2" && (
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                  {player4Name ? (
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-600">
+                        {player4Name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800 truncate">
+                        {player4Name} {playerName === player4Name && "(Bạn)"}{" "}
+                        {hostName === player4Name && "👑"}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleSlotClick(4)}
+                      className="text-sm text-zinc-500 hover:text-red-500 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-red-400 w-full text-left transition-colors"
+                    >
+                      + Tham gia (Người chơi 4)
+                    </button>
+                  )}
+                </div>
+              )}
 
               {!isSpectator && (!gameStarted || winner) && (
                 <button
