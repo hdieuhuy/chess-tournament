@@ -22,7 +22,7 @@ export function Card({
         className={`relative aspect-[2.5/3.5] w-32 cursor-pointer overflow-hidden rounded-lg border-4 border-red-900 bg-red-700 shadow-lg ${className}`}
       >
         <Image
-          src="https://explodi.ng/assets/decks/exploding-kittens-original-edition.png"
+          src="https://cdn.tgdd.vn/GameApp/2/235774/Screentshots/exploding-kittens-bai-meo-no-235774-logo-28-02-2021.png"
           alt="Mặt sau lá bài"
           fill
           style={{ objectFit: "contain" }}

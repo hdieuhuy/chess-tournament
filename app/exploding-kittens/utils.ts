@@ -75,7 +75,7 @@ export function dealCards(playerNames: string[]): {
     (card) => card.type !== "exploding-kitten" && card.type !== "defuse",
   );
 
-  // 2. Shuffle the remaining deck and deal 7 cards to each player.
+  // 2. Shuffle the remaining deck and deal 5 cards to each player.
   deckWithoutBombsAndDefuses = shuffle(deckWithoutBombsAndDefuses);
 
   const playerHands: Record<string, CardInstance[]> = {};
@@ -83,7 +83,7 @@ export function dealCards(playerNames: string[]): {
     playerHands[name] = [];
   });
 
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 5; i++) {
     for (const name of playerNames) {
       const card = deckWithoutBombsAndDefuses.pop();
       if (card) {
