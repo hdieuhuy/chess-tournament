@@ -77,6 +77,13 @@ const GAMES = [
     icon: "🃏",
     iconClassName: "text-2xl",
   },
+  {
+    href: "/exploding-kittens",
+    title: "Mèo Nổ",
+    subtitle: "Exploding Kittens",
+    icon: "🐱💣",
+    iconClassName: "text-2xl",
+  },
 ];
 
 export default function LandingPage() {

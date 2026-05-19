@@ -192,14 +192,14 @@ const canPieceMoveBasic = (
     if (!isRed && tr > 2) return false;
   } else if (pType === "a") {
     if (adr !== 1 || adc !== 1) return false;
-    if (chessVariant !== "coup") {
+    if (chessVariant !== "coup" || isFaceDown) {
       if (tc < 3 || tc > 5) return false;
       if (isRed && tr < 7) return false;
       if (!isRed && tr > 2) return false;
     }
   } else if (pType === "b") {
     if (adr !== 2 || adc !== 2) return false;
-    if (chessVariant !== "coup") {
+    if (chessVariant !== "coup" || isFaceDown) {
       if (isRed && tr < 5) return false; // Không qua sông
       if (!isRed && tr > 4) return false;
     }
@@ -1158,9 +1158,12 @@ function XiangqiGame() {
 
           const newCaptures = { r: [...captures.r], b: [...captures.b] };
           if (capturedPiece) {
-            const trueCaptured = capturedPiece.startsWith("?")
-              ? capturedPiece[1]
-              : capturedPiece;
+            const trueCaptured =
+              chessVariant === "coup" && capturedPiece.startsWith("?")
+                ? capturedPiece
+                : capturedPiece.startsWith("?")
+                  ? capturedPiece[1]
+                  : capturedPiece;
             if (isRedTurn) newCaptures.r.push(trueCaptured);
             else newCaptures.b.push(trueCaptured);
           }
@@ -2508,18 +2511,40 @@ function XiangqiGame() {
                 <div className="flex flex-wrap gap-1 min-h-[32px] items-center bg-zinc-50 p-2 rounded-lg border border-zinc-100">
                   {captures.r.length > 0 ? (
                     [...captures.r]
-                      .sort(
-                        (a, b) =>
-                          (PIECE_VALUES[b] || 0) - (PIECE_VALUES[a] || 0),
-                      )
-                      .map((p, i) => (
-                        <div
-                          key={i}
-                          className={`flex items-center justify-center w-6 h-6 rounded-full bg-[#FFE6B3] border border-[#8B5A2B] text-xs font-bold drop-shadow-sm ${piecesMap[p].color}`}
-                        >
-                          {piecesMap[p].text}
-                        </div>
-                      ))
+                      .sort((a, b) => {
+                        const valA = a.startsWith("?")
+                          ? -1
+                          : PIECE_VALUES[a] || 0;
+                        const valB = b.startsWith("?")
+                          ? -1
+                          : PIECE_VALUES[b] || 0;
+                        return valB - valA;
+                      })
+                      .map((p, i) => {
+                        if (p.startsWith("?")) {
+                          const pIsRed = p[1] === p[1].toUpperCase();
+                          return (
+                            <div
+                              key={i}
+                              className={`flex items-center justify-center w-6 h-6 rounded-full border border-[#8B5A2B] shadow-inner ${pIsRed ? "bg-red-900/10 border-red-900/30" : "bg-zinc-800/10 border-zinc-800/30"}`}
+                            >
+                              <span
+                                className={`text-[10px] opacity-40 font-serif ${pIsRed ? "text-red-900" : "text-zinc-900"}`}
+                              >
+                                ?
+                              </span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div
+                            key={i}
+                            className={`flex items-center justify-center w-6 h-6 rounded-full bg-[#FFE6B3] border border-[#8B5A2B] text-xs font-bold drop-shadow-sm ${piecesMap[p].color}`}
+                          >
+                            {piecesMap[p].text}
+                          </div>
+                        );
+                      })
                   ) : (
                     <span className="text-xs text-zinc-400 italic">
                       Chưa ăn quân nào
@@ -2538,18 +2563,40 @@ function XiangqiGame() {
                 <div className="flex flex-wrap gap-1 min-h-[32px] items-center bg-zinc-50 p-2 rounded-lg border border-zinc-100">
                   {captures.b.length > 0 ? (
                     [...captures.b]
-                      .sort(
-                        (a, b) =>
-                          (PIECE_VALUES[b] || 0) - (PIECE_VALUES[a] || 0),
-                      )
-                      .map((p, i) => (
-                        <div
-                          key={i}
-                          className={`flex items-center justify-center w-6 h-6 rounded-full bg-[#FFE6B3] border border-[#8B5A2B] text-xs font-bold drop-shadow-sm ${piecesMap[p].color}`}
-                        >
-                          {piecesMap[p].text}
-                        </div>
-                      ))
+                      .sort((a, b) => {
+                        const valA = a.startsWith("?")
+                          ? -1
+                          : PIECE_VALUES[a] || 0;
+                        const valB = b.startsWith("?")
+                          ? -1
+                          : PIECE_VALUES[b] || 0;
+                        return valB - valA;
+                      })
+                      .map((p, i) => {
+                        if (p.startsWith("?")) {
+                          const pIsRed = p[1] === p[1].toUpperCase();
+                          return (
+                            <div
+                              key={i}
+                              className={`flex items-center justify-center w-6 h-6 rounded-full border border-[#8B5A2B] shadow-inner ${pIsRed ? "bg-red-900/10 border-red-900/30" : "bg-zinc-800/10 border-zinc-800/30"}`}
+                            >
+                              <span
+                                className={`text-[10px] opacity-40 font-serif ${pIsRed ? "text-red-900" : "text-zinc-900"}`}
+                              >
+                                ?
+                              </span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div
+                            key={i}
+                            className={`flex items-center justify-center w-6 h-6 rounded-full bg-[#FFE6B3] border border-[#8B5A2B] text-xs font-bold drop-shadow-sm ${piecesMap[p].color}`}
+                          >
+                            {piecesMap[p].text}
+                          </div>
+                        );
+                      })
                   ) : (
                     <span className="text-xs text-zinc-400 italic">
                       Chưa ăn quân nào
