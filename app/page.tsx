@@ -1,6 +1,77 @@
 import Link from "next/link";
 import Image from "next/image";
 
+const GAMES = [
+  {
+    href: "/gomoku",
+    title: "Cờ Caro",
+    subtitle: "Gomoku",
+    icon: (
+      <>
+        <span className="font-bold text-green-600">X</span>
+        <span className="font-bold text-red-500">O</span>
+      </>
+    ),
+    iconClassName: "text-xl",
+  },
+  {
+    href: "/chess",
+    title: "Cờ Vua",
+    subtitle: "Chess",
+    icon: "♚",
+    iconClassName: "text-2xl",
+  },
+  {
+    href: "/xiangqi",
+    title: "Cờ Tướng",
+    subtitle: "Xiangqi",
+    icon: "帥",
+    iconClassName: "text-2xl font-bold text-red-600",
+  },
+  {
+    href: "/go",
+    title: "Cờ Vây",
+    subtitle: "Go",
+    icon: "⚫⚪",
+    iconClassName: "text-2xl",
+  },
+  {
+    href: "/battleship",
+    title: "Bắn Thuyền",
+    subtitle: "Battleship",
+    icon: "🚢",
+    iconClassName: "text-2xl",
+  },
+  {
+    href: "/werewolf",
+    title: "Ma Sói",
+    subtitle: "Werewolf",
+    icon: "🐺",
+    iconClassName: "text-2xl",
+  },
+  {
+    href: "/oanquan",
+    title: "Ô Ăn Quan",
+    subtitle: "O An Quan",
+    icon: "🪨",
+    iconClassName: "text-2xl",
+  },
+  {
+    href: "/jungle",
+    title: "Cờ Thú",
+    subtitle: "Jungle",
+    icon: "🦁",
+    iconClassName: "text-2xl",
+  },
+  {
+    href: "/checkers",
+    title: "Cờ Đam",
+    subtitle: "Checkers",
+    icon: "🔴",
+    iconClassName: "text-2xl",
+  },
+];
+
 export default function LandingPage() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-white text-zinc-900 selection:bg-zinc-200">
@@ -29,128 +100,23 @@ export default function LandingPage() {
 
           {/* Danh sách Game */}
           <div className="mt-4 flex flex-wrap justify-center gap-4">
-            {/* Cờ Caro */}
-            <Link
-              href="/gomoku"
-              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
-            >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-xl transition-colors group-hover:bg-zinc-100">
-                <span className="font-bold text-green-600">X</span>
-                <span className="font-bold text-red-500">O</span>
-              </div>
-              <h3 className="text-base font-medium text-zinc-900">Cờ Caro</h3>
-              <p className="mt-1 text-xs text-zinc-500">Gomoku</p>
-            </Link>
-
-            {/* Cờ Vua */}
-            <Link
-              href="/chess"
-              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
-            >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-2xl transition-colors group-hover:bg-zinc-100">
-                ♚
-              </div>
-              <h3 className="text-base font-medium text-zinc-900">Cờ Vua</h3>
-              <p className="mt-1 text-xs text-zinc-500">Chess</p>
-            </Link>
-
-            {/* Cờ Tướng */}
-            <Link
-              href="/xiangqi"
-              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
-            >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-2xl font-bold text-red-600 transition-colors group-hover:bg-zinc-100">
-                帥
-              </div>
-              <h3 className="text-base font-medium text-zinc-900">Cờ Tướng</h3>
-              <p className="mt-1 text-xs text-zinc-500">Xiangqi</p>
-            </Link>
-
-            {/* Cờ Vây */}
-            <Link
-              href="/go"
-              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
-            >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-2xl transition-colors group-hover:bg-zinc-100">
-                ⚫⚪
-              </div>
-              <h3 className="text-base font-medium text-zinc-900">Cờ Vây</h3>
-              <p className="mt-1 text-xs text-zinc-500">Go</p>
-            </Link>
-
-            {/* Bắn Thuyền */}
-            <Link
-              href="/battleship"
-              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
-            >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-2xl transition-colors group-hover:bg-zinc-100">
-                🚢
-              </div>
-              <h3 className="text-base font-medium text-zinc-900">
-                Bắn Thuyền
-              </h3>
-              <p className="mt-1 text-xs text-zinc-500">Battleship</p>
-            </Link>
-
-            {/* Ma Sói */}
-            <Link
-              href="/werewolf"
-              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
-            >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-2xl transition-colors group-hover:bg-zinc-100">
-                🐺
-              </div>
-              <h3 className="text-base font-medium text-zinc-900">Ma Sói</h3>
-              <p className="mt-1 text-xs text-zinc-500">Werewolf</p>
-            </Link>
-
-            {/* Ô Ăn Quan */}
-            <Link
-              href="/oanquan"
-              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
-            >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-2xl transition-colors group-hover:bg-zinc-100">
-                🪨
-              </div>
-              <h3 className="text-base font-medium text-zinc-900">Ô Ăn Quan</h3>
-              <p className="mt-1 text-xs text-zinc-500">O An Quan</p>
-            </Link>
-
-            {/* Cờ Thú */}
-            <Link
-              href="/jungle"
-              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
-            >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-2xl transition-colors group-hover:bg-zinc-100">
-                🦁
-              </div>
-              <h3 className="text-base font-medium text-zinc-900">Cờ Thú</h3>
-              <p className="mt-1 text-xs text-zinc-500">Jungle</p>
-            </Link>
-
-            {/* Cờ Đam */}
-            <Link
-              href="/checkers"
-              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
-            >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-2xl transition-colors group-hover:bg-zinc-100">
-                🔴
-              </div>
-              <h3 className="text-base font-medium text-zinc-900">Cờ Đam</h3>
-              <p className="mt-1 text-xs text-zinc-500">Checkers</p>
-            </Link>
-
-            {/* Codenames */}
-            {/* <Link
-              href="/codenames"
-              className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
-            >
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 text-2xl transition-colors group-hover:bg-zinc-100">
-                🕵️
-              </div>
-              <h3 className="text-base font-medium text-zinc-900">Codenames</h3>
-              <p className="mt-1 text-xs text-zinc-500">Mật danh</p>
-            </Link> */}
+            {GAMES.map((game) => (
+              <Link
+                key={game.href}
+                href={game.href}
+                className="group flex w-[calc(50%-8px)] flex-col items-center rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-1 hover:border-zinc-300 hover:shadow-md sm:w-[calc(33.333%-11px)] md:w-[calc(33.333%-11px)]"
+              >
+                <div
+                  className={`mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-50 transition-colors group-hover:bg-zinc-100 ${game.iconClassName}`}
+                >
+                  {game.icon}
+                </div>
+                <h3 className="text-base font-medium text-zinc-900">
+                  {game.title}
+                </h3>
+                <p className="mt-1 text-xs text-zinc-500">{game.subtitle}</p>
+              </Link>
+            ))}
           </div>
         </div>
       </main>
