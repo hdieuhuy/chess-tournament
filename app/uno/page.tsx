@@ -11,6 +11,16 @@ import toast from "react-hot-toast";
 import { generateUnoDeck, UnoCard, CardColor } from "./constants";
 import { motion, AnimatePresence } from "framer-motion";
 
+const generateId = () => Math.random().toString(36).substring(2, 10);
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const newArr = [...array];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
+};
+
 const getCardColorClass = (color: CardColor) => {
   switch (color) {
     case "red":
@@ -366,7 +376,7 @@ function UnoGame() {
       if (!roomParam) {
         setShowNameModal(false);
         setHasInitialized(true);
-        const newRoomId = Math.random().toString(36).substring(2, 10);
+        const newRoomId = generateId();
         setRoomId(newRoomId);
         setHostName(savedName);
         setPlayers([savedName]);
@@ -397,7 +407,7 @@ function UnoGame() {
     if (!hasInitialized) {
       setHasInitialized(true);
       if (!roomId) {
-        const newRoomId = Math.random().toString(36).substring(2, 10);
+        const newRoomId = generateId();
         setRoomId(newRoomId);
         setHostName(newName);
         setPlayers([newName]);
@@ -462,12 +472,8 @@ function UnoGame() {
   const handleStartGame = () => {
     if (playerName !== hostName) return;
 
-    const initialDeck = generateUnoDeck();
-    // Fisher-Yates Shuffle
-    for (let i = initialDeck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [initialDeck[i], initialDeck[j]] = [initialDeck[j], initialDeck[i]];
-    }
+    let initialDeck = generateUnoDeck();
+    initialDeck = shuffleArray(initialDeck);
 
     const initialHands: Record<string, UnoCard[]> = {};
     players.forEach((p) => {
@@ -556,10 +562,7 @@ function UnoGame() {
         if (nextDeck.length === 0 && newDiscard.length > 1) {
           const top = newDiscard.pop()!;
           nextDeck = [...newDiscard];
-          for (let idx = nextDeck.length - 1; idx > 0; idx--) {
-            const j = Math.floor(Math.random() * (idx + 1));
-            [nextDeck[idx], nextDeck[j]] = [nextDeck[j], nextDeck[idx]];
-          }
+          nextDeck = shuffleArray(nextDeck);
           newDiscard.length = 0;
           newDiscard.push(top);
         }
@@ -640,10 +643,7 @@ function UnoGame() {
     if (nextDeck.length === 0 && newDiscard.length > 1) {
       const top = newDiscard.pop()!;
       nextDeck = [...newDiscard];
-      for (let idx = nextDeck.length - 1; idx > 0; idx--) {
-        const j = Math.floor(Math.random() * (idx + 1));
-        [nextDeck[idx], nextDeck[j]] = [nextDeck[j], nextDeck[idx]];
-      }
+      nextDeck = shuffleArray(nextDeck);
       newDiscard.length = 0;
       newDiscard.push(top);
     }

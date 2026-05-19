@@ -33,6 +33,18 @@ import RoleConfigPanel from "./RoleConfigPanel";
 import ActionLogsArea from "./ActionLogsArea";
 import toast from "react-hot-toast";
 
+const generateId = () => Math.random().toString(36).substring(2, 9);
+const getRandomInt = (min: number, max: number) =>
+  Math.floor(Math.random() * (max - min + 1)) + min;
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const newArr = [...array];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
+};
+
 const getNextNightPhase = (
   currentPhase: string | null,
   roles: Record<string, RoleConfig>,
@@ -1390,7 +1402,7 @@ function WerewolfGame() {
       if (!roomParam) {
         setShowNameModal(false);
         setHasInitialized(true);
-        const newRoomId = Math.random().toString(36).substring(2, 10);
+        const newRoomId = generateId();
         setRoomId(newRoomId);
         dispatch({
           type: "UPDATE",
@@ -1910,7 +1922,7 @@ function WerewolfGame() {
           payload.payload.playerName !== state.hostName
         ) {
           const sysLog: ActionLog = {
-            id: Math.random().toString(36).substring(2, 9),
+            id: generateId(),
             dayCount: state.dayCount,
             roleId: "system",
             playerName: "system",
@@ -2064,7 +2076,7 @@ function WerewolfGame() {
     if (!hasInitialized) {
       setHasInitialized(true);
       if (!roomId) {
-        const newRoomId = Math.random().toString(36).substring(2, 10);
+        const newRoomId = generateId();
         setRoomId(newRoomId);
         dispatch({
           type: "UPDATE",
@@ -2227,7 +2239,7 @@ function WerewolfGame() {
         )
         .join(", ");
       const execVoteLog: ActionLog = {
-        id: Math.random().toString(36).substring(2, 9),
+        id: generateId(),
         dayCount: state.dayCount,
         roleId: "system",
         playerName: "system",
@@ -2237,7 +2249,7 @@ function WerewolfGame() {
       };
 
       const sysLog: ActionLog = {
-        id: Math.random().toString(36).substring(2, 9),
+        id: generateId(),
         dayCount: state.dayCount,
         roleId: "system",
         playerName: "system",
@@ -2248,7 +2260,7 @@ function WerewolfGame() {
 
       if (newWinner) {
         const endLog: ActionLog = {
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           dayCount: state.dayCount,
           roleId: "system",
           playerName: "system",
@@ -2325,7 +2337,7 @@ function WerewolfGame() {
               count: 1,
             };
             newLogs.push({
-              id: Math.random().toString(36).substring(2, 9),
+              id: generateId(),
               dayCount: state.dayCount,
               roleId: "werewolf",
               playerName: victim,
@@ -2351,7 +2363,7 @@ function WerewolfGame() {
     if (state.infectedPlayer) {
       if (state.infectedPlayer === state.lastProtected) {
         newLogs.push({
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           dayCount: state.dayCount,
           roleId: "werewolf",
           playerName: state.infectedPlayer,
@@ -2364,7 +2376,7 @@ function WerewolfGame() {
           count: 1,
         };
         newLogs.push({
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           dayCount: state.dayCount,
           roleId: "werewolf",
           playerName: state.infectedPlayer,
@@ -2458,7 +2470,7 @@ function WerewolfGame() {
 
     const finalDeadArray = Array.from(actualDeaths);
     const sysLog: ActionLog = {
-      id: Math.random().toString(36).substring(2, 9),
+      id: generateId(),
       dayCount: state.dayCount,
       roleId: "system",
       playerName: "system",
@@ -2471,7 +2483,7 @@ function WerewolfGame() {
 
     if (state.mediumResurrect) {
       newLogs.push({
-        id: Math.random().toString(36).substring(2, 9),
+        id: generateId(),
         dayCount: state.dayCount,
         roleId: "system",
         playerName: "system",
@@ -2481,7 +2493,7 @@ function WerewolfGame() {
 
     if (newWinner) {
       const endLog: ActionLog = {
-        id: Math.random().toString(36).substring(2, 9),
+        id: generateId(),
         dayCount: state.dayCount,
         roleId: "system",
         playerName: "system",
@@ -2717,7 +2729,7 @@ function WerewolfGame() {
         )
         .join(", ");
       const voteLog: ActionLog = {
-        id: Math.random().toString(36).substring(2, 9),
+        id: generateId(),
         dayCount: state.dayCount,
         roleId: "system",
         playerName: "system",
@@ -2742,7 +2754,7 @@ function WerewolfGame() {
 
       if (accused && !tie) {
         const sysLog: ActionLog = {
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           dayCount: state.dayCount,
           roleId: "system",
           playerName: "system",
@@ -2774,7 +2786,7 @@ function WerewolfGame() {
         }
       } else {
         const sysLog: ActionLog = {
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           dayCount: state.dayCount,
           roleId: "system",
           playerName: "system",
@@ -2838,7 +2850,7 @@ function WerewolfGame() {
           )
           .join(", ");
         const execVoteLog: ActionLog = {
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           dayCount: state.dayCount,
           roleId: "system",
           playerName: "system",
@@ -2848,7 +2860,7 @@ function WerewolfGame() {
         };
 
         const sysLog: ActionLog = {
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           dayCount: state.dayCount,
           roleId: "system",
           playerName: "system",
@@ -2981,8 +2993,7 @@ function WerewolfGame() {
         const currentLimit = nightPhase === "hunter" && dayCount > 1 ? 15 : 120;
         const maxDelay = Math.min(30, currentLimit - 1);
         const minDelay = Math.min(10, maxDelay);
-        const randomDelay =
-          Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+        const randomDelay = getRandomInt(minDelay, maxDelay);
 
         deadRoleTimerRef.current = setTimeout(() => {
           advanceNightPhase();
@@ -3100,15 +3111,12 @@ function WerewolfGame() {
       });
 
       // Xáo trộn mảng vai trò (Fisher-Yates shuffle)
-      for (let i = rolePool.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [rolePool[i], rolePool[j]] = [rolePool[j], rolePool[i]];
-      }
+      const shuffledRolePool = shuffleArray(rolePool);
 
       const newPlayerRoles: Record<string, RoleConfig> = {};
       const newExtraLives: Record<string, number> = {};
       players.forEach((player, idx) => {
-        const role = rolePool[idx];
+        const role = shuffledRolePool[idx];
         newPlayerRoles[player] = role;
         if (role.id === "mayor") {
           newExtraLives[player] = 1;
@@ -3144,14 +3152,14 @@ function WerewolfGame() {
         });
         if (villagers.length > 0) {
           initialHeadhunterTarget =
-            villagers[Math.floor(Math.random() * villagers.length)];
+            villagers[getRandomInt(0, villagers.length - 1)];
         }
       }
 
       const initialLogs: ActionLog[] = [];
       if (headhunterPlayer && initialHeadhunterTarget) {
         initialLogs.push({
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           dayCount: 1,
           roleId: "headhunter",
           playerName: headhunterPlayer,
@@ -3318,7 +3326,7 @@ function WerewolfGame() {
       let newLog: ActionLog | null = null;
       if (logContent) {
         newLog = {
-          id: Math.random().toString(36).substring(2, 9),
+          id: generateId(),
           dayCount: stateRef.current.dayCount,
           roleId: stateRef.current.playerRoles[playerName]?.id || "system",
           playerName,
@@ -4429,7 +4437,7 @@ function WerewolfGame() {
                             if (hostName === playerName) {
                               const state = stateRef.current;
                               const sysLog: ActionLog = {
-                                id: Math.random().toString(36).substring(2, 9),
+                                id: generateId(),
                                 dayCount: state.dayCount,
                                 roleId: "system",
                                 playerName: "system",
@@ -4537,7 +4545,7 @@ function WerewolfGame() {
                   phase={phase}
                   onSendWolfMessage={(msg) => {
                     const newMsg: ChatMessage = {
-                      id: Math.random().toString(36).substring(2, 9),
+                      id: generateId(),
                       playerName,
                       message: msg,
                       timestamp: Date.now(),
@@ -4558,7 +4566,7 @@ function WerewolfGame() {
                   }}
                   onSendLoversMessage={(msg) => {
                     const newMsg: ChatMessage = {
-                      id: Math.random().toString(36).substring(2, 9),
+                      id: generateId(),
                       playerName,
                       message: msg,
                       timestamp: Date.now(),
@@ -4579,7 +4587,7 @@ function WerewolfGame() {
                   }}
                   onSendGeneralMessage={(msg) => {
                     const newMsg: ChatMessage = {
-                      id: Math.random().toString(36).substring(2, 9),
+                      id: generateId(),
                       playerName,
                       message: msg,
                       timestamp: Date.now(),

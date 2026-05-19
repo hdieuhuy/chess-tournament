@@ -2512,16 +2512,22 @@ function XiangqiGame() {
                   {captures.r.length > 0 ? (
                     [...captures.r]
                       .sort((a, b) => {
-                        const valA = a.startsWith("?")
-                          ? -1
-                          : PIECE_VALUES[a] || 0;
-                        const valB = b.startsWith("?")
-                          ? -1
-                          : PIECE_VALUES[b] || 0;
+                        const isRedPlayer =
+                          isPlayer1 || playerName === player3Name;
+                        const valA =
+                          a.startsWith("?") && !isRedPlayer
+                            ? -1
+                            : PIECE_VALUES[a.replace("?", "")] || 0;
+                        const valB =
+                          b.startsWith("?") && !isRedPlayer
+                            ? -1
+                            : PIECE_VALUES[b.replace("?", "")] || 0;
                         return valB - valA;
                       })
                       .map((p, i) => {
-                        if (p.startsWith("?")) {
+                        const isRedPlayer =
+                          isPlayer1 || playerName === player3Name;
+                        if (p.startsWith("?") && !isRedPlayer) {
                           const pIsRed = p[1] === p[1].toUpperCase();
                           return (
                             <div
@@ -2536,12 +2542,13 @@ function XiangqiGame() {
                             </div>
                           );
                         }
+                        const realP = p.replace("?", "");
                         return (
                           <div
                             key={i}
-                            className={`flex items-center justify-center w-6 h-6 rounded-full bg-[#FFE6B3] border border-[#8B5A2B] text-xs font-bold drop-shadow-sm ${piecesMap[p].color}`}
+                            className={`flex items-center justify-center w-6 h-6 rounded-full bg-[#FFE6B3] border border-[#8B5A2B] text-xs font-bold drop-shadow-sm ${piecesMap[realP].color}`}
                           >
-                            {piecesMap[p].text}
+                            {piecesMap[realP].text}
                           </div>
                         );
                       })
@@ -2564,16 +2571,22 @@ function XiangqiGame() {
                   {captures.b.length > 0 ? (
                     [...captures.b]
                       .sort((a, b) => {
-                        const valA = a.startsWith("?")
-                          ? -1
-                          : PIECE_VALUES[a] || 0;
-                        const valB = b.startsWith("?")
-                          ? -1
-                          : PIECE_VALUES[b] || 0;
+                        const isBlackPlayer =
+                          isPlayer2 || playerName === player4Name;
+                        const valA =
+                          a.startsWith("?") && !isBlackPlayer
+                            ? -1
+                            : PIECE_VALUES[a.replace("?", "")] || 0;
+                        const valB =
+                          b.startsWith("?") && !isBlackPlayer
+                            ? -1
+                            : PIECE_VALUES[b.replace("?", "")] || 0;
                         return valB - valA;
                       })
                       .map((p, i) => {
-                        if (p.startsWith("?")) {
+                        const isBlackPlayer =
+                          isPlayer2 || playerName === player4Name;
+                        if (p.startsWith("?") && !isBlackPlayer) {
                           const pIsRed = p[1] === p[1].toUpperCase();
                           return (
                             <div
@@ -2588,12 +2601,13 @@ function XiangqiGame() {
                             </div>
                           );
                         }
+                        const realP = p.replace("?", "");
                         return (
                           <div
                             key={i}
-                            className={`flex items-center justify-center w-6 h-6 rounded-full bg-[#FFE6B3] border border-[#8B5A2B] text-xs font-bold drop-shadow-sm ${piecesMap[p].color}`}
+                            className={`flex items-center justify-center w-6 h-6 rounded-full bg-[#FFE6B3] border border-[#8B5A2B] text-xs font-bold drop-shadow-sm ${piecesMap[realP].color}`}
                           >
-                            {piecesMap[p].text}
+                            {piecesMap[realP].text}
                           </div>
                         );
                       })

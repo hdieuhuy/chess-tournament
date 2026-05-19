@@ -12,6 +12,10 @@ import { Card } from "./Card";
 import { dealCards } from "./utils";
 import { motion, AnimatePresence } from "framer-motion";
 
+const generateId = () => Math.random().toString(36).substring(2, 10);
+const shuffleArray = <T,>(array: T[]): T[] =>
+  [...array].sort(() => Math.random() - 0.5);
+
 function ExplodingKittensGame() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -212,6 +216,18 @@ function ExplodingKittensGame() {
 
           if (!isAlreadyPlayer && !isAlreadySpec) {
             if (role === "player") {
+              if (state.gameStarted) {
+                roomChannel.send({
+                  type: "broadcast",
+                  event: "join-rejected",
+                  payload: {
+                    playerName: newPlayer,
+                    reason:
+                      "Trò chơi đang diễn ra, bạn không thể tham gia với tư cách Người chơi (hãy chọn Người xem)!",
+                  },
+                });
+                return;
+              }
               if (newPlayers.length < maxPlayers) {
                 newPlayers.push(newPlayer);
                 setPlayers(newPlayers);
@@ -245,6 +261,14 @@ function ExplodingKittensGame() {
         setIsShuffling(true);
         setTimeout(() => setIsShuffling(false), 800);
       })
+      .on("broadcast", { event: "join-rejected" }, (payload) => {
+        if (payload.payload.playerName === playerName) {
+          toast.error(payload.payload.reason || "Không thể tham gia phòng!");
+          setHasInitialized(false);
+          setShowNameModal(true);
+          if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
+        }
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           roomChannel.send({
@@ -269,7 +293,7 @@ function ExplodingKittensGame() {
       if (!roomParam) {
         setShowNameModal(false);
         setHasInitialized(true);
-        const newRoomId = Math.random().toString(36).substring(2, 10);
+        const newRoomId = generateId();
         setRoomId(newRoomId);
         setHostName(savedName);
         setPlayers([savedName]);
@@ -299,7 +323,7 @@ function ExplodingKittensGame() {
     if (!hasInitialized) {
       setHasInitialized(true);
       if (!roomId) {
-        const newRoomId = Math.random().toString(36).substring(2, 10);
+        const newRoomId = generateId();
         setRoomId(newRoomId);
         setHostName(newName);
         setPlayers([newName]);
@@ -382,7 +406,7 @@ function ExplodingKittensGame() {
         }
       } else if (cardType === "shuffle") {
         newLog.unshift(`${player} đánh lá Shuffle.`);
-        newDrawPile = [...state.drawPile].sort(() => Math.random() - 0.5);
+        newDrawPile = shuffleArray(state.drawPile);
         setIsShuffling(true);
         setTimeout(() => setIsShuffling(false), 800);
         if (channel)
@@ -432,23 +456,47 @@ function ExplodingKittensGame() {
           );
         } else {
           newLog.unshift(
-            `${player} dùng bộ 3 gọi ${CARD_DEFINITIONS[requestedType].name} từ ${targetPlayer} nhưng đối thủ không có.`,
+            `${player} dùng bộ 3 gọi lá ${CARD_DEFINITIONS[requestedType].name} từ ${targetPlayer} nhưng đối thủ không có nên mất luôn chức năng.`,
           );
         }
       } else if (cardType === "combo5" && targetCardId) {
-        const cardIndex = newDiscardPile.findIndex(
-          (c) => c.id === targetCardId,
-        );
-        if (cardIndex !== -1) {
-          const takenCard = newDiscardPile[cardIndex];
-          newDiscardPile.splice(cardIndex, 1);
-          newPlayerHands[player] = [
-            ...(newPlayerHands[player] || []),
-            takenCard,
-          ];
-          newLog.unshift(
-            `${player} dùng bộ 5 lấy lại ${CARD_DEFINITIONS[takenCard.type].name} từ chồng bài bỏ.`,
+        if (targetCardId === "draw_from_pile") {
+          let cardToGive = null;
+          if (newDrawPile.length > 0) {
+            const safeIndex = [...newDrawPile]
+              .reverse()
+              .findIndex((c) => c.type !== "exploding-kitten");
+            if (safeIndex !== -1) {
+              const actualIndex = newDrawPile.length - 1 - safeIndex;
+              cardToGive = newDrawPile.splice(actualIndex, 1)[0];
+            } else {
+              cardToGive = newDrawPile.pop()!;
+            }
+            if (cardToGive) {
+              newPlayerHands[player] = [
+                ...(newPlayerHands[player] || []),
+                cardToGive,
+              ];
+              newLog.unshift(
+                `${player} dùng bộ 5 lá, nhưng bài bỏ không có Defuse nên được hệ thống lấy 1 lá an toàn từ chồng bài rút.`,
+              );
+            }
+          }
+        } else {
+          const cardIndex = newDiscardPile.findIndex(
+            (c) => c.id === targetCardId,
           );
+          if (cardIndex !== -1) {
+            const takenCard = newDiscardPile[cardIndex];
+            newDiscardPile.splice(cardIndex, 1);
+            newPlayerHands[player] = [
+              ...(newPlayerHands[player] || []),
+              takenCard,
+            ];
+            newLog.unshift(
+              `${player} dùng bộ 5 lấy lại ${CARD_DEFINITIONS[takenCard.type].name} từ chồng bài bỏ.`,
+            );
+          }
         }
       }
     }
@@ -752,8 +800,14 @@ function ExplodingKittensGame() {
         } else toast.error("Bộ 3 phải gồm 3 lá có cùng loại!");
       } else if (selectedHandCards.length === 5) {
         if (new Set(selectedHandCards.map((c) => c.type)).size === 5) {
-          setPendingComboCards(selectedHandCards);
-          setTargetSelectMode("combo5");
+          const hasDefuse = discardPile.some((c) => c.type === "defuse");
+          if (hasDefuse) {
+            setPendingComboCards(selectedHandCards);
+            setTargetSelectMode("combo5");
+          } else {
+            setPendingComboCards(selectedHandCards);
+            executeComboAction("combo5", null, null, "draw_from_pile");
+          }
         } else toast.error("Bộ 5 lá phải có loại khác nhau hoàn toàn!");
       } else toast.error("Số lượng bài không hợp lệ cho bất kỳ combo nào!");
     }
@@ -821,7 +875,7 @@ function ExplodingKittensGame() {
 
     if (["attack", "skip", "shuffle", "see-the-future"].includes(card.type)) {
       const pAction = {
-        id: Math.random().toString(),
+        id: generateId(),
         player: playerName,
         cardType: card.type,
         playedCards: [card],
@@ -881,7 +935,7 @@ function ExplodingKittensGame() {
     const newLog = [`${playerName} muốn dùng ${comboName}...`, ...actionLog];
 
     const pAction = {
-      id: Math.random().toString(),
+      id: generateId(),
       player: playerName,
       cardType: comboType,
       playedCards: pendingComboCards,
@@ -941,7 +995,7 @@ function ExplodingKittensGame() {
     const newPlayerHands = { ...playerHands, [playerName]: newHand };
 
     const pAction = {
-      id: Math.random().toString(),
+      id: generateId(),
       player: playerName,
       cardType: "favor",
       playedCards: [card],
@@ -1090,9 +1144,46 @@ function ExplodingKittensGame() {
             required
             autoFocus
           />
+
+          {!hasInitialized && roomParam && (
+            <div className="flex flex-col space-y-2 mt-4">
+              <label className="text-sm font-medium text-zinc-700">
+                Bạn muốn tham gia với tư cách:
+              </label>
+              <div className="flex gap-4">
+                <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="player"
+                    checked={requestedRole === "player"}
+                    onChange={(e) =>
+                      setRequestedRole(e.target.value as "player" | "spectator")
+                    }
+                    className="accent-zinc-900"
+                  />
+                  <span>Người chơi</span>
+                </label>
+                <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="spectator"
+                    checked={requestedRole === "spectator"}
+                    onChange={(e) =>
+                      setRequestedRole(e.target.value as "player" | "spectator")
+                    }
+                    className="accent-zinc-900"
+                  />
+                  <span>Người xem</span>
+                </label>
+              </div>
+            </div>
+          )}
+
           <button
             type="submit"
-            className="w-full cursor-pointer rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+            className="mt-4 w-full cursor-pointer rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
           >
             {hasInitialized ? "Cập nhật" : "Vào phòng"}
           </button>
@@ -1799,6 +1890,34 @@ function ExplodingKittensGame() {
               ))}
             </div>
           </div>
+
+          {spectators.length > 0 && (
+            <div className="flex w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-6 py-4">
+                <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+                  <span className="text-lg">👀</span> Người xem
+                </h3>
+                <span className="rounded-full bg-zinc-200 px-2.5 py-1 text-xs font-bold text-zinc-700">
+                  {spectators.length}
+                </span>
+              </div>
+              <div className="flex flex-col gap-2 p-4">
+                {spectators.map((s, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-2"
+                  >
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+                      {s.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm font-medium text-zinc-800">
+                      {s} {playerName === s && "(Bạn)"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {gameStarted && (
             <div className="flex w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
