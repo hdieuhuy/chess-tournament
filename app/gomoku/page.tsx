@@ -1651,54 +1651,86 @@ function GomokuGame() {
         </div>
 
         {/* Cột giữa: Khu vực bàn cờ caro */}
-        <div
-          className={`p-2 sm:p-4 rounded-sm shadow-xl transition-all ${isDarkMode ? "bg-slate-800" : "bg-white"} ${!gameStarted || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
-        >
+        <div className="flex w-full flex-col items-center justify-center pb-8 overflow-x-auto max-w-[100vw]">
           <div
-            className={`grid gap-0 border transition-colors ${isDarkMode ? "border-slate-600" : "border-zinc-800"}`}
-            style={{
-              gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
-            }}
+            className={`p-2 sm:p-4 rounded-sm shadow-xl transition-all ${isDarkMode ? "bg-slate-800" : "bg-white"} ${!gameStarted || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
           >
-            {board.map((row, rowIndex) =>
-              row.map((cell, colIndex) => {
-                const isWinningCell = winningCells.some(
-                  ([r, c]) => r === rowIndex && c === colIndex,
-                );
-                const isLastMove =
-                  lastMove?.[0] === rowIndex && lastMove?.[1] === colIndex;
-
-                return (
+            <div className="relative pl-5 pb-5 sm:pl-6 sm:pb-6">
+              {/* Tọa độ hàng dọc (Chữ A-Y) */}
+              <div
+                className={`absolute top-0 bottom-5 sm:bottom-6 left-0 flex w-5 sm:w-6 flex-col text-[10px] sm:text-[11px] font-bold select-none ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}
+              >
+                {Array.from({ length: BOARD_SIZE }).map((_, i) => (
                   <div
-                    key={`${rowIndex}-${colIndex}`}
-                    onClick={() => handleCellClick(rowIndex, colIndex)}
-                    className={`flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center border cursor-pointer transition-colors ${isDarkMode ? "border-slate-600/40" : "border-zinc-800/40"} ${
-                      !cell && !winner
-                        ? isDarkMode
-                          ? "hover:bg-white/10"
-                          : "hover:bg-black/10"
-                        : ""
-                    } ${isWinningCell ? "bg-red-400/50" : isLastMove ? (isDarkMode ? "bg-yellow-400/30" : "bg-yellow-200") : ""}`}
+                    key={`row-label-${i}`}
+                    className="flex flex-1 items-center justify-center"
                   >
-                    {cell && (
-                      <span
-                        className={`font-bold text-xl sm:text-2xl leading-none ${
-                          cell === "B"
-                            ? isDarkMode
-                              ? "text-green-400"
-                              : "text-green-600"
-                            : isDarkMode
-                              ? "text-red-400"
-                              : "text-red-500"
-                        }`}
-                      >
-                        {cell === "B" ? "X" : "O"}
-                      </span>
-                    )}
+                    {String.fromCharCode(65 + i)}
                   </div>
-                );
-              }),
-            )}
+                ))}
+              </div>
+
+              {/* Tọa độ hàng ngang (Số 1-25) */}
+              <div
+                className={`absolute bottom-0 left-5 sm:left-6 right-0 flex h-5 sm:h-6 text-[10px] sm:text-[11px] font-bold select-none ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}
+              >
+                {Array.from({ length: BOARD_SIZE }).map((_, i) => (
+                  <div
+                    key={`col-label-${i}`}
+                    className="flex flex-1 items-center justify-center"
+                  >
+                    {i + 1}
+                  </div>
+                ))}
+              </div>
+
+              <div
+                className={`grid gap-0 border transition-colors ${isDarkMode ? "border-slate-600" : "border-zinc-800"}`}
+                style={{
+                  gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
+                }}
+              >
+                {board.map((row, rowIndex) =>
+                  row.map((cell, colIndex) => {
+                    const isWinningCell = winningCells.some(
+                      ([r, c]) => r === rowIndex && c === colIndex,
+                    );
+                    const isLastMove =
+                      lastMove?.[0] === rowIndex && lastMove?.[1] === colIndex;
+
+                    return (
+                      <div
+                        key={`${rowIndex}-${colIndex}`}
+                        onClick={() => handleCellClick(rowIndex, colIndex)}
+                        className={`flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center border cursor-pointer transition-colors ${isDarkMode ? "border-slate-600/40" : "border-zinc-800/40"} ${
+                          !cell && !winner
+                            ? isDarkMode
+                              ? "hover:bg-white/10"
+                              : "hover:bg-black/10"
+                            : ""
+                        } ${isWinningCell ? "bg-red-400/50" : isLastMove ? (isDarkMode ? "bg-yellow-400/30" : "bg-yellow-200") : ""}`}
+                      >
+                        {cell && (
+                          <span
+                            className={`font-bold text-xl sm:text-2xl leading-none ${
+                              cell === "B"
+                                ? isDarkMode
+                                  ? "text-green-400"
+                                  : "text-green-600"
+                                : isDarkMode
+                                  ? "text-red-400"
+                                  : "text-red-500"
+                            }`}
+                          >
+                            {cell === "B" ? "X" : "O"}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  }),
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
