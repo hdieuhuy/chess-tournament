@@ -8,6 +8,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Modal } from "@/components/Modal";
 import confetti from "canvas-confetti";
 import toast from "react-hot-toast";
+import { FaChevronLeft, FaChevronRight, FaTimes } from "react-icons/fa";
 
 const INITIAL_BOARD: (string | null)[][] = [
   ["r", "n", "b", "q", "k", "b", "n", "r"],
@@ -309,6 +310,13 @@ function ChessGame() {
     from: [number, number];
     to: [number, number];
   } | null>(null);
+  const [animatingMove, setAnimatingMove] = useState<{
+    id: string;
+    fr: number;
+    fc: number;
+    r: number;
+    c: number;
+  } | null>(null);
   const [promotionPending, setPromotionPending] = useState<{
     r: number;
     c: number;
@@ -320,7 +328,8 @@ function ChessGame() {
     captures: { w: string[]; b: string[] };
     color: "W" | "B";
   } | null>(null);
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<never[]>([]);
+  const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
   const [gameMode, setGameMode] = useState<"1v1" | "2v2">("1v1");
   const [player3Name, setPlayer3Name] = useState<string | null>(null);
@@ -456,6 +465,25 @@ function ChessGame() {
     initialTime,
   ]);
 
+  const currentStateForReview = {
+    board,
+    isWhiteTurn,
+    turnIndex,
+    winner,
+    castlingRights,
+    enPassantTarget,
+    captures,
+    lastMove,
+    player1Time,
+    player2Time,
+  };
+  const fullHistory = [...history, currentStateForReview];
+  const isInReview = reviewIndex !== null;
+  const displayState =
+    reviewIndex !== null && fullHistory[reviewIndex]
+      ? fullHistory[reviewIndex]
+      : currentStateForReview;
+
   useEffect(() => {
     if (!roomId || !playerName || !hasInitialized) return;
     const roomChannel = supabase.channel(`chess-room-${roomId}`);
@@ -463,6 +491,22 @@ function ChessGame() {
     roomChannel
       .on("broadcast", { event: "sync-move" }, (payload) => {
         const { history: newHistory, ...data } = payload.payload;
+
+        if (data.lastMove) {
+          const { from, to } = data.lastMove;
+          const animId = Date.now().toString() + Math.random().toString();
+          setAnimatingMove({
+            id: animId,
+            fr: from[0],
+            fc: from[1],
+            r: to[0],
+            c: to[1],
+          });
+          setTimeout(() => {
+            setAnimatingMove((prev) => (prev?.id === animId ? null : prev));
+          }, 300);
+        }
+
         setBoard(data.board);
         setIsWhiteTurn(data.isWhiteTurn);
         setWinner(data.winner);
@@ -1013,6 +1057,12 @@ function ChessGame() {
       r: number,
       c: number,
     ) => {
+      const animId = Date.now().toString() + Math.random().toString();
+      setAnimatingMove({ id: animId, fr, fc, r, c });
+      setTimeout(() => {
+        setAnimatingMove((prev) => (prev?.id === animId ? null : prev));
+      }, 300);
+
       const currentState = {
         board: stateRef.current.board,
         isWhiteTurn: stateRef.current.isWhiteTurn,
@@ -1133,7 +1183,14 @@ function ChessGame() {
 
   const handleCellClick = useCallback(
     (r: number, c: number) => {
-      if (winner || !gameStarted || isSpectator || promotionPending) return;
+      if (
+        winner ||
+        !gameStarted ||
+        isSpectator ||
+        promotionPending ||
+        isInReview
+      )
+        return;
 
       const expectedPlayer =
         gameMode === "2v2"
@@ -1674,6 +1731,15 @@ function ChessGame() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12">
+      <style>{`
+        @keyframes slidePiece {
+          0% { transform: translate(var(--start-x), var(--start-y)); }
+          100% { transform: translate(0px, 0px); }
+        }
+        .animating-piece {
+          animation: slidePiece 0.25s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+      `}</style>
       {undoRequestedBy && undoRequestedBy !== playerName && !isSpectator && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4 border border-zinc-200">
@@ -1896,7 +1962,7 @@ function ChessGame() {
                 {gameStarted ? (
                   <div className="w-full space-y-4 text-left xl:text-left text-center">
                     <div
-                      className={`rounded-lg border-2 p-3 transition-colors ${isWhiteTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"} ${isWhiteInCheck && !winner ? "border-red-500 bg-red-50 ring-1 ring-red-500" : ""}`}
+                      className={`rounded-lg border-2 p-3 transition-colors ${displayState.isWhiteTurn && !displayState.winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"} ${isWhiteInCheck && !displayState.winner ? "border-red-500 bg-red-50 ring-1 ring-red-500" : ""}`}
                     >
                       <div className="flex justify-between items-baseline">
                         <div className="flex flex-col items-start">
@@ -1905,7 +1971,7 @@ function ChessGame() {
                               ? `Đội Trắng (${player1Name} & ${player3Name})`
                               : `${player1Name} (Trắng)`}
                           </span>
-                          {isWhiteInCheck && !winner && (
+                          {isWhiteInCheck && !displayState.winner && (
                             <span className="text-xs font-bold text-red-600 animate-bounce mt-1">
                               ⚠️ CHIẾU TƯỚNG!
                             </span>
@@ -1917,7 +1983,7 @@ function ChessGame() {
                       </div>
                     </div>
                     <div
-                      className={`rounded-lg border-2 p-3 transition-colors ${!isWhiteTurn && !winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"} ${isBlackInCheck && !winner ? "border-red-500 bg-red-50 ring-1 ring-red-500" : ""}`}
+                      className={`rounded-lg border-2 p-3 transition-colors ${!displayState.isWhiteTurn && !displayState.winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"} ${isBlackInCheck && !displayState.winner ? "border-red-500 bg-red-50 ring-1 ring-red-500" : ""}`}
                     >
                       <div className="flex justify-between items-baseline">
                         <div className="flex flex-col items-start">
@@ -1926,7 +1992,7 @@ function ChessGame() {
                               ? `Đội Đen (${player2Name} & ${player4Name})`
                               : `${player2Name} (Đen)`}
                           </span>
-                          {isBlackInCheck && !winner && (
+                          {isBlackInCheck && !displayState.winner && (
                             <span className="text-xs font-bold text-red-600 animate-bounce mt-1">
                               ⚠️ CHIẾU TƯỚNG!
                             </span>
@@ -1938,27 +2004,39 @@ function ChessGame() {
                       </div>
                     </div>
                     <div className="pt-2 text-center xl:text-left">
-                      <p className="text-sm font-medium text-zinc-800">
-                        {winner === "Draw"
-                          ? "🤝 Hòa cờ!"
-                          : winner
-                            ? `🎉 Chiến thắng: ${winner === "W" ? (gameMode === "2v2" ? "Đội Trắng" : player1Name) : gameMode === "2v2" ? "Đội Đen" : player2Name}!`
-                            : `Lượt đi: ${
-                                gameMode === "2v2"
-                                  ? turnIndex === 0
-                                    ? player1Name
-                                    : turnIndex === 1
-                                      ? player2Name
-                                      : turnIndex === 2
-                                        ? player3Name
-                                        : player4Name
-                                  : isWhiteTurn
-                                    ? "Trắng"
-                                    : "Đen"
-                              }`}
-                      </p>
+                      {isInReview ? (
+                        <div className="p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
+                          <p className="text-sm font-bold text-indigo-700 text-center">
+                            Đang xem lại ván đấu
+                          </p>
+                          <p className="text-sm font-medium text-zinc-800 text-center">
+                            Lượt đi của:{" "}
+                            {displayState.isWhiteTurn ? "Trắng" : "Đen"}
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm font-medium text-zinc-800">
+                          {winner === "Draw"
+                            ? "🤝 Hòa cờ!"
+                            : winner
+                              ? `🎉 Chiến thắng: ${winner === "W" ? (gameMode === "2v2" ? "Đội Trắng" : player1Name) : gameMode === "2v2" ? "Đội Đen" : player2Name}!`
+                              : `Lượt đi: ${
+                                  gameMode === "2v2"
+                                    ? turnIndex === 0
+                                      ? player1Name
+                                      : turnIndex === 1
+                                        ? player2Name
+                                        : turnIndex === 2
+                                          ? player3Name
+                                          : player4Name
+                                    : isWhiteTurn
+                                      ? "Trắng"
+                                      : "Đen"
+                                }`}
+                        </p>
+                      )}
                     </div>
-                    {gameStarted && !winner && !isSpectator && (
+                    {!isInReview && gameStarted && !winner && !isSpectator && (
                       <button
                         onClick={handleResign}
                         className="mt-2 w-full cursor-pointer rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
@@ -2093,30 +2171,84 @@ function ChessGame() {
           )}
 
           <div className="mt-10 flex w-full flex-wrap justify-center gap-4 xl:justify-start">
-            {gameStarted && !winner && !isSpectator && history.length > 0 && (
-              <button
-                onClick={handleRequestUndo}
-                disabled={!!undoRequestedBy}
-                className="cursor-pointer rounded-full border border-purple-300 bg-purple-50 px-6 py-2 text-sm font-medium text-purple-700 shadow-sm transition-colors hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Xin đi lại
-              </button>
+            {isInReview ? (
+              <div className="flex items-center justify-center xl:justify-start gap-2 w-full bg-zinc-100 p-2 rounded-lg">
+                <button
+                  onClick={() =>
+                    setReviewIndex((prev) =>
+                      prev !== null ? Math.max(0, prev - 1) : 0,
+                    )
+                  }
+                  disabled={reviewIndex === 0}
+                  className="p-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Trước"
+                >
+                  <FaChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="font-medium text-zinc-700 text-sm whitespace-nowrap">
+                  Nước đi {reviewIndex} / {fullHistory.length - 1}
+                </span>
+                <button
+                  onClick={() =>
+                    setReviewIndex((prev) =>
+                      prev !== null
+                        ? Math.min(fullHistory.length - 1, prev + 1)
+                        : 0,
+                    )
+                  }
+                  disabled={(reviewIndex ?? 0) >= fullHistory.length - 1}
+                  className="p-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Sau"
+                >
+                  <FaChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setReviewIndex(null)}
+                  className="ml-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-md transition-colors flex items-center gap-2"
+                >
+                  <FaTimes />
+                  Thoát
+                </button>
+              </div>
+            ) : (
+              <>
+                {gameStarted &&
+                  !winner &&
+                  !isSpectator &&
+                  history.length > 0 && (
+                    <button
+                      onClick={handleRequestUndo}
+                      disabled={!!undoRequestedBy}
+                      className="cursor-pointer rounded-full border border-purple-300 bg-purple-50 px-6 py-2 text-sm font-medium text-purple-700 shadow-sm transition-colors hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Xin đi lại
+                    </button>
+                  )}
+                {winner && playerName === hostName && history.length > 0 && (
+                  <button
+                    onClick={() => setReviewIndex(0)}
+                    className="cursor-pointer rounded-full bg-indigo-600 px-6 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  >
+                    Xem lại ván đấu
+                  </button>
+                )}
+                {playerName === hostName && (
+                  <button
+                    onClick={resetGame}
+                    disabled={!player2Name}
+                    className="cursor-pointer rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Chơi lại
+                  </button>
+                )}
+                <Link
+                  href="/"
+                  className="cursor-pointer rounded-full bg-zinc-900 px-6 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+                >
+                  Đổi trò chơi
+                </Link>
+              </>
             )}
-            {playerName === hostName && (
-              <button
-                onClick={resetGame}
-                disabled={!player2Name}
-                className="cursor-pointer rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Chơi lại
-              </button>
-            )}
-            <Link
-              href="/"
-              className="cursor-pointer rounded-full bg-zinc-900 px-6 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-            >
-              Đổi trò chơi
-            </Link>
           </div>
         </div>
 
@@ -2187,86 +2319,122 @@ function ChessGame() {
                 )}
                 {(() => {
                   const shouldFlip = isPlayer2 || playerName === player4Name;
-                  return (shouldFlip ? [...board].reverse() : board).map(
-                    (row, mappedR) => {
-                      const r = shouldFlip ? 7 - mappedR : mappedR;
-                      return (shouldFlip ? [...row].reverse() : row).map(
-                        (piece, mappedC) => {
-                          const c = shouldFlip ? 7 - mappedC : mappedC;
+                  return (
+                    shouldFlip
+                      ? [...displayState.board].reverse()
+                      : displayState.board
+                  ).map((row, mappedR) => {
+                    const r = shouldFlip ? 7 - mappedR : mappedR;
+                    return (shouldFlip ? [...row].reverse() : row).map(
+                      (piece, mappedC) => {
+                        const c = shouldFlip ? 7 - mappedC : mappedC;
 
-                          const isLight = (r + c) % 2 === 0;
-                          const bgClass = isLight
-                            ? "bg-[#F0D9B5]"
-                            : "bg-[#B58863]";
+                        const isLight = (r + c) % 2 === 0;
+                        const bgClass = isLight
+                          ? "bg-[#F0D9B5]"
+                          : "bg-[#B58863]";
 
-                          const isSelected =
-                            selectedPos?.[0] === r && selectedPos?.[1] === c;
-                          const isLastMove =
-                            (lastMove?.from[0] === r &&
-                              lastMove?.from[1] === c) ||
-                            (lastMove?.to[0] === r && lastMove?.to[1] === c);
-                          const isValidTarget =
-                            selectedPos &&
-                            !piece &&
-                            isLegalMove(
-                              board,
-                              selectedPos[0],
-                              selectedPos[1],
-                              r,
-                              c,
-                              enPassantTarget,
-                              isWhiteTurn,
-                              castlingRights,
-                            );
-                          const canCapture =
-                            selectedPos &&
-                            piece &&
-                            isLegalMove(
-                              board,
-                              selectedPos[0],
-                              selectedPos[1],
-                              r,
-                              c,
-                              enPassantTarget,
-                              isWhiteTurn,
-                              castlingRights,
-                            );
-
-                          return (
-                            <div
-                              key={`${r}-${c}`}
-                              className={`relative w-full h-full flex items-center justify-center cursor-pointer ${bgClass}`}
-                              onClick={() => handleCellClick(r, c)}
-                            >
-                              {/* Highlight moves */}
-                              {isSelected && (
-                                <div className="absolute inset-0 bg-blue-400/50 z-10" />
-                              )}
-                              {isLastMove && !isSelected && (
-                                <div className="absolute inset-0 bg-yellow-400/40 z-10" />
-                              )}
-                              {isValidTarget && (
-                                <div className="w-[30%] h-[30%] bg-black/20 rounded-full z-20" />
-                              )}
-                              {canCapture && (
-                                <div className="absolute inset-0 border-[6px] border-black/20 rounded-full z-20 scale-90" />
-                              )}
-
-                              {/* Piece */}
-                              {piece && (
-                                <img
-                                  src={PIECE_IMAGES[piece]}
-                                  alt={piece}
-                                  draggable={false}
-                                  className="relative z-30 w-[80%] h-[80%] select-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]"
-                                />
-                              )}
-                            </div>
+                        const isSelected =
+                          !isInReview &&
+                          selectedPos?.[0] === r &&
+                          selectedPos?.[1] === c;
+                        const isLastMove =
+                          (displayState.lastMove?.from[0] === r &&
+                            displayState.lastMove?.from[1] === c) ||
+                          (displayState.lastMove?.to[0] === r &&
+                            displayState.lastMove?.to[1] === c);
+                        const isValidTarget =
+                          selectedPos &&
+                          !piece &&
+                          isLegalMove(
+                            board,
+                            selectedPos[0],
+                            selectedPos[1],
+                            r,
+                            c,
+                            enPassantTarget,
+                            isWhiteTurn,
+                            castlingRights,
                           );
-                        },
-                      );
-                    },
-                  );
+                        const canCapture =
+                          selectedPos &&
+                          piece &&
+                          isLegalMove(
+                            board,
+                            selectedPos[0],
+                            selectedPos[1],
+                            r,
+                            c,
+                            enPassantTarget,
+                            isWhiteTurn,
+                            castlingRights,
+                          );
+
+                        const isAnimatingThisPiece =
+                          animatingMove &&
+                          animatingMove.r === r &&
+                          animatingMove.c === c;
+                        let startX = 0,
+                          startY = 0;
+                        if (isAnimatingThisPiece) {
+                          const visualFromR = shouldFlip
+                            ? 7 - animatingMove.fr
+                            : animatingMove.fr;
+                          const visualFromC = shouldFlip
+                            ? 7 - animatingMove.fc
+                            : animatingMove.fc;
+                          const visualToR = shouldFlip
+                            ? 7 - animatingMove.r
+                            : animatingMove.r;
+                          const visualToC = shouldFlip
+                            ? 7 - animatingMove.c
+                            : animatingMove.c;
+                          startX = (visualFromC - visualToC) * 100;
+                          startY = (visualFromR - visualToR) * 100;
+                        }
+
+                        const animationStyle = isAnimatingThisPiece
+                          ? ({
+                              "--start-x": `${startX}%`,
+                              "--start-y": `${startY}%`,
+                            } as React.CSSProperties)
+                          : {};
+
+                        return (
+                          <div
+                            key={`${r}-${c}`}
+                            className={`relative w-full h-full flex items-center justify-center cursor-pointer ${bgClass} ${isAnimatingThisPiece ? "z-40" : ""}`}
+                            onClick={() => handleCellClick(r, c)}
+                          >
+                            {/* Highlight moves */}
+                            {isSelected && (
+                              <div className="absolute inset-0 bg-blue-400/50 z-10" />
+                            )}
+                            {isLastMove && !isSelected && (
+                              <div className="absolute inset-0 bg-yellow-400/40 z-10" />
+                            )}
+                            {isValidTarget && (
+                              <div className="w-[30%] h-[30%] bg-black/20 rounded-full z-20" />
+                            )}
+                            {canCapture && (
+                              <div className="absolute inset-0 border-[6px] border-black/20 rounded-full z-20 scale-90" />
+                            )}
+
+                            {/* Piece */}
+                            {piece && (
+                              <img
+                                src={PIECE_IMAGES[piece]}
+                                alt={piece}
+                                draggable={false}
+                                style={animationStyle}
+                                className={`relative z-30 w-[80%] h-[80%] select-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)] ${isAnimatingThisPiece ? "animating-piece" : ""}`}
+                              />
+                            )}
+                          </div>
+                        );
+                      },
+                    );
+                  });
                 })()}
               </div>
             </div>
