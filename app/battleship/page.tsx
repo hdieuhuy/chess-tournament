@@ -7,29 +7,10 @@ import { supabase } from "@/lib/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { Modal } from "@/components/Modal";
 import confetti from "canvas-confetti";
-import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
-
-const BOARD_SIZE = 10;
-const ROWS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-const COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
-
-type Ship = {
-  id: number;
-  positions: [number, number][];
-  size?: number;
-  color?: string;
-  orientation?: "H" | "V";
-};
-type Shot = { r: number; c: number; result: "hit" | "miss" };
-
-const getInitialShips = (): Ship[] => [
-  { id: 0, size: 5, positions: [], orientation: "H", color: "bg-blue-500" },
-  { id: 1, size: 4, positions: [], orientation: "H", color: "bg-cyan-500" },
-  { id: 2, size: 3, positions: [], orientation: "H", color: "bg-green-500" },
-  { id: 3, size: 3, positions: [], orientation: "H", color: "bg-yellow-500" },
-  { id: 4, size: 2, positions: [], orientation: "H", color: "bg-purple-500" },
-];
+import { Ship, Shot, ActiveAnimation } from "./types";
+import { getInitialShips, BOARD_SIZE } from "./constants";
+import { Board } from "./Board";
 
 function BattleshipGame() {
   const searchParams = useSearchParams();
@@ -46,12 +27,8 @@ function BattleshipGame() {
   const [winner, setWinner] = useState<string | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
-  const [activeAnimation, setActiveAnimation] = useState<{
-    r: number;
-    c: number;
-    result: "hit" | "miss";
-    stage: "falling" | "exploding";
-  } | null>(null);
+  const [activeAnimation, setActiveAnimation] =
+    useState<ActiveAnimation | null>(null);
 
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
@@ -70,6 +47,7 @@ function BattleshipGame() {
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [readyPlayers, setReadyPlayers] = useState<string[]>([]);
+  const [placingPlayers, setPlacingPlayers] = useState<string[]>([]);
 
   const [hasInitialized, setHasInitialized] = useState<boolean>(false);
   const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
@@ -130,6 +108,7 @@ function BattleshipGame() {
     winner,
     gameStartTime,
     gameStarted,
+    placingPlayers,
     readyPlayers,
     history,
     undoRequestedBy,
@@ -149,6 +128,7 @@ function BattleshipGame() {
       winner,
       gameStartTime,
       gameStarted,
+      placingPlayers,
       readyPlayers,
       history,
       undoRequestedBy,
@@ -166,10 +146,36 @@ function BattleshipGame() {
     winner,
     gameStartTime,
     gameStarted,
+    placingPlayers,
     readyPlayers,
     history,
     undoRequestedBy,
   ]);
+
+  const channelRef = useRef(channel);
+  const playerNameRef = useRef(playerName);
+  useEffect(() => {
+    channelRef.current = channel;
+    playerNameRef.current = playerName;
+  }, [channel, playerName]);
+
+  useEffect(() => {
+    const handleUnload = () => {
+      if (channelRef.current && playerNameRef.current) {
+        channelRef.current.send({
+          type: "broadcast",
+          event: "leave-room",
+          payload: { playerName: playerNameRef.current },
+        });
+      }
+    };
+
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      handleUnload();
+    };
+  }, []);
 
   // Network Effect
   useEffect(() => {
@@ -203,6 +209,7 @@ function BattleshipGame() {
         setGameStarted(false);
         setReadyPlayers([]);
         setGameStartTime(null);
+        setPlacingPlayers([]);
         setElapsedTime(0);
         setMyShips(getInitialShips());
         setHistory([]);
@@ -219,6 +226,12 @@ function BattleshipGame() {
 
         setReadyPlayers((prev) =>
           prev.includes(readyPlayer) ? prev : [...prev, readyPlayer],
+        );
+      })
+      .on("broadcast", { event: "player-placing" }, (payload) => {
+        const { playerName: placingPlayer } = payload.payload;
+        setPlacingPlayers((prev) =>
+          prev.includes(placingPlayer) ? prev : [...prev, placingPlayer],
         );
       })
       .on("broadcast", { event: "game-start" }, (payload) => {
@@ -239,7 +252,10 @@ function BattleshipGame() {
 
           if (!isAlreadyPlayer && !isAlreadySpec) {
             if (role === "player") {
-              if (!newP2) {
+              if (!state.player1Name) {
+                setPlayer1Name(newPlayer);
+                stateRef.current.player1Name = newPlayer;
+              } else if (!newP2) {
                 newP2 = newPlayer;
                 setPlayer2Name(newP2);
                 stateRef.current.player2Name = newP2;
@@ -249,7 +265,8 @@ function BattleshipGame() {
                   event: "join-rejected",
                   payload: {
                     playerName: newPlayer,
-                    reason: "Phòng đã đủ 2 người chơi!",
+                    reason:
+                      "Phòng đã đủ 2 người chơi, vui lòng tham gia với tư cách Người xem!",
                   },
                 });
                 return;
@@ -278,9 +295,11 @@ function BattleshipGame() {
             event: "room-sync",
             payload: {
               ...stateRef.current,
+              player1Name: stateRef.current.player1Name,
               player2Name: newP2,
               spectators: newSpecs,
               readyPlayers: state.readyPlayers,
+              placingPlayers: state.placingPlayers,
               history: state.history,
               undoRequestedBy: state.undoRequestedBy,
             },
@@ -305,6 +324,7 @@ function BattleshipGame() {
         if (data.gameStartTime !== undefined)
           setGameStartTime(data.gameStartTime);
         if (data.gameStarted !== undefined) setGameStarted(data.gameStarted);
+        if (data.placingPlayers) setPlacingPlayers(data.placingPlayers);
         if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
         if (data.history) setHistory(data.history);
         if (data.undoRequestedBy !== undefined)
@@ -343,23 +363,127 @@ function BattleshipGame() {
         }
       })
       .on("broadcast", { event: "request-role-change" }, (payload) => {
-        const { playerName: reqPlayer, newRole } = payload.payload;
+        const { playerName: reqPlayer, newRole, targetSlot } = payload.payload;
         const state = stateRef.current;
         if (state.hostName === playerName) {
-          if (newRole === "player" && !state.player2Name) {
+          if (newRole === "player") {
             const newSpecs = state.spectators.filter((s) => s !== reqPlayer);
-            setPlayer2Name(reqPlayer);
+            const newReadyPlayers = state.readyPlayers.filter(
+              (p) => p !== reqPlayer,
+            );
+
+            let newP1 =
+              state.player1Name === reqPlayer ? null : state.player1Name;
+            let newP2 =
+              state.player2Name === reqPlayer ? null : state.player2Name;
+
+            let success = false;
+
+            if (targetSlot === 1 && !newP1) {
+              newP1 = reqPlayer;
+              success = true;
+            } else if (targetSlot === 2 && !newP2) {
+              newP2 = reqPlayer;
+              success = true;
+            }
+
+            if (!success && !targetSlot) {
+              if (!newP1) {
+                newP1 = reqPlayer;
+                success = true;
+              } else if (!newP2) {
+                newP2 = reqPlayer;
+                success = true;
+              }
+            }
+
+            if (success) {
+              setPlayer1Name(newP1);
+              setPlayer2Name(newP2);
+              setSpectators(newSpecs);
+              setReadyPlayers(newReadyPlayers);
+
+              stateRef.current.player1Name = newP1;
+              stateRef.current.player2Name = newP2;
+              stateRef.current.spectators = newSpecs;
+              stateRef.current.readyPlayers = newReadyPlayers;
+
+              roomChannel.send({
+                type: "broadcast",
+                event: "room-sync",
+                payload: { ...stateRef.current },
+              });
+            }
+          } else if (newRole === "spectator") {
+            const newP1 =
+              state.player1Name === reqPlayer ? null : state.player1Name;
+            const newP2 =
+              state.player2Name === reqPlayer ? null : state.player2Name;
+            const newSpecs = [...state.spectators];
+            if (!newSpecs.includes(reqPlayer)) {
+              newSpecs.push(reqPlayer);
+            }
+            const newReadyPlayers = state.readyPlayers.filter(
+              (p) => p !== reqPlayer,
+            );
+
+            setPlayer1Name(newP1);
+            setPlayer2Name(newP2);
             setSpectators(newSpecs);
+            setReadyPlayers(newReadyPlayers);
+
+            stateRef.current.player1Name = newP1;
+            stateRef.current.player2Name = newP2;
+            stateRef.current.spectators = newSpecs;
+            stateRef.current.readyPlayers = newReadyPlayers;
+
             roomChannel.send({
               type: "broadcast",
               event: "room-sync",
-              payload: {
-                ...stateRef.current,
-                player2Name: reqPlayer,
-                spectators: newSpecs,
-              },
+              payload: { ...stateRef.current },
             });
           }
+        }
+      })
+      .on("broadcast", { event: "leave-room" }, (payload) => {
+        const state = stateRef.current;
+        const leavingPlayer = payload.payload.playerName;
+
+        let newP1 = state.player1Name;
+        let newP2 = state.player2Name;
+        if (newP1 === leavingPlayer) newP1 = null;
+        if (newP2 === leavingPlayer) newP2 = null;
+
+        const newSpecs = state.spectators.filter((s) => s !== leavingPlayer);
+        const newReadyPlayers = state.readyPlayers.filter(
+          (p) => p !== leavingPlayer,
+        );
+
+        let newHostName = state.hostName;
+        if (state.hostName === leavingPlayer) {
+          newHostName = newP1 || newP2 || newSpecs[0] || null;
+        }
+
+        setPlayer1Name(newP1);
+        setPlayer2Name(newP2);
+        setSpectators(newSpecs);
+        setReadyPlayers(newReadyPlayers);
+        setHostName(newHostName);
+
+        stateRef.current.player1Name = newP1;
+        stateRef.current.player2Name = newP2;
+        stateRef.current.spectators = newSpecs;
+        stateRef.current.readyPlayers = newReadyPlayers;
+        stateRef.current.hostName = newHostName;
+
+        if (newHostName === playerName) {
+          setTimeout(() => {
+            roomChannel.send({
+              type: "broadcast",
+              event: "room-sync",
+              payload: { ...stateRef.current },
+            });
+          }, 50);
         }
       })
       .on("broadcast", { event: "request-undo" }, (payload) => {
@@ -825,6 +949,7 @@ function BattleshipGame() {
     setMyShips(getInitialShips());
     setHistory([]);
     setUndoRequestedBy(null);
+    setPlacingPlayers([]);
 
     if (channel) {
       channel.send({ type: "broadcast", event: "reset-game" });
@@ -833,7 +958,11 @@ function BattleshipGame() {
 
   const handleKickPlayer = (targetName: string) => {
     if (playerName !== hostName || !channel) return;
-    if (targetName === player2Name && gameStarted) return;
+    if (
+      (targetName === player1Name || targetName === player2Name) &&
+      gameStarted
+    )
+      return;
 
     channel.send({
       type: "broadcast",
@@ -841,7 +970,26 @@ function BattleshipGame() {
       payload: { playerName: targetName },
     });
 
-    if (targetName === player2Name) {
+    if (targetName === player1Name) {
+      setPlayer1Name(null);
+      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
+      if (gameStarted) {
+        resetGame();
+      }
+      setTimeout(() => {
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: {
+            ...stateRef.current,
+            player1Name: null,
+            readyPlayers: stateRef.current.readyPlayers.filter(
+              (p) => p !== targetName,
+            ),
+          },
+        });
+      }, 50);
+    } else if (targetName === player2Name) {
       setPlayer2Name(null);
       setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
       if (gameStarted) {
@@ -871,16 +1019,101 @@ function BattleshipGame() {
     }
   };
 
-  const handleBecomePlayer = () => {
-    if (channel && isSpectator && !player2Name) {
+  const handleSlotClick = (targetSlot: 1 | 2) => {
+    if (!channel || gameStarted) return;
+
+    if (targetSlot === 1 && player1Name) return;
+    if (targetSlot === 2 && player2Name) return;
+
+    if (playerName === hostName) {
+      const state = stateRef.current;
+      const newSpecs = state.spectators.filter((s) => s !== playerName);
+      const newReadyPlayers = state.readyPlayers.filter(
+        (p) => p !== playerName,
+      );
+
+      let newP1 = state.player1Name === playerName ? null : state.player1Name;
+      let newP2 = state.player2Name === playerName ? null : state.player2Name;
+
+      let success = false;
+
+      if (targetSlot === 1 && !newP1) {
+        newP1 = playerName;
+        success = true;
+      } else if (targetSlot === 2 && !newP2) {
+        newP2 = playerName;
+        success = true;
+      }
+
+      if (success) {
+        setPlayer1Name(newP1);
+        setPlayer2Name(newP2);
+        setSpectators(newSpecs);
+        setReadyPlayers(newReadyPlayers);
+
+        stateRef.current.player1Name = newP1;
+        stateRef.current.player2Name = newP2;
+        stateRef.current.spectators = newSpecs;
+        stateRef.current.readyPlayers = newReadyPlayers;
+
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: { ...stateRef.current },
+        });
+      }
+    } else {
       channel.send({
         type: "broadcast",
         event: "request-role-change",
-        payload: { playerName, newRole: "player" },
+        payload: { playerName, newRole: "player", targetSlot },
       });
-      setRequestedRole("player");
-      if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
     }
+
+    setRequestedRole("player");
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
+  };
+
+  const handleBecomeSpectator = () => {
+    if (!channel || (gameStarted && !winner)) return;
+
+    if (playerName === hostName) {
+      const state = stateRef.current;
+      const newP1 = state.player1Name === playerName ? null : state.player1Name;
+      const newP2 = state.player2Name === playerName ? null : state.player2Name;
+      const newSpecs = [...state.spectators];
+      if (!newSpecs.includes(playerName)) {
+        newSpecs.push(playerName);
+      }
+      const newReadyPlayers = state.readyPlayers.filter(
+        (p) => p !== playerName,
+      );
+
+      setPlayer1Name(newP1);
+      setPlayer2Name(newP2);
+      setSpectators(newSpecs);
+      setReadyPlayers(newReadyPlayers);
+
+      stateRef.current.player1Name = newP1;
+      stateRef.current.player2Name = newP2;
+      stateRef.current.spectators = newSpecs;
+      stateRef.current.readyPlayers = newReadyPlayers;
+
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: { ...stateRef.current },
+      });
+    } else {
+      channel.send({
+        type: "broadcast",
+        event: "request-role-change",
+        payload: { playerName, newRole: "spectator" },
+      });
+    }
+
+    setRequestedRole("spectator");
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "spectator");
   };
 
   const handleRequestUndo = () => {
@@ -932,6 +1165,19 @@ function BattleshipGame() {
     }
   };
 
+  const handleReadyToPlace = () => {
+    if (!playerName || placingPlayers.includes(playerName)) return;
+    const newPlacingPlayers = [...placingPlayers, playerName];
+    setPlacingPlayers(newPlacingPlayers);
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "player-placing",
+        payload: { playerName },
+      });
+    }
+  };
+
   const handleResign = () => {
     if (winner || !gameStarted || isSpectator) return;
     const myColor = isPlayer1 ? "P1" : isPlayer2 ? "P2" : null;
@@ -960,256 +1206,10 @@ function BattleshipGame() {
     return `${m}:${s}`;
   };
 
-  const renderBoard = (
-    title: string,
-    ships: Ship[],
-    shots: Shot[],
-    onCellClick: (r: number, c: number) => void,
-    hideShips: boolean,
-    interactive: boolean,
-    isMyBoardForPlacement: boolean = false,
-  ) => {
-    return (
-      <div className="flex flex-col items-center">
-        <h3 className="text-lg font-semibold text-zinc-800 mb-4">{title}</h3>
-        <div className="relative pl-6 pb-6">
-          <div className="absolute top-0 bottom-6 left-0 flex w-6 flex-col text-sm font-bold text-zinc-500 select-none">
-            {ROWS.map((n) => (
-              <div key={n} className="flex flex-1 items-center justify-center">
-                {n}
-              </div>
-            ))}
-          </div>
-          <div className="absolute bottom-0 left-6 right-0 flex h-6 text-sm font-bold text-zinc-500 select-none">
-            {COLS.map((l) => (
-              <div key={l} className="flex flex-1 items-center justify-center">
-                {l}
-              </div>
-            ))}
-          </div>
-
-          <div
-            className={`relative grid grid-cols-10 grid-rows-10 w-[95vw] sm:w-[80vw] md:w-[42vh] md:max-w-[420px] aspect-square border-2 border-zinc-800 bg-[#E3F2FD] ${interactive ? "" : "pointer-events-none"}`}
-          >
-            {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, i) => {
-              const r = Math.floor(i / BOARD_SIZE);
-              const c = i % BOARD_SIZE;
-              const isAnimatingHere =
-                interactive &&
-                activeAnimation &&
-                activeAnimation.r === r &&
-                activeAnimation.c === c;
-
-              return (
-                <div
-                  key={`${r}-${c}`}
-                  onClick={() => onCellClick(r, c)}
-                  onDragOver={(e) => {
-                    if (isMyBoardForPlacement && !gameStarted) {
-                      e.preventDefault();
-                    }
-                  }}
-                  onDrop={(e) => {
-                    if (isMyBoardForPlacement && !gameStarted) {
-                      handleDrop(e, r, c);
-                    }
-                  }}
-                  className="border border-blue-200 relative flex items-center justify-center cursor-pointer hover:bg-blue-100 transition-colors"
-                >
-                  <AnimatePresence>
-                    {isAnimatingHere && (
-                      <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
-                        {activeAnimation.stage === "falling" && (
-                          <motion.div
-                            key="falling"
-                            initial={{
-                              y: -100,
-                              opacity: 0,
-                              scale: 1.5,
-                              rotate: 15,
-                            }}
-                            animate={{ y: 0, opacity: 1, scale: 1, rotate: 0 }}
-                            exit={{ opacity: 0, scale: 0.5 }}
-                            transition={{ duration: 0.35, ease: "easeIn" }}
-                            className="text-2xl md:text-3xl drop-shadow-lg"
-                          >
-                            💣
-                          </motion.div>
-                        )}
-                        {activeAnimation.stage === "exploding" &&
-                          activeAnimation.result === "hit" && (
-                            <motion.div
-                              key="exploding-hit"
-                              initial={{ scale: 0.5, opacity: 1 }}
-                              animate={{ scale: 2.5, opacity: 0 }}
-                              transition={{ duration: 0.5, ease: "easeOut" }}
-                              className="text-3xl md:text-4xl absolute drop-shadow-xl"
-                            >
-                              💥
-                            </motion.div>
-                          )}
-                        {activeAnimation.stage === "exploding" &&
-                          activeAnimation.result === "miss" && (
-                            <motion.div
-                              key="exploding-miss"
-                              initial={{ scale: 0.5, opacity: 1 }}
-                              animate={{ scale: 2, opacity: 0 }}
-                              transition={{ duration: 0.5, ease: "easeOut" }}
-                              className="text-3xl md:text-4xl absolute drop-shadow-md"
-                            >
-                              💦
-                            </motion.div>
-                          )}
-                      </div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              );
-            })}
-
-            {ships.map((ship) => {
-              if (ship.positions.length === 0) return null;
-
-              const isSunk =
-                gameStarted &&
-                ship.positions.every((p) =>
-                  shots.some(
-                    (s) => s.r === p[0] && s.c === p[1] && s.result === "hit",
-                  ),
-                );
-
-              if (hideShips && !isSunk) return null;
-
-              const startR = ship.positions[0][0];
-              const startC = ship.positions[0][1];
-
-              const size = ship.size || ship.positions.length;
-              let isH = ship.orientation === "H";
-              if (ship.positions.length > 1) {
-                isH = ship.positions[0][0] === ship.positions[1][0];
-              }
-
-              const topPos = (startR * 100) / BOARD_SIZE;
-              const leftPos = (startC * 100) / BOARD_SIZE;
-              const widthPos = isH
-                ? (size * 100) / BOARD_SIZE
-                : 100 / BOARD_SIZE;
-              const heightPos = isH
-                ? 100 / BOARD_SIZE
-                : (size * 100) / BOARD_SIZE;
-
-              const shipClasses = [
-                "absolute",
-                isSunk ? "brightness-75" : "",
-                ship.color || "bg-zinc-600",
-                "rounded-sm",
-                isMyBoardForPlacement && !gameStarted
-                  ? "cursor-grab active:cursor-grabbing hover:brightness-110 shadow-md z-20"
-                  : "pointer-events-none z-10",
-              ]
-                .filter(Boolean)
-                .join(" ");
-
-              return (
-                <div
-                  key={ship.id}
-                  draggable={isMyBoardForPlacement && !gameStarted}
-                  onDragStart={(e) => {
-                    if (
-                      isMyBoardForPlacement &&
-                      !gameStarted &&
-                      e.dataTransfer
-                    ) {
-                      e.dataTransfer.effectAllowed = "move";
-                    }
-                  }}
-                  onClick={(e) => {
-                    if (isMyBoardForPlacement && !gameStarted) {
-                      e.stopPropagation();
-                      handleShipClick(ship.id);
-                    }
-                  }}
-                  className={shipClasses}
-                  style={{
-                    top: `${topPos}%`,
-                    left: `${leftPos}%`,
-                    width: `${widthPos}%`,
-                    height: `${heightPos}%`,
-                    padding: "2px",
-                  }}
-                >
-                  <div
-                    className={`flex ${isH ? "flex-row" : "flex-col"} w-full h-full`}
-                  >
-                    {Array.from({ length: size || 0 }).map((_, idx) => (
-                      <div
-                        key={`segment-${ship.id}-${idx}`}
-                        className="flex-1 border border-white/20"
-                        onMouseDown={() => {
-                          if (isMyBoardForPlacement && !gameStarted) {
-                            draggedShipRef.current = {
-                              id: ship.id,
-                              segment: idx,
-                            };
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-
-            {shots.map((shot, idx) => {
-              const topPos = (shot.r * 100) / BOARD_SIZE;
-              const leftPos = (shot.c * 100) / BOARD_SIZE;
-              const cellSpan = 100 / BOARD_SIZE;
-
-              const isSunkCell = ships.some(
-                (ship) =>
-                  ship.positions.length > 0 &&
-                  ship.positions.some(
-                    (p) => p[0] === shot.r && p[1] === shot.c,
-                  ) &&
-                  ship.positions.every((p) =>
-                    shots.some(
-                      (s) => s.r === p[0] && s.c === p[1] && s.result === "hit",
-                    ),
-                  ),
-              );
-
-              return (
-                <div
-                  key={`shot-${idx}`}
-                  className="absolute z-30 pointer-events-none flex items-center justify-center"
-                  style={{
-                    top: `${topPos}%`,
-                    left: `${leftPos}%`,
-                    width: `${cellSpan}%`,
-                    height: `${cellSpan}%`,
-                  }}
-                >
-                  {shot.result === "hit" ? (
-                    <div
-                      className={`flex items-center justify-center w-5 h-5 md:w-6 md:h-6 rounded-full bg-red-500 shadow-md ${!isSunkCell ? "animate-pulse" : ""}`}
-                    >
-                      {isSunkCell && (
-                        <span className="text-white font-bold text-xs md:text-sm leading-none pointer-events-none select-none">
-                          X
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="w-3 h-3 rounded-full bg-zinc-500" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const opponentName = isPlayer1 ? player2Name : player1Name;
+  const opponentIsPlacing =
+    opponentName && placingPlayers.includes(opponentName);
+  const opponentIsReady = opponentName && readyPlayers.includes(opponentName);
 
   if (isCheckingStorage) {
     return (
@@ -1330,7 +1330,7 @@ function BattleshipGame() {
 
           {!showNameModal && (
             <>
-              {player2Name ? (
+              {player1Name || player2Name ? (
                 <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 xl:justify-start justify-center">
                   <span>Trận đấu:</span>
                   <span className="font-semibold text-blue-600">
@@ -1340,19 +1340,24 @@ function BattleshipGame() {
                   <span className="font-semibold text-red-600">
                     {player2Name}
                   </span>
-                  {playerName === hostName && (
+                  {playerName === hostName && !gameStarted && (
                     <button
-                      onClick={() => handleKickPlayer(player2Name)}
+                      onClick={() => {
+                        if (player1Name && player1Name !== hostName)
+                          handleKickPlayer(player1Name);
+                        if (player2Name && player2Name !== hostName)
+                          handleKickPlayer(player2Name);
+                      }}
                       className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
                     >
-                      Kick
+                      Kick All (Trừ Host)
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="mt-4 flex w-full flex-col items-center xl:items-start">
+                <div className="mt-4 flex w-full flex-col items-center xl:items-start mb-6">
                   <p className="mb-3 text-sm text-zinc-500">
-                    Đang chờ đối thủ tham gia...
+                    Đang chờ người chơi tham gia...
                   </p>
                   <div className="flex w-full items-center space-x-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm">
                     <span className="flex-1 select-all truncate text-left text-xs text-zinc-500">
@@ -1371,36 +1376,64 @@ function BattleshipGame() {
                       {linkCopied ? "Đã copy!" : "Copy Link"}
                     </button>
                   </div>
-                  {isSpectator && (
-                    <button
-                      onClick={handleBecomePlayer}
-                      className="mt-4 w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
-                    >
-                      Tham gia làm người chơi
-                    </button>
+                  {isSpectator && !gameStarted && (
+                    <div className="mt-4 w-full rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700 text-center">
+                      Vui lòng chọn ghế Người chơi ở khung bên phải để tham gia.
+                    </div>
                   )}
                 </div>
               )}
 
-              {player2Name && (
-                <div className="mt-6 flex w-full flex-col items-center space-y-3 xl:items-start">
-                  {gameStarted ? (
-                    <>
-                      <div className="inline-block rounded-full border border-zinc-100 bg-white px-6 py-3 shadow-sm">
-                        <p className="text-sm font-medium text-zinc-800">
-                          {winner
-                            ? `🎉 Chiến thắng: ${winner}!`
-                            : `Lượt bắn: ${isPlayer1Turn ? player1Name : player2Name}`}
-                        </p>
-                      </div>
+              <div className="mt-6 flex w-full flex-col items-center space-y-3 xl:items-start">
+                {gameStarted ? (
+                  <>
+                    <div className="inline-block rounded-full border border-zinc-100 bg-white px-6 py-3 shadow-sm">
+                      <p className="text-sm font-medium text-zinc-800">
+                        {winner
+                          ? `🎉 Chiến thắng: ${winner}!`
+                          : `Lượt bắn: ${isPlayer1Turn ? player1Name : player2Name}`}
+                      </p>
+                    </div>
 
-                      <div className="text-3xl font-mono font-medium tracking-wider text-zinc-800">
-                        {formatTime(elapsedTime)}
-                      </div>
-                    </>
-                  ) : (
-                    !isSpectator && (
-                      <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm xl:items-start xl:text-left">
+                    <div className="text-3xl font-mono font-medium tracking-wider text-zinc-800">
+                      {formatTime(elapsedTime)}
+                    </div>
+                  </>
+                ) : (
+                  !isSpectator && (
+                    <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm xl:items-start xl:text-left">
+                      {readyPlayers.includes(playerName || "") ? (
+                        <div className="w-full text-center">
+                          <h3 className="text-lg font-semibold text-green-600">
+                            Đã sẵn sàng!
+                          </h3>
+                          <p className="text-zinc-500">
+                            {opponentIsReady
+                              ? "Đối thủ cũng đã sẵn sàng. Bắt đầu!"
+                              : "Chờ đối thủ sẵn sàng..."}
+                          </p>
+                        </div>
+                      ) : !placingPlayers.includes(playerName || "") ? (
+                        <div className="flex flex-col items-center w-full space-y-4">
+                          <h3 className="text-base font-semibold text-zinc-800">
+                            Trận đấu sắp bắt đầu!
+                          </h3>
+                          <button
+                            onClick={handleReadyToPlace}
+                            className="w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+                          >
+                            Sẵn sàng chiến đấu
+                          </button>
+                          {opponentName && (
+                            <p className="text-sm text-zinc-500 mt-2">
+                              Đối thủ:{" "}
+                              {opponentIsPlacing || opponentIsReady
+                                ? "Đã sẵn sàng chiến đấu"
+                                : "Đang chờ..."}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
                         <div className="w-full flex flex-col items-center xl:items-start space-y-4">
                           <div
                             className="flex flex-col gap-4 w-full p-4 border-2 border-dashed border-zinc-300 rounded-lg bg-zinc-50/50"
@@ -1484,16 +1517,16 @@ function BattleshipGame() {
                               className="w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
                             >
                               {readyPlayers.includes(playerName || "")
-                                ? "Chờ đối thủ..."
-                                : "Sẵn sàng chiến đấu"}
+                                ? "Đã sẵn sàng"
+                                : "Xác nhận & Sẵn sàng"}
                             </button>
                           )}
                         </div>
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
             </>
           )}
 
@@ -1544,121 +1577,236 @@ function BattleshipGame() {
           )}
 
           <div
-            className={`flex flex-col md:flex-row gap-8 lg:gap-16 justify-center w-full transition-opacity ${!player2Name || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
+            className={`flex flex-col md:flex-row gap-8 lg:gap-16 justify-center w-full transition-opacity ${showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
           >
             {!gameStarted && !isSpectator ? (
               <>
                 {/* Placement Board */}
-                {renderBoard(
-                  "Bảng của bạn",
-                  myShips,
-                  [],
-                  () => {},
-                  false,
-                  true,
-                  true,
-                )}
+                <Board
+                  title="Bảng của bạn"
+                  ships={myShips}
+                  shots={[]}
+                  onCellClick={() => {}}
+                  hideShips={false}
+                  interactive={true}
+                  isMyBoardForPlacement={true}
+                  gameStarted={gameStarted}
+                  onShipClick={handleShipClick}
+                  onDrop={handleDrop}
+                  draggedShipRef={draggedShipRef}
+                />
                 {/* Empty opponent board */}
-                {renderBoard("Bảng đối thủ", [], [], () => {}, true, false)}
+                <Board
+                  title="Bảng đối thủ"
+                  ships={[]}
+                  shots={[]}
+                  onCellClick={() => {}}
+                  hideShips={true}
+                  interactive={false}
+                  gameStarted={gameStarted}
+                />
               </>
             ) : (
               <>
-                {isPlayer1 &&
-                  renderBoard(
-                    "Bảng của bạn",
-                    p1Ships,
-                    p2Shots,
-                    () => {},
-                    false,
-                    false,
-                  )}
-                {isPlayer1 &&
-                  renderBoard(
-                    "Bảng đối thủ",
-                    p2Ships,
-                    p1Shots,
-                    (r, c) => handleShootTrigger(r, c),
-                    !winner,
-                    true,
-                  )}
+                {isPlayer1 && (
+                  <Board
+                    title="Bảng của bạn"
+                    ships={p1Ships}
+                    shots={p2Shots}
+                    onCellClick={() => {}}
+                    hideShips={false}
+                    interactive={false}
+                    gameStarted={gameStarted}
+                  />
+                )}
+                {isPlayer1 && (
+                  <Board
+                    title="Bảng đối thủ"
+                    ships={p2Ships}
+                    shots={p1Shots}
+                    onCellClick={(r, c) => handleShootTrigger(r, c)}
+                    hideShips={!winner}
+                    interactive={true}
+                    gameStarted={gameStarted}
+                    activeAnimation={activeAnimation}
+                  />
+                )}
 
-                {isPlayer2 &&
-                  renderBoard(
-                    "Bảng của bạn",
-                    p2Ships,
-                    p1Shots,
-                    () => {},
-                    false,
-                    false,
-                  )}
-                {isPlayer2 &&
-                  renderBoard(
-                    "Bảng đối thủ",
-                    p1Ships,
-                    p2Shots,
-                    (r, c) => handleShootTrigger(r, c),
-                    !winner,
-                    true,
-                  )}
+                {isPlayer2 && (
+                  <Board
+                    title="Bảng của bạn"
+                    ships={p2Ships}
+                    shots={p1Shots}
+                    onCellClick={() => {}}
+                    hideShips={false}
+                    interactive={false}
+                    gameStarted={gameStarted}
+                  />
+                )}
+                {isPlayer2 && (
+                  <Board
+                    title="Bảng đối thủ"
+                    ships={p1Ships}
+                    shots={p2Shots}
+                    onCellClick={(r, c) => handleShootTrigger(r, c)}
+                    hideShips={!winner}
+                    interactive={true}
+                    gameStarted={gameStarted}
+                    activeAnimation={activeAnimation}
+                  />
+                )}
 
-                {isSpectator &&
-                  renderBoard(
-                    `Bảng của ${player1Name}`,
-                    p1Ships,
-                    p2Shots,
-                    () => {},
-                    false,
-                    false,
-                  )}
-                {isSpectator &&
-                  renderBoard(
-                    `Bảng của ${player2Name}`,
-                    p2Ships,
-                    p1Shots,
-                    () => {},
-                    false,
-                    false,
-                  )}
+                {isSpectator && (
+                  <Board
+                    title={`Bảng của ${player1Name}`}
+                    ships={p1Ships}
+                    shots={p2Shots}
+                    onCellClick={() => {}}
+                    hideShips={false}
+                    interactive={false}
+                    gameStarted={gameStarted}
+                  />
+                )}
+                {isSpectator && (
+                  <Board
+                    title={`Bảng của ${player2Name}`}
+                    ships={p2Ships}
+                    shots={p1Shots}
+                    onCellClick={() => {}}
+                    hideShips={false}
+                    interactive={false}
+                    gameStarted={gameStarted}
+                  />
+                )}
               </>
             )}
           </div>
         </div>
 
         {/* Cột phải: Thông tin người xem */}
-        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8">
-          <div className="bg-white rounded-xl border border-zinc-200 p-6 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0">
-            <h3 className="text-lg font-medium text-zinc-900 mb-4 border-b border-zinc-100 pb-3">
-              Người xem ({spectators.length}/5)
-            </h3>
-            {spectators.length === 0 ? (
-              <p className="text-sm text-zinc-500 italic">Chưa có người xem</p>
-            ) : (
-              <ul className="space-y-3">
-                {spectators.map((spec, idx) => (
-                  <li
-                    key={idx}
-                    className="flex items-center justify-between space-x-3"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-sm font-bold text-zinc-700">
-                        {spec.charAt(0).toUpperCase()}
+        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8 flex flex-col">
+          {/* Khung người chơi */}
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col mb-8">
+            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
+              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+                <span className="text-lg">🎮</span> Người chơi
+              </h3>
+              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
+                {[player1Name, player2Name].filter(Boolean).length}/2
+              </span>
+            </div>
+
+            <div className="p-4 sm:p-6 flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <h4 className="text-sm font-bold text-blue-600">
+                  Người chơi 1
+                </h4>
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                  {player1Name ? (
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+                        {player1Name.charAt(0).toUpperCase()}
                       </div>
-                      <span className="text-sm font-medium text-zinc-800">
-                        {spec}
+                      <span className="text-sm font-medium text-zinc-800 truncate">
+                        {player1Name} {playerName === player1Name && "(Bạn)"}{" "}
+                        {hostName === player1Name && "👑"}
                       </span>
                     </div>
-                    {playerName === hostName && (
-                      <button
-                        onClick={() => handleKickPlayer(spec)}
-                        className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
-                      >
-                        Kick
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
+                  ) : (
+                    <button
+                      onClick={() => handleSlotClick(1)}
+                      className="text-sm text-zinc-500 hover:text-blue-600 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-blue-400 w-full text-left transition-colors"
+                    >
+                      + Tham gia (Người chơi 1)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 mt-2">
+                <h4 className="text-sm font-bold text-red-600">Người chơi 2</h4>
+                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
+                  {player2Name ? (
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700">
+                        {player2Name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-800 truncate">
+                        {player2Name} {playerName === player2Name && "(Bạn)"}{" "}
+                        {hostName === player2Name && "👑"}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleSlotClick(2)}
+                      className="text-sm text-zinc-500 hover:text-red-600 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-red-400 w-full text-left transition-colors"
+                    >
+                      + Tham gia (Người chơi 2)
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {!isSpectator && (!gameStarted || winner) && (
+                <button
+                  onClick={handleBecomeSpectator}
+                  className="mt-2 text-sm text-zinc-500 hover:text-zinc-700 underline text-center w-full"
+                >
+                  Rời ghế, trở thành khán giả
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
+            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
+              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
+                <span className="text-lg">👀</span> Người xem
+              </h3>
+              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
+                {spectators.length}/10
+              </span>
+            </div>
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 custom-scrollbar">
+              {spectators.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <span className="text-3xl mb-2 opacity-20">🪑</span>
+                  <p className="text-sm text-zinc-400 font-medium">
+                    Chưa có người xem
+                  </p>
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {spectators.map((spec, idx) => (
+                    <li
+                      key={idx}
+                      className="group flex items-center justify-between space-x-3 rounded-xl border border-transparent p-2 transition-all hover:bg-zinc-50 hover:border-zinc-100"
+                    >
+                      <div className="flex items-center space-x-3 overflow-hidden">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-sm font-bold text-indigo-700 shadow-inner">
+                          {spec.charAt(0).toUpperCase()}
+                        </div>
+                        <span
+                          className="text-sm font-medium text-zinc-800 truncate"
+                          title={spec}
+                        >
+                          {spec}
+                        </span>
+                      </div>
+                      {playerName === hostName && (
+                        <button
+                          onClick={() => handleKickPlayer(spec)}
+                          className="shrink-0 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 opacity-100 xl:opacity-0 transition-all hover:bg-red-100 xl:group-hover:opacity-100 focus:opacity-100"
+                          title="Kích người xem"
+                        >
+                          Kick
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </div>
       </div>
