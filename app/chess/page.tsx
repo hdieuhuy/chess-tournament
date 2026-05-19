@@ -328,7 +328,20 @@ function ChessGame() {
     captures: { w: string[]; b: string[] };
     color: "W" | "B";
   } | null>(null);
-  const [history, setHistory] = useState<never[]>([]);
+  const [history, setHistory] = useState<
+    {
+      board: (string | null)[][];
+      isWhiteTurn: boolean;
+      turnIndex: number;
+      winner: string | null;
+      castlingRights: { wK: boolean; wQ: boolean; bK: boolean; bQ: boolean };
+      enPassantTarget: [number, number] | null;
+      captures: { w: string[]; b: string[] };
+      lastMove: { from: [number, number]; to: [number, number] } | null;
+      player1Time: number;
+      player2Time: number;
+    }[]
+  >([]);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
   const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
   const [gameMode, setGameMode] = useState<"1v1" | "2v2">("1v1");

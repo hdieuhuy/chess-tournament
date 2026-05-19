@@ -248,7 +248,7 @@ function OAnQuanGame() {
       const newBoard = state.board.map((c) => ({ ...c }));
       let currentIdx = startIndex;
       let stonesInHand = newBoard[currentIdx].stones;
-      newBoard[currentIdx].stones = 0;
+      newBoard[currentIdx] = { ...newBoard[currentIdx], stones: 0 };
 
       let currentP1Score = state.p1Score;
       let currentP2Score = state.p2Score;
@@ -266,7 +266,10 @@ function OAnQuanGame() {
       while (isDistributing) {
         while (stonesInHand > 0) {
           currentIdx = nextIndex(currentIdx);
-          newBoard[currentIdx].stones++;
+          newBoard[currentIdx] = {
+            ...newBoard[currentIdx],
+            stones: newBoard[currentIdx].stones + 1,
+          };
           stonesInHand--;
           setBoard([...newBoard]);
           setDropIndex(currentIdx);
@@ -280,7 +283,7 @@ function OAnQuanGame() {
           isDistributing = false;
         } else if (newBoard[checkIdx].stones > 0) {
           stonesInHand = newBoard[checkIdx].stones;
-          newBoard[checkIdx].stones = 0;
+          newBoard[checkIdx] = { ...newBoard[checkIdx], stones: 0 };
           currentIdx = checkIdx;
           setBoard([...newBoard]);
           setDropIndex(currentIdx);
@@ -302,8 +305,11 @@ function OAnQuanGame() {
             const capturedStones = newBoard[targetIdx].stones;
             const capturedQuan = newBoard[targetIdx].quan;
 
-            newBoard[targetIdx].stones = 0;
-            newBoard[targetIdx].quan = 0;
+            newBoard[targetIdx] = {
+              ...newBoard[targetIdx],
+              stones: 0,
+              quan: 0,
+            };
 
             const points = capturedStones + capturedQuan * 10;
             if (currentP1Turn) currentP1Score += points;
@@ -331,11 +337,11 @@ function OAnQuanGame() {
       ) {
         for (let i = 0; i < 5; i++) {
           currentP1Score += newBoard[i].stones;
-          newBoard[i].stones = 0;
+          newBoard[i] = { ...newBoard[i], stones: 0 };
         }
         for (let i = 6; i < 11; i++) {
           currentP2Score += newBoard[i].stones;
-          newBoard[i].stones = 0;
+          newBoard[i] = { ...newBoard[i], stones: 0 };
         }
         currentWinner =
           currentP1Score > currentP2Score
@@ -353,7 +359,8 @@ function OAnQuanGame() {
             .reduce((sum, c) => sum + c.stones, 0);
           if (p1Stones === 0) {
             currentP1Score -= 5;
-            for (let i = 0; i < 5; i++) newBoard[i].stones = 1;
+            for (let i = 0; i < 5; i++)
+              newBoard[i] = { ...newBoard[i], stones: 1 };
             setBoard([...newBoard]);
             setP1Score(currentP1Score);
             await delay(400);
@@ -364,7 +371,8 @@ function OAnQuanGame() {
             .reduce((sum, c) => sum + c.stones, 0);
           if (p2Stones === 0) {
             currentP2Score -= 5;
-            for (let i = 6; i < 11; i++) newBoard[i].stones = 1;
+            for (let i = 6; i < 11; i++)
+              newBoard[i] = { ...newBoard[i], stones: 1 };
             setBoard([...newBoard]);
             setP2Score(currentP2Score);
             await delay(400);
@@ -1004,16 +1012,101 @@ function OAnQuanGame() {
     }
   };
 
-  const handleBecomePlayer = () => {
-    if (channel && isSpectator && !player2Name) {
+  const handleSlotClick = (targetSlot: 1 | 2) => {
+    if (!channel || gameStarted) return;
+
+    if (targetSlot === 1 && player1Name) return;
+    if (targetSlot === 2 && player2Name) return;
+
+    if (playerName === hostName) {
+      const state = stateRef.current;
+      const newSpecs = state.spectators.filter((s) => s !== playerName);
+      const newReadyPlayers = state.readyPlayers.filter(
+        (p) => p !== playerName,
+      );
+
+      let newP1 = state.player1Name === playerName ? null : state.player1Name;
+      let newP2 = state.player2Name === playerName ? null : state.player2Name;
+
+      let success = false;
+
+      if (targetSlot === 1 && !newP1) {
+        newP1 = playerName;
+        success = true;
+      } else if (targetSlot === 2 && !newP2) {
+        newP2 = playerName;
+        success = true;
+      }
+
+      if (success) {
+        setPlayer1Name(newP1);
+        setPlayer2Name(newP2);
+        setSpectators(newSpecs);
+        setReadyPlayers(newReadyPlayers);
+
+        stateRef.current.player1Name = newP1;
+        stateRef.current.player2Name = newP2;
+        stateRef.current.spectators = newSpecs;
+        stateRef.current.readyPlayers = newReadyPlayers;
+
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: { ...stateRef.current },
+        });
+      }
+    } else {
       channel.send({
         type: "broadcast",
         event: "request-role-change",
-        payload: { playerName, newRole: "player" },
+        payload: { playerName, newRole: "player", targetSlot },
       });
-      setRequestedRole("player");
-      if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
     }
+
+    setRequestedRole("player");
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
+  };
+
+  const handleBecomeSpectator = () => {
+    if (!channel || (gameStarted && !winner)) return;
+
+    if (playerName === hostName) {
+      const state = stateRef.current;
+      const newP1 = state.player1Name === playerName ? null : state.player1Name;
+      const newP2 = state.player2Name === playerName ? null : state.player2Name;
+      const newSpecs = [...state.spectators];
+      if (!newSpecs.includes(playerName)) {
+        newSpecs.push(playerName);
+      }
+      const newReadyPlayers = state.readyPlayers.filter(
+        (p) => p !== playerName,
+      );
+
+      setPlayer1Name(newP1);
+      setPlayer2Name(newP2);
+      setSpectators(newSpecs);
+      setReadyPlayers(newReadyPlayers);
+
+      stateRef.current.player1Name = newP1;
+      stateRef.current.player2Name = newP2;
+      stateRef.current.spectators = newSpecs;
+      stateRef.current.readyPlayers = newReadyPlayers;
+
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: { ...stateRef.current },
+      });
+    } else {
+      channel.send({
+        type: "broadcast",
+        event: "request-role-change",
+        payload: { playerName, newRole: "spectator" },
+      });
+    }
+
+    setRequestedRole("spectator");
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "spectator");
   };
 
   const handleStartClick = () => {
