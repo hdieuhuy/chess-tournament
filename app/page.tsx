@@ -70,6 +70,13 @@ const GAMES = [
     icon: "🔴",
     iconClassName: "text-2xl",
   },
+  {
+    href: "/uno",
+    title: "Bài Uno",
+    subtitle: "Uno",
+    icon: "🃏",
+    iconClassName: "text-2xl",
+  },
 ];
 
 export default function LandingPage() {
