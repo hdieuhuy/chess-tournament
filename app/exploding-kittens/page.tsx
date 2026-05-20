@@ -10,8 +10,22 @@ import toast from "react-hot-toast";
 import { CARD_DEFINITIONS, CardInstance, CardType } from "./constants";
 import { Card } from "./Card";
 import { dealCards } from "./utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import confetti from "canvas-confetti";
+import {
+  FaArrowLeft,
+  FaArrowRight,
+  FaCheckCircle,
+  FaCrown,
+  FaEye,
+  FaGhost,
+  FaPlay,
+  FaScroll,
+  FaTimesCircle,
+} from "react-icons/fa";
+import { GiSwordClash } from "react-icons/gi";
+import { BsFillRocketFill } from "react-icons/bs";
+import { IoWarningOutline } from "react-icons/io5";
 
 const generateId = () => Math.random().toString(36).substring(2, 10);
 const shuffleArray = <T,>(array: T[]): T[] =>
@@ -51,6 +65,7 @@ function ExplodingKittensGame() {
   const [discardPile, setDiscardPile] = useState<CardInstance[]>([]);
   const [currentTurnIndex, setCurrentTurnIndex] = useState<number>(0);
   const [winner, setWinner] = useState<string | null>(null);
+  const [direction, setDirection] = useState<1 | -1>(1);
   const myHand = playerHands[playerName] || [];
 
   // Advanced Game Logic States
@@ -60,7 +75,7 @@ function ExplodingKittensGame() {
   const [drawnBomb, setDrawnBomb] = useState<CardInstance | null>(null);
   const [peekedCards, setPeekedCards] = useState<CardInstance[] | null>(null);
   const [targetSelectMode, setTargetSelectMode] = useState<
-    "favor" | "combo2" | "combo3" | "combo5" | null
+    "favor" | "combo2" | "combo3" | "combo5" | "targeted-attack" | null
   >(null);
   const [combo2Target, setCombo2Target] = useState<string | null>(null);
   const [selectedHandCards, setSelectedHandCards] = useState<CardInstance[]>(
@@ -91,6 +106,10 @@ function ExplodingKittensGame() {
     message: string;
     type: "defusing" | "exploded";
   } | null>(null);
+  const [isAlteringFuture, setIsAlteringFuture] = useState<boolean>(false);
+  const [alterCards, setAlterCards] = useState<CardInstance[]>([]);
+  const [isPlacingImplodingKitten, setIsPlacingImplodingKitten] =
+    useState<boolean>(false);
 
   useEffect(() => {
     if (bombAlert) {
@@ -114,6 +133,7 @@ function ExplodingKittensGame() {
     discardPile,
     deadPlayers,
     turnsLeft,
+    direction,
     actionLog,
     favorRequest,
     pendingAction,
@@ -133,6 +153,7 @@ function ExplodingKittensGame() {
       discardPile,
       deadPlayers,
       turnsLeft,
+      direction,
       actionLog,
       favorRequest,
       pendingAction,
@@ -150,6 +171,7 @@ function ExplodingKittensGame() {
     discardPile,
     deadPlayers,
     turnsLeft,
+    direction,
     actionLog,
     favorRequest,
     pendingAction,
@@ -177,6 +199,7 @@ function ExplodingKittensGame() {
         if (data.discardPile !== undefined) setDiscardPile(data.discardPile);
         if (data.deadPlayers !== undefined) setDeadPlayers(data.deadPlayers);
         if (data.turnsLeft !== undefined) setTurnsLeft(data.turnsLeft);
+        if (data.direction !== undefined) setDirection(data.direction);
         if (data.actionLog !== undefined) setActionLog(data.actionLog);
         if (data.favorRequest !== undefined) setFavorRequest(data.favorRequest);
         if (data.pendingAction !== undefined)
@@ -192,6 +215,7 @@ function ExplodingKittensGame() {
         if (data.winner !== undefined) setWinner(data.winner);
         if (data.deadPlayers !== undefined) setDeadPlayers(data.deadPlayers);
         if (data.turnsLeft !== undefined) setTurnsLeft(data.turnsLeft);
+        if (data.direction !== undefined) setDirection(data.direction);
         if (data.actionLog !== undefined) setActionLog(data.actionLog);
         if (data.favorRequest !== undefined) setFavorRequest(data.favorRequest);
         if (data.pendingAction !== undefined)
@@ -208,8 +232,12 @@ function ExplodingKittensGame() {
         setDiscardPile(data.discardPile);
         setTurnsLeft(data.turnsLeft);
         setCurrentTurnIndex(data.currentTurnIndex);
+        if (data.direction !== undefined) setDirection(data.direction);
         setActionLog(data.actionLog);
         setFavorRequest(data.favorRequest);
+        if (data.deadPlayers) setDeadPlayers(data.deadPlayers);
+        if (data.winner !== undefined) setWinner(data.winner);
+        if (data.bombAlert !== undefined) setBombAlert(data.bombAlert);
 
         if (
           data.cardType === "see-the-future" &&
@@ -217,6 +245,20 @@ function ExplodingKittensGame() {
           data.actionPlayer === playerName
         ) {
           setPeekedCards(data.drawPile.slice(-3).reverse());
+        }
+
+        if (
+          data.cardType === "alter-the-future" &&
+          !data.isNoped &&
+          data.actionPlayer === playerName
+        ) {
+          setIsAlteringFuture(true);
+          setAlterCards(data.drawPile.slice(-3).reverse());
+        }
+
+        if (data.drawnBombForPlayer === playerName && data.drawnBomb) {
+          setIsDefusing(true);
+          setDrawnBomb(data.drawnBomb);
         }
       })
       .on("broadcast", { event: "reset-game" }, () => {
@@ -228,6 +270,7 @@ function ExplodingKittensGame() {
         setCurrentTurnIndex(0);
         setWinner(null);
         setDeadPlayers([]);
+        setDirection(1);
         setTurnsLeft(1);
         setActionLog([]);
         setFavorRequest(null);
@@ -237,6 +280,9 @@ function ExplodingKittensGame() {
         setPendingComboCards([]);
         setPeekedCards(null);
         setBombAlert(null);
+        setIsAlteringFuture(false);
+        setAlterCards([]);
+        setIsPlacingImplodingKitten(false);
       })
       .on("broadcast", { event: "request-join" }, (payload) => {
         const { playerName: newPlayer, requestedRole: role } = payload.payload;
@@ -245,7 +291,7 @@ function ExplodingKittensGame() {
         if (state.hostName === playerName) {
           const newPlayers = [...state.players];
           const newSpecs = [...state.spectators];
-          const maxPlayers = 5; // Exploding Kittens usually 2-5 players
+          const maxPlayers = 10; // Hỗ trợ Party Pack lên đến 10 người
 
           const isAlreadyPlayer = newPlayers.includes(newPlayer);
           const isAlreadySpec = newSpecs.includes(newPlayer);
@@ -383,26 +429,20 @@ function ExplodingKittensGame() {
     currentIndex: number,
     playersList: string[],
     deadList: string[],
+    currentDirection: 1 | -1,
   ) => {
     let nextIndex = currentIndex;
     let count = 0;
     do {
-      nextIndex = (nextIndex + 1) % playersList.length;
+      nextIndex =
+        (nextIndex + currentDirection + playersList.length) %
+        playersList.length;
       count++;
     } while (
       deadList.includes(playersList[nextIndex]) &&
       count < playersList.length
     );
     return nextIndex;
-  };
-
-  const getNextAlivePlayerIndex = (currentIndex: number) => {
-    const state = stateRef.current;
-    return getNextAlivePlayerIndexState(
-      currentIndex,
-      state.players,
-      state.deadPlayers,
-    );
   };
 
   const resolvePendingAction = useCallback(() => {
@@ -422,10 +462,19 @@ function ExplodingKittensGame() {
     const newLog = [...state.actionLog];
     let newTurnsLeft = state.turnsLeft;
     let nextTurnIdx = state.currentTurnIndex;
+    let newDirection = state.direction;
     let newDrawPile = [...state.drawPile];
     const newPlayerHands = { ...state.playerHands };
     const newDiscardPile = [...state.discardPile];
     let newFavorRequest = state.favorRequest;
+    const newDeadPlayers = [...state.deadPlayers];
+    let newWinner = state.winner;
+    let newBombAlert: {
+      message: string;
+      type: "defusing" | "exploded";
+    } | null = null;
+    let drawnBombForPlayer: string | null = null;
+    let drawnBomb: CardInstance | null = null;
 
     if (isNoped) {
       newLog.unshift(`Hành động của ${player} đã bị NOPE hủy bỏ!`);
@@ -433,13 +482,51 @@ function ExplodingKittensGame() {
       if (cardType === "attack") {
         newLog.unshift(`${player} đánh lá Attack.`);
         newTurnsLeft = (state.turnsLeft || 1) + 1;
-        nextTurnIdx = getNextAlivePlayerIndex(state.currentTurnIndex);
+        nextTurnIdx = getNextAlivePlayerIndexState(
+          state.currentTurnIndex,
+          state.players,
+          state.deadPlayers,
+          state.direction,
+        );
+      } else if (cardType === "targeted-attack" && targetPlayer) {
+        newLog.unshift(
+          `${player} đánh lá Targeted Attack chỉ định ${targetPlayer}.`,
+        );
+        newTurnsLeft = (state.turnsLeft || 1) + 1;
+        const targetIdx = state.players.indexOf(targetPlayer);
+        nextTurnIdx =
+          targetIdx !== -1 && !state.deadPlayers.includes(targetPlayer)
+            ? targetIdx
+            : getNextAlivePlayerIndexState(
+                state.currentTurnIndex,
+                state.players,
+                state.deadPlayers,
+                state.direction,
+              );
+      } else if (cardType === "reverse") {
+        newLog.unshift(`${player} đánh lá Reverse.`);
+        newDirection = (state.direction * -1) as 1 | -1;
+        newTurnsLeft -= 1;
+        if (newTurnsLeft <= 0) {
+          newTurnsLeft = 1;
+          nextTurnIdx = getNextAlivePlayerIndexState(
+            state.currentTurnIndex,
+            state.players,
+            state.deadPlayers,
+            newDirection,
+          );
+        }
       } else if (cardType === "skip") {
         newLog.unshift(`${player} đánh lá Skip.`);
         newTurnsLeft -= 1;
         if (newTurnsLeft <= 0) {
           newTurnsLeft = 1;
-          nextTurnIdx = getNextAlivePlayerIndex(state.currentTurnIndex);
+          nextTurnIdx = getNextAlivePlayerIndexState(
+            state.currentTurnIndex,
+            state.players,
+            state.deadPlayers,
+            state.direction,
+          );
         }
       } else if (cardType === "shuffle") {
         newLog.unshift(`${player} đánh lá Shuffle.`);
@@ -456,6 +543,12 @@ function ExplodingKittensGame() {
         newLog.unshift(`${player} đánh lá See the Future.`);
         if (player === playerName) {
           setPeekedCards(newDrawPile.slice(-3).reverse());
+        }
+      } else if (cardType === "alter-the-future") {
+        newLog.unshift(`${player} đánh lá Alter the Future.`);
+        if (player === playerName) {
+          setIsAlteringFuture(true);
+          setAlterCards(newDrawPile.slice(-3).reverse());
         }
       } else if (cardType === "favor" && targetPlayer) {
         newLog.unshift(`${player} dùng Favor lên ${targetPlayer}.`);
@@ -498,11 +591,15 @@ function ExplodingKittensGame() {
         }
       } else if (cardType === "combo5" && targetCardId) {
         if (targetCardId === "draw_from_pile") {
-          let cardToGive = null;
+          let cardToGive: CardInstance | null = null;
           if (newDrawPile.length > 0) {
             const safeIndex = [...newDrawPile]
               .reverse()
-              .findIndex((c) => c.type !== "exploding-kitten");
+              .findIndex(
+                (c) =>
+                  c.type !== "exploding-kitten" &&
+                  c.type !== "imploding-kitten",
+              );
             if (safeIndex !== -1) {
               const actualIndex = newDrawPile.length - 1 - safeIndex;
               cardToGive = newDrawPile.splice(actualIndex, 1)[0];
@@ -535,6 +632,68 @@ function ExplodingKittensGame() {
             );
           }
         }
+      } else if (cardType === "draw-from-bottom") {
+        newLog.unshift(`${player} đánh lá Draw from Bottom.`);
+        const bottomCard = newDrawPile.shift();
+        if (bottomCard) {
+          if (
+            bottomCard.type === "exploding-kitten" ||
+            bottomCard.type === "imploding-kitten"
+          ) {
+            const hasDefuse = newPlayerHands[player]?.some(
+              (c) => c.type === "defuse",
+            );
+            if (hasDefuse) {
+              drawnBombForPlayer = player;
+              drawnBomb = bottomCard;
+              const alertMsg = `${player} rút trúng Mèo Nổ từ đáy và đang Gỡ Bom!`;
+              newBombAlert = { message: alertMsg, type: "defusing" };
+              newLog.unshift(
+                `${player} rút trúng Mèo Nổ từ đáy và đang dùng Defuse!`,
+              );
+            } else {
+              const alertMsg = `${player} rút trúng Mèo Nổ từ đáy và NỔ TUNG!`;
+              newBombAlert = { message: alertMsg, type: "exploded" };
+              newDeadPlayers.push(player);
+              newLog.unshift(
+                `💥 BOOM! ${player} rút trúng Mèo Nổ từ đáy và đã nổ tung!`,
+              );
+
+              if (newDeadPlayers.length === state.players.length - 1) {
+                newWinner =
+                  state.players.find((p) => !newDeadPlayers.includes(p)) ||
+                  null;
+                if (newWinner)
+                  newLog.unshift(`🏆 ${newWinner} giành chiến thắng!`);
+              }
+              nextTurnIdx = getNextAlivePlayerIndexState(
+                state.currentTurnIndex,
+                state.players,
+                newDeadPlayers,
+                state.direction,
+              );
+              newTurnsLeft = 1;
+            }
+          } else {
+            newPlayerHands[player] = [
+              ...(newPlayerHands[player] || []),
+              bottomCard,
+            ];
+            newLog.unshift(
+              `${player} đã rút lá dưới cùng và kết thúc lượt an toàn.`,
+            );
+            newTurnsLeft -= 1;
+            if (newTurnsLeft <= 0) {
+              newTurnsLeft = 1;
+              nextTurnIdx = getNextAlivePlayerIndexState(
+                state.currentTurnIndex,
+                state.players,
+                state.deadPlayers,
+                state.direction,
+              );
+            }
+          }
+        }
       }
     }
 
@@ -544,8 +703,12 @@ function ExplodingKittensGame() {
     setDiscardPile(newDiscardPile);
     setTurnsLeft(newTurnsLeft);
     setCurrentTurnIndex(nextTurnIdx);
+    setDirection(newDirection);
     setActionLog(newLog);
     setFavorRequest(newFavorRequest);
+    setDeadPlayers(newDeadPlayers);
+    setWinner(newWinner);
+    if (newBombAlert) setBombAlert(newBombAlert);
 
     if (channel) {
       channel.send({
@@ -560,8 +723,14 @@ function ExplodingKittensGame() {
           discardPile: newDiscardPile,
           turnsLeft: newTurnsLeft,
           currentTurnIndex: nextTurnIdx,
+          direction: newDirection,
           actionLog: newLog,
           favorRequest: newFavorRequest,
+          deadPlayers: newDeadPlayers,
+          winner: newWinner,
+          bombAlert: newBombAlert,
+          drawnBombForPlayer,
+          drawnBomb,
         },
       });
     }
@@ -642,7 +811,76 @@ function ExplodingKittensGame() {
     const newDrawPile = [...state.drawPile];
     const drawnCard = newDrawPile.pop()!;
 
-    if (drawnCard.type === "exploding-kitten") {
+    if (drawnCard.type === "imploding-kitten") {
+      if (drawnCard.isFaceUp) {
+        // Nổ tung ngay lập tức, không thể gỡ
+        const alertMsg = `💥 BOOM! ${playerName} rút trúng Mèo Nổ Sập và NỔ TUNG!`;
+        setBombAlert({ message: alertMsg, type: "exploded" });
+
+        const newDeadPlayers = [...state.deadPlayers, playerName];
+        const newLog = [
+          `💥 BOOM! ${playerName} đã nổ tung vì Mèo Nổ Sập!`,
+          ...state.actionLog,
+        ];
+
+        let newWinner: string | null = null;
+        if (newDeadPlayers.length === state.players.length - 1) {
+          newWinner =
+            state.players.find((p) => !newDeadPlayers.includes(p)) || null;
+          if (newWinner) newLog.unshift(`🏆 ${newWinner} giành chiến thắng!`);
+        }
+
+        const nextTurnIdx = getNextAlivePlayerIndexState(
+          state.currentTurnIndex,
+          state.players,
+          newDeadPlayers,
+          state.direction,
+        );
+
+        setDeadPlayers(newDeadPlayers);
+        setDrawPile(newDrawPile); // Lá bài bị loại khỏi game
+        setCurrentTurnIndex(nextTurnIdx);
+        setTurnsLeft(1); // Reset lượt
+        setWinner(newWinner);
+        setActionLog(newLog);
+
+        if (channel) {
+          channel.send({
+            type: "broadcast",
+            event: "sync-game",
+            payload: {
+              drawPile: newDrawPile,
+              deadPlayers: newDeadPlayers,
+              currentTurnIndex: nextTurnIdx,
+              turnsLeft: 1,
+              winner: newWinner,
+              actionLog: newLog,
+              bombAlert: { message: alertMsg, type: "exploded" },
+            },
+          });
+        }
+      } else {
+        // Lần đầu rút phải, đặt lại vào chồng bài
+        setIsPlacingImplodingKitten(true);
+        setDrawnBomb(drawnCard);
+        setDrawPile(newDrawPile);
+
+        const newLog = [
+          `...${playerName} đã rút phải Mèo Nổ Sập! Họ phải đặt nó lại vào chồng bài...`,
+          ...state.actionLog,
+        ];
+        setActionLog(newLog);
+        if (channel)
+          channel.send({
+            type: "broadcast",
+            event: "sync-game",
+            payload: {
+              drawPile: newDrawPile,
+              actionLog: newLog,
+            },
+          });
+      }
+    } else if (drawnCard.type === "exploding-kitten") {
       const hasDefuse = state.playerHands[playerName]?.some(
         (c) => c.type === "defuse",
       );
@@ -679,14 +917,19 @@ function ExplodingKittensGame() {
           ...state.actionLog,
         ];
 
-        let newWinner = null;
+        let newWinner: string | null = null;
         if (newDeadPlayers.length === state.players.length - 1) {
           newWinner =
             state.players.find((p) => !newDeadPlayers.includes(p)) || null;
           if (newWinner) newLog.unshift(`🏆 ${newWinner} giành chiến thắng!`);
         }
 
-        const nextTurnIdx = getNextAlivePlayerIndex(state.currentTurnIndex);
+        const nextTurnIdx = getNextAlivePlayerIndexState(
+          state.currentTurnIndex,
+          state.players,
+          newDeadPlayers,
+          state.direction,
+        );
 
         setDeadPlayers(newDeadPlayers);
         setDrawPile(newDrawPile);
@@ -720,7 +963,12 @@ function ExplodingKittensGame() {
 
       if (newTurnsLeft <= 0) {
         newTurnsLeft = 1;
-        nextTurnIdx = getNextAlivePlayerIndex(state.currentTurnIndex);
+        nextTurnIdx = getNextAlivePlayerIndexState(
+          state.currentTurnIndex,
+          state.players,
+          state.deadPlayers,
+          state.direction,
+        );
       }
 
       const newLog = [
@@ -774,7 +1022,12 @@ function ExplodingKittensGame() {
     let nextTurnIdx = currentTurnIndex;
     if (newTurnsLeft <= 0) {
       newTurnsLeft = 1;
-      nextTurnIdx = getNextAlivePlayerIndex(currentTurnIndex);
+      nextTurnIdx = getNextAlivePlayerIndexState(
+        currentTurnIndex,
+        players,
+        deadPlayers,
+        direction,
+      );
     }
 
     const newLog = [
@@ -808,6 +1061,63 @@ function ExplodingKittensGame() {
       });
   };
 
+  const handlePlaceImplodingKitten = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!isPlacingImplodingKitten || !drawnBomb) return;
+
+    const formData = new FormData(e.currentTarget);
+    const indexFromTop = Number(formData.get("bombPosition") || 0);
+
+    const implodingKittenToPlace: CardInstance = {
+      ...drawnBomb,
+      isFaceUp: true,
+    };
+
+    const newDrawPile = [...drawPile];
+    newDrawPile.splice(
+      newDrawPile.length - indexFromTop,
+      0,
+      implodingKittenToPlace,
+    );
+
+    // Lượt của người chơi kết thúc
+    let newTurnsLeft = turnsLeft - 1;
+    let nextTurnIdx = currentTurnIndex;
+    if (newTurnsLeft <= 0) {
+      newTurnsLeft = 1;
+      nextTurnIdx = getNextAlivePlayerIndexState(
+        currentTurnIndex,
+        players,
+        deadPlayers,
+        direction,
+      );
+    }
+
+    const newLog = [
+      `${playerName} đã giấu Mèo Nổ Sập trở lại và kết thúc lượt.`,
+      ...actionLog,
+    ];
+
+    setIsPlacingImplodingKitten(false);
+    setDrawnBomb(null);
+    setDrawPile(newDrawPile);
+    setTurnsLeft(newTurnsLeft);
+    setCurrentTurnIndex(nextTurnIdx);
+    setActionLog(newLog);
+
+    if (channel)
+      channel.send({
+        type: "broadcast",
+        event: "sync-game",
+        payload: {
+          drawPile: newDrawPile,
+          turnsLeft: newTurnsLeft,
+          currentTurnIndex: nextTurnIdx,
+          actionLog: newLog,
+        },
+      });
+  };
+
   const toggleCardSelection = (card: CardInstance) => {
     if (
       players[currentTurnIndex] !== playerName ||
@@ -815,10 +1125,16 @@ function ExplodingKittensGame() {
       isDefusing ||
       deadPlayers.includes(playerName) ||
       favorRequest ||
-      pendingAction
+      pendingAction ||
+      isPlacingImplodingKitten
     )
       return;
-    if (card.type === "defuse" || card.type === "exploding-kitten") return;
+    if (
+      card.type === "defuse" ||
+      card.type === "exploding-kitten" ||
+      card.type === "imploding-kitten"
+    )
+      return;
 
     if (selectedHandCards.some((c) => c.id === card.id)) {
       setSelectedHandCards((prev) => prev.filter((c) => c.id !== card.id));
@@ -843,6 +1159,7 @@ function ExplodingKittensGame() {
       "hairy-potato-cat",
       "beard-cat",
       "rainbow-ralphing-cat",
+      "feral-cat",
     ];
 
     if (selectedHandCards.length === 1) {
@@ -865,21 +1182,38 @@ function ExplodingKittensGame() {
       }
 
       if (selectedHandCards.length === 2) {
-        if (
-          selectedHandCards.every((c) => c.type === selectedHandCards[0].type)
-        ) {
+        const types = selectedHandCards.map((c) => c.type);
+        const nonFeralTypes = types.filter((t) => t !== "feral-cat");
+        const isValidPair = types[0] === types[1] || nonFeralTypes.length <= 1;
+
+        if (isValidPair) {
           setPendingComboCards(selectedHandCards);
           setTargetSelectMode("combo2");
-        } else toast.error("Bộ đôi phải gồm 2 lá có cùng loại!");
+        } else {
+          toast.error(
+            "Bộ đôi phải gồm 2 lá cùng loại (Mèo hoang có thể thay thế)!",
+          );
+        }
       } else if (selectedHandCards.length === 3) {
-        if (
-          selectedHandCards.every((c) => c.type === selectedHandCards[0].type)
-        ) {
+        const types = selectedHandCards.map((c) => c.type);
+        const nonFeralTypes = types.filter((t) => t !== "feral-cat");
+        const isValidTriple = new Set(nonFeralTypes).size <= 1;
+
+        if (isValidTriple) {
           setPendingComboCards(selectedHandCards);
           setTargetSelectMode("combo3");
-        } else toast.error("Bộ 3 phải gồm 3 lá có cùng loại!");
+        } else {
+          toast.error(
+            "Bộ 3 phải gồm 3 lá cùng loại (Mèo hoang có thể thay thế)!",
+          );
+        }
       } else if (selectedHandCards.length === 5) {
-        if (new Set(selectedHandCards.map((c) => c.type)).size === 5) {
+        const types = selectedHandCards.map((c) => c.type);
+        const nonFeralTypes = types.filter((t) => t !== "feral-cat");
+        const isValidFive =
+          nonFeralTypes.length === new Set(nonFeralTypes).size;
+
+        if (isValidFive) {
           const hasDefuse = discardPile.some((c) => c.type === "defuse");
           if (hasDefuse) {
             setPendingComboCards(selectedHandCards);
@@ -888,7 +1222,11 @@ function ExplodingKittensGame() {
             setPendingComboCards(selectedHandCards);
             executeComboAction("combo5", null, null, "draw_from_pile");
           }
-        } else toast.error("Bộ 5 lá phải có loại khác nhau hoàn toàn!");
+        } else {
+          toast.error(
+            "Bộ 5 lá phải có loại khác nhau hoàn toàn (Mèo hoang có thể thay thế)!",
+          );
+        }
       } else toast.error("Số lượng bài không hợp lệ cho bất kỳ combo nào!");
     }
   };
@@ -928,7 +1266,12 @@ function ExplodingKittensGame() {
   };
 
   const handlePlayCard = (card: CardInstance) => {
-    if (card.type === "defuse" || card.type === "exploding-kitten") return;
+    if (
+      card.type === "defuse" ||
+      card.type === "exploding-kitten" ||
+      card.type === "imploding-kitten"
+    )
+      return;
 
     if (card.type === "nope") {
       handlePlayNope(card);
@@ -941,7 +1284,8 @@ function ExplodingKittensGame() {
       isDefusing ||
       deadPlayers.includes(playerName) ||
       favorRequest ||
-      pendingAction
+      pendingAction ||
+      isPlacingImplodingKitten
     )
       return;
 
@@ -952,7 +1296,17 @@ function ExplodingKittensGame() {
     const newPlayerHands = { ...playerHands, [playerName]: newHand };
     const newDiscardPile = [...discardPile, card];
 
-    if (["attack", "skip", "shuffle", "see-the-future"].includes(card.type)) {
+    if (
+      [
+        "attack",
+        "skip",
+        "shuffle",
+        "see-the-future",
+        "reverse",
+        "alter-the-future",
+        "draw-from-bottom",
+      ].includes(card.type)
+    ) {
       const pAction = {
         id: generateId(),
         player: playerName,
@@ -985,8 +1339,8 @@ function ExplodingKittensGame() {
           },
         });
       }
-    } else if (card.type === "favor") {
-      setTargetSelectMode("favor");
+    } else if (card.type === "favor" || card.type === "targeted-attack") {
+      setTargetSelectMode(card.type);
       setPendingComboCards([card]);
       setSelectedHandCards([]);
     }
@@ -1046,24 +1400,28 @@ function ExplodingKittensGame() {
     }
   };
 
-  const handleFavorTarget = (targetPlayer: string) => {
+  const handleSelectTarget = (targetPlayer: string) => {
+    const mode = targetSelectMode;
     setTargetSelectMode(null);
-    const targetHand = [...playerHands[targetPlayer]];
-    if (targetHand.length === 0) {
-      const newLog = [
-        `${playerName} muốn dùng Favor với ${targetPlayer} nhưng họ không còn lá nào!`,
-        ...actionLog,
-      ];
-      setActionLog(newLog);
-      setPendingComboCards([]); // Reset
-      if (channel) {
-        channel.send({
-          type: "broadcast",
-          event: "sync-game",
-          payload: { actionLog: newLog },
-        });
+
+    if (mode === "favor") {
+      const targetHand = [...playerHands[targetPlayer]];
+      if (targetHand.length === 0) {
+        const newLog = [
+          `${playerName} muốn dùng Favor với ${targetPlayer} nhưng họ không còn lá nào!`,
+          ...actionLog,
+        ];
+        setActionLog(newLog);
+        setPendingComboCards([]); // Reset
+        if (channel) {
+          channel.send({
+            type: "broadcast",
+            event: "sync-game",
+            payload: { actionLog: newLog },
+          });
+        }
+        return;
       }
-      return;
     }
 
     const card = pendingComboCards[0];
@@ -1074,7 +1432,7 @@ function ExplodingKittensGame() {
     const pAction = {
       id: generateId(),
       player: playerName,
-      cardType: "favor",
+      cardType: mode as string,
       playedCards: [card],
       targetPlayer,
       targetCardId: null,
@@ -1082,8 +1440,9 @@ function ExplodingKittensGame() {
       nopeCount: 0,
     };
 
+    const actionText = mode === "favor" ? "Favor" : "Targeted Attack";
     const newLog = [
-      `${playerName} muốn dùng Favor lên ${targetPlayer}...`,
+      `${playerName} muốn dùng ${actionText} lên ${targetPlayer}...`,
       ...actionLog,
     ];
 
@@ -1160,6 +1519,7 @@ function ExplodingKittensGame() {
       winner: null,
       deadPlayers: [],
       turnsLeft: 1,
+      direction: 1 as 1 | -1,
       actionLog: ["Trận đấu bắt đầu!"],
       favorRequest: null,
       pendingAction: null,
@@ -1173,6 +1533,7 @@ function ExplodingKittensGame() {
     setCurrentTurnIndex(newGameState.currentTurnIndex);
     setDeadPlayers(newGameState.deadPlayers);
     setTurnsLeft(newGameState.turnsLeft);
+    setDirection(newGameState.direction);
     setActionLog(newGameState.actionLog);
     setFavorRequest(newGameState.favorRequest);
     setPendingAction(newGameState.pendingAction);
@@ -1199,6 +1560,7 @@ function ExplodingKittensGame() {
     setWinner(null);
     setDeadPlayers([]);
     setTurnsLeft(1);
+    setDirection(1);
     setActionLog([]);
     setFavorRequest(null);
     setPendingAction(null);
@@ -1207,6 +1569,9 @@ function ExplodingKittensGame() {
     setPendingComboCards([]);
     setPeekedCards(null);
     setBombAlert(null);
+    setIsAlteringFuture(false);
+    setAlterCards([]);
+    setIsPlacingImplodingKitten(false);
 
     if (channel) {
       channel.send({
@@ -1320,6 +1685,37 @@ function ExplodingKittensGame() {
         </form>
       </Modal>
 
+      {/* Modal Place Imploding Kitten */}
+      <Modal
+        isOpen={isPlacingImplodingKitten}
+        title="BẠN ĐÃ RÚT PHẢI MÈO NỔ SẬP!"
+      >
+        <form
+          onSubmit={handlePlaceImplodingKitten}
+          className="flex flex-col space-y-4"
+        >
+          <p className="text-center text-sm text-zinc-600">
+            Bạn không bị nổ (lần này). Hãy đặt lá Mèo Nổ Sập này trở lại chồng
+            bài ở bất kỳ đâu. Lá bài sẽ được lật ngửa, và người tiếp theo rút
+            phải nó sẽ nổ tung!
+          </p>
+          <input
+            type="number"
+            name="bombPosition"
+            min={0}
+            max={drawPile.length}
+            defaultValue={0}
+            className="w-full rounded-lg border border-zinc-300 px-4 py-3 focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="w-full rounded-lg bg-purple-600 px-4 py-3 text-white font-medium hover:bg-purple-700"
+          >
+            Đặt Mèo Nổ Sập
+          </button>
+        </form>
+      </Modal>
+
       {/* Modal See The Future */}
       <Modal isOpen={peekedCards !== null} title="Xem trước 3 lá bài">
         <div className="flex flex-col items-center space-y-4 py-4">
@@ -1345,10 +1741,109 @@ function ExplodingKittensGame() {
         </div>
       </Modal>
 
-      {/* Modal Favor */}
+      {/* Modal Alter The Future */}
+      <Modal isOpen={isAlteringFuture} title="Thay đổi tương lai">
+        <div className="flex flex-col items-center space-y-6 py-4">
+          <p className="text-sm text-zinc-600 text-center">
+            Sắp xếp lại các lá bài (Bên trái là lá trên cùng). Sử dụng nút mũi
+            tên để đổi vị trí, sau đó bấm Xác nhận.
+          </p>
+          <div className="flex justify-center gap-4 w-full overflow-x-auto pb-4">
+            {alterCards.map((card, i) => (
+              <motion.div
+                key={card.id}
+                layout
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                className="flex flex-col items-center gap-2"
+              >
+                <span className="text-xs font-bold text-zinc-500 whitespace-nowrap">
+                  {i === 0 ? "Trên cùng" : `Thứ ${i + 1}`}
+                </span>
+                <Card
+                  card={CARD_DEFINITIONS[card.type]}
+                  variantIndex={card.variantIndex}
+                />
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={() => {
+                      if (i > 0) {
+                        const newCards = [...alterCards];
+                        [newCards[i - 1], newCards[i]] = [
+                          newCards[i],
+                          newCards[i - 1],
+                        ];
+                        setAlterCards(newCards);
+                      }
+                    }}
+                    disabled={i === 0}
+                    className="p-2 bg-zinc-100 hover:bg-zinc-200 rounded disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <FaArrowLeft />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (i < alterCards.length - 1) {
+                        const newCards = [...alterCards];
+                        [newCards[i + 1], newCards[i]] = [
+                          newCards[i],
+                          newCards[i + 1],
+                        ];
+                        setAlterCards(newCards);
+                      }
+                    }}
+                    disabled={i === alterCards.length - 1}
+                    className="p-2 bg-zinc-100 hover:bg-zinc-200 rounded disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <FaArrowRight />
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+          <button
+            onClick={() => {
+              const newDrawPile = [...drawPile];
+              const count = alterCards.length;
+              newDrawPile.splice(-count, count, ...[...alterCards].reverse());
+
+              setIsAlteringFuture(false);
+              setAlterCards([]);
+              setDrawPile(newDrawPile);
+
+              const newLog = [
+                `${playerName} đã sắp xếp lại ${count} lá bài trên cùng.`,
+                ...actionLog,
+              ];
+              setActionLog(newLog);
+
+              if (channel) {
+                channel.send({
+                  type: "broadcast",
+                  event: "sync-game",
+                  payload: {
+                    drawPile: newDrawPile,
+                    actionLog: newLog,
+                  },
+                });
+              }
+            }}
+            className="w-full rounded-lg bg-blue-600 px-4 py-3 text-white font-medium hover:bg-blue-700 cursor-pointer"
+          >
+            Xác nhận sắp xếp
+          </button>
+        </div>
+      </Modal>
+
+      {/* Modal Favor / Targeted Attack */}
       <Modal
-        isOpen={targetSelectMode === "favor"}
-        title="Chọn mục tiêu xin bài"
+        isOpen={
+          targetSelectMode === "favor" || targetSelectMode === "targeted-attack"
+        }
+        title={
+          targetSelectMode === "favor"
+            ? "Chọn mục tiêu xin bài"
+            : "Chọn mục tiêu tấn công"
+        }
       >
         <div className="flex flex-col space-y-2 py-4">
           {players
@@ -1356,16 +1851,18 @@ function ExplodingKittensGame() {
             .map((p) => (
               <button
                 key={p}
-                onClick={() => handleFavorTarget(p)}
+                onClick={() => handleSelectTarget(p)}
                 className="w-full rounded-lg bg-zinc-100 border border-zinc-200 px-4 py-3 text-zinc-800 font-medium hover:bg-zinc-200"
               >
-                Xin của {p} ({playerHands[p]?.length || 0} lá)
+                {targetSelectMode === "favor"
+                  ? `Xin của ${p} (${playerHands[p]?.length || 0} lá)`
+                  : `Tấn công ${p}`}
               </button>
             ))}
           {players.filter((p) => p !== playerName && !deadPlayers.includes(p))
             .length === 0 && (
             <p className="text-center text-sm text-zinc-500">
-              Không còn ai sống để xin!
+              Không còn ai sống để chọn!
             </p>
           )}
           <button
@@ -1500,7 +1997,10 @@ function ExplodingKittensGame() {
           >
             <option value="">-- Chọn bài --</option>
             {Object.entries(CARD_DEFINITIONS)
-              .filter(([type]) => type !== "exploding-kitten")
+              .filter(
+                ([type]) =>
+                  type !== "exploding-kitten" && type !== "imploding-kitten",
+              )
               .map(([type, def]) => (
                 <option key={type} value={type}>
                   {def.name}
@@ -1619,7 +2119,7 @@ function ExplodingKittensGame() {
           {!gameStarted && (
             <div className="mt-4 flex w-full flex-col items-center xl:items-start">
               <p className="mb-3 text-sm text-zinc-500">
-                Đang chờ người chơi tham gia ({players.length}/5)...
+                Đang chờ người chơi tham gia ({players.length}/10)...
               </p>
               <div className="mb-4 flex w-full max-w-md items-center space-x-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm">
                 <span className="flex-1 select-all truncate text-left text-xs text-zinc-500">
@@ -1700,7 +2200,12 @@ function ExplodingKittensGame() {
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold border border-zinc-200 shadow-inner">
                       {(
                         players[
-                          getNextAlivePlayerIndex(currentTurnIndex)
+                          getNextAlivePlayerIndexState(
+                            currentTurnIndex,
+                            players,
+                            deadPlayers,
+                            direction,
+                          )
                         ]?.charAt(0) || ""
                       ).toUpperCase()}
                     </div>
@@ -1709,12 +2214,18 @@ function ExplodingKittensGame() {
                         Tiếp theo
                       </span>
                       <span className="text-sm font-bold text-zinc-700 leading-none mt-0.5">
-                        {players[getNextAlivePlayerIndex(currentTurnIndex)] ||
-                          "..."}
+                        {players[
+                          getNextAlivePlayerIndexState(
+                            currentTurnIndex,
+                            players,
+                            deadPlayers,
+                            direction,
+                          )
+                        ] || "..."}
                       </span>
                     </div>
                     <div className="ml-auto text-lg text-zinc-500 bg-zinc-50 rounded-full w-8 h-8 flex items-center justify-center border border-zinc-200">
-                      ▶
+                      {direction === 1 ? <FaPlay /> : <FaArrowLeft />}
                     </div>
                   </div>
                 </div>
@@ -1734,7 +2245,15 @@ function ExplodingKittensGame() {
           {bombAlert && (
             <div className="mt-4 w-full max-w-sm rounded-xl border-4 border-red-500 bg-red-950 p-4 shadow-2xl xl:items-start text-center xl:text-left animate-pulse">
               <div className="text-red-400 font-black text-xl mb-1 uppercase tracking-wider flex items-center justify-center xl:justify-start gap-2">
-                {bombAlert.type === "exploded" ? "💥 BOOM!" : "🧨 CẢNH BÁO"}
+                {bombAlert.type === "exploded" ? (
+                  <>
+                    <BsFillRocketFill className="inline-block mr-2" /> BOOM!
+                  </>
+                ) : (
+                  <>
+                    <IoWarningOutline className="inline-block mr-2" /> CẢNH BÁO
+                  </>
+                )}
               </div>
               <p className="text-white text-sm font-medium">
                 {bombAlert.message}
@@ -1762,10 +2281,12 @@ function ExplodingKittensGame() {
               </div>
               <div className="mt-2 text-sm font-bold">
                 {pendingAction.nopeCount % 2 === 0 ? (
-                  <span className="text-green-400">Trạng thái: HỢP LỆ ✅</span>
+                  <span className="text-green-400 flex items-center justify-center gap-2">
+                    Trạng thái: HỢP LỆ <FaCheckCircle />
+                  </span>
                 ) : (
-                  <span className="text-red-400">
-                    Trạng thái: BỊ NOPE CHẶN ❌
+                  <span className="text-red-400 flex items-center justify-center gap-2">
+                    Trạng thái: BỊ NOPE CHẶN <FaTimesCircle />
                   </span>
                 )}
               </div>
@@ -1791,7 +2312,7 @@ function ExplodingKittensGame() {
         {/* Cột giữa: Khu vực Game */}
         <div className="flex w-full flex-col items-center justify-center">
           {gameStarted ? (
-            <div className="relative flex w-full max-w-6xl flex-col items-center justify-between min-h-[80vh] rounded-3xl border-4 border-red-500 bg-orange-100 p-4 sm:p-8 shadow-xl overflow-hidden">
+            <div className="relative flex w-full max-w-7xl flex-col items-center justify-between min-h-[85vh] rounded-3xl border-4 border-red-500 bg-orange-100 p-4 sm:p-8 shadow-xl overflow-hidden">
               {/* Opponents around the table */}
               {players
                 .filter((p) => p !== playerName)
@@ -1830,14 +2351,18 @@ function ExplodingKittensGame() {
                       className={`absolute ${posClass} flex flex-col items-center rounded-xl border-2 bg-white px-4 py-2 shadow-md transition-all z-10 ${isTurn ? "border-red-500 ring-4 ring-red-200 scale-110" : "border-zinc-200"} ${isDead ? "opacity-40 grayscale" : ""}`}
                     >
                       <span className="text-sm font-bold text-zinc-800 whitespace-nowrap">
-                        {p} {isDead && "👻"}
+                        {p}{" "}
+                        {isDead && (
+                          <FaGhost className="inline-block ml-1 text-slate-500" />
+                        )}
                       </span>
                       <span className="text-xs text-zinc-500 whitespace-nowrap">
                         {isDead ? "Đã nổ" : `${playerHands[p]?.length || 0} lá`}
                       </span>
                       {isTurn && turnsLeft > 1 && !isDead && (
                         <span className="absolute -bottom-3 text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full shadow-md whitespace-nowrap animate-bounce">
-                          ⚔️ Phải rút: {turnsLeft}
+                          <GiSwordClash className="inline-block mr-1" /> Phải
+                          rút: {turnsLeft}
                         </span>
                       )}
                     </div>
@@ -1945,16 +2470,38 @@ function ExplodingKittensGame() {
                         whileTap={{ scale: 0.95 }}
                         className="relative z-10"
                       >
-                        <Card
-                          card={CARD_DEFINITIONS["exploding-kitten"]}
-                          isFaceDown={true}
-                          onClick={handleDrawCard}
-                          className={
-                            players[currentTurnIndex] === playerName && !winner
-                              ? "ring-[6px] ring-red-500 animate-pulse cursor-pointer shadow-[0_0_25px_rgba(239,68,68,0.8)]"
-                              : "opacity-90"
-                          }
-                        />
+                        {drawPile.length > 0 &&
+                        drawPile[drawPile.length - 1].isFaceUp ? (
+                          <Card
+                            card={
+                              CARD_DEFINITIONS[
+                                drawPile[drawPile.length - 1].type
+                              ]
+                            }
+                            variantIndex={
+                              drawPile[drawPile.length - 1].variantIndex
+                            }
+                            onClick={handleDrawCard}
+                            className={
+                              players[currentTurnIndex] === playerName &&
+                              !winner
+                                ? "ring-[6px] ring-red-500 animate-pulse cursor-pointer shadow-[0_0_25px_rgba(239,68,68,0.8)]"
+                                : "opacity-90"
+                            }
+                          />
+                        ) : (
+                          <Card
+                            card={CARD_DEFINITIONS["exploding-kitten"]}
+                            isFaceDown={true}
+                            onClick={handleDrawCard}
+                            className={
+                              players[currentTurnIndex] === playerName &&
+                              !winner
+                                ? "ring-[6px] ring-red-500 animate-pulse cursor-pointer shadow-[0_0_25px_rgba(239,68,68,0.8)]"
+                                : "opacity-90"
+                            }
+                          />
+                        )}
                       </motion.div>
                     </div>
                     <p className="mt-3 text-center text-sm font-bold text-zinc-800 bg-white/80 px-3 py-1 rounded-full shadow-sm">
@@ -1964,7 +2511,8 @@ function ExplodingKittensGame() {
                       !winner &&
                       turnsLeft > 1 && (
                         <div className="absolute -bottom-10 whitespace-nowrap rounded-md bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-md animate-bounce z-20">
-                          👇 Phải rút: {turnsLeft} lượt
+                          <GiSwordClash className="inline-block mr-1" /> Phải
+                          rút: {turnsLeft} lượt
                         </div>
                       )}
                   </div>
@@ -2020,7 +2568,7 @@ function ExplodingKittensGame() {
                   return (
                     <div
                       key={rowIdx}
-                      className="flex w-full justify-center -space-x-8 sm:-space-x-12 pb-6 px-2 hover:-space-x-2 sm:hover:-space-x-4 transition-all duration-300"
+                      className="flex w-full justify-center -space-x-10 sm:-space-x-14 pb-6 px-2 hover:-space-x-2 sm:hover:-space-x-4 transition-all duration-300"
                     >
                       <AnimatePresence>
                         {rowCards.map((cardInstance, localIdx) => {
@@ -2033,7 +2581,7 @@ function ExplodingKittensGame() {
                             cardInstance.type === "nope" &&
                             !deadPlayers.includes(playerName);
 
-                          let cardClassName = `${players[currentTurnIndex] === playerName && !winner && cardInstance.type !== "defuse" && cardInstance.type !== "exploding-kitten" ? "cursor-pointer" : "opacity-80 cursor-not-allowed"} ${isSelected ? "ring-[5px] ring-blue-500 -translate-y-8 shadow-2xl" : "hover:-translate-y-6 shadow-xl"}`;
+                          let cardClassName = `${players[currentTurnIndex] === playerName && !winner && cardInstance.type !== "defuse" && cardInstance.type !== "exploding-kitten" && cardInstance.type !== "imploding-kitten" ? "cursor-pointer" : "opacity-80 cursor-not-allowed"} ${isSelected ? "ring-[5px] ring-blue-500 -translate-y-8 shadow-2xl" : "hover:-translate-y-6 shadow-xl"}`;
 
                           if (isNopeable) {
                             cardClassName =
@@ -2059,7 +2607,7 @@ function ExplodingKittensGame() {
                                 stiffness: 300,
                                 damping: 25,
                               }}
-                              className="relative hover:z-40 transition-transform duration-200"
+                              className="relative hover:z-40 transition-transform duration-200 transform scale-90"
                               style={{
                                 zIndex: isNopeable
                                   ? 100
@@ -2104,10 +2652,10 @@ function ExplodingKittensGame() {
           <div className="flex w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-6 py-4">
               <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
-                <span className="text-lg">🎮</span> Người chơi
+                <FaEye className="text-lg" /> Người chơi
               </h3>
               <span className="rounded-full bg-zinc-200 px-2.5 py-1 text-xs font-bold text-zinc-700">
-                {players.length}/5
+                {players.length}/10
               </span>
             </div>
             <div className="flex flex-col gap-2 p-4">
@@ -2121,7 +2669,11 @@ function ExplodingKittensGame() {
                       {p.charAt(0).toUpperCase()}
                     </div>
                     <span className="text-sm font-medium text-zinc-800">
-                      {p} {p === hostName && "👑"} {playerName === p && "(Bạn)"}
+                      {p}{" "}
+                      {p === hostName && (
+                        <FaCrown className="inline-block ml-1 text-yellow-500" />
+                      )}{" "}
+                      {playerName === p && "(Bạn)"}
                     </span>
                   </div>
                   {gameStarted && (
@@ -2134,8 +2686,8 @@ function ExplodingKittensGame() {
                       {players[currentTurnIndex] === p &&
                         turnsLeft > 1 &&
                         !deadPlayers.includes(p) && (
-                          <span className="text-[10px] font-bold text-white bg-red-500 px-1.5 py-0.5 rounded shadow-sm animate-pulse">
-                            ⚔️ Rút: {turnsLeft}
+                          <span className="text-[10px] font-bold text-white bg-red-500 px-1.5 py-0.5 rounded shadow-sm animate-pulse flex items-center gap-1">
+                            <GiSwordClash /> Rút: {turnsLeft}
                           </span>
                         )}
                     </div>
@@ -2149,7 +2701,7 @@ function ExplodingKittensGame() {
             <div className="flex w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-6 py-4">
                 <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
-                  <span className="text-lg">👀</span> Người xem
+                  <FaEye className="text-lg" /> Người xem
                 </h3>
                 <span className="rounded-full bg-zinc-200 px-2.5 py-1 text-xs font-bold text-zinc-700">
                   {spectators.length}
@@ -2177,7 +2729,7 @@ function ExplodingKittensGame() {
             <div className="flex w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
               <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between">
                 <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
-                  <span className="text-lg">📜</span> Lịch sử (Log)
+                  <FaScroll className="text-lg" /> Lịch sử (Log)
                 </h3>
               </div>
               <div className="h-[300px] overflow-y-auto p-4 flex flex-col gap-2 bg-zinc-100 text-sm custom-scrollbar">

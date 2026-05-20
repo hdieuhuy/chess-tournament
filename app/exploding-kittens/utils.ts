@@ -22,23 +22,29 @@ function shuffle<T>(array: T[]): T[] {
   return array;
 }
 
-// Function to create the full 56-card deck
+// Function to create the full deck (Expansion + Party Pack)
 function createFullDeck(): CardInstance[] {
   const deck: CardInstance[] = [];
   const cardCounts: Partial<Record<CardType, number>> = {
-    "exploding-kitten": 4,
-    defuse: 6,
-    nope: 5,
-    attack: 4,
-    skip: 4,
-    favor: 4,
-    shuffle: 4,
-    "see-the-future": 5,
-    tacocat: 4,
-    cattermelon: 4,
-    "hairy-potato-cat": 4,
-    "beard-cat": 4,
-    "rainbow-ralphing-cat": 4,
+    "exploding-kitten": 9, // Hỗ trợ lên đến 10 người
+    defuse: 10,
+    nope: 10,
+    attack: 8,
+    skip: 10,
+    favor: 8,
+    shuffle: 8,
+    "see-the-future": 10,
+    tacocat: 8,
+    cattermelon: 8,
+    "hairy-potato-cat": 8,
+    "beard-cat": 8,
+    "rainbow-ralphing-cat": 8,
+    "imploding-kitten": 1,
+    reverse: 4,
+    "draw-from-bottom": 4,
+    "feral-cat": 4,
+    "alter-the-future": 4,
+    "targeted-attack": 3,
   };
 
   for (const cardType in cardCounts) {
@@ -64,15 +70,18 @@ export function dealCards(playerNames: string[]): {
   drawPile: CardInstance[];
 } {
   const numPlayers = playerNames.length;
-  if (numPlayers < 2 || numPlayers > 5) {
-    throw new Error("Game requires 2 to 5 players.");
+  if (numPlayers < 2 || numPlayers > 10) {
+    throw new Error("Game requires 2 to 10 players.");
   }
 
   const fullDeck = createFullDeck();
 
   // 1. Remove all Exploding Kittens and Defuse cards from the deck.
   let deckWithoutBombsAndDefuses = fullDeck.filter(
-    (card) => card.type !== "exploding-kitten" && card.type !== "defuse",
+    (card) =>
+      card.type !== "exploding-kitten" &&
+      card.type !== "imploding-kitten" &&
+      card.type !== "defuse",
   );
 
   // 2. Shuffle the remaining deck and deal 5 cards to each player.
@@ -105,10 +114,11 @@ export function dealCards(playerNames: string[]): {
   let drawPile = [...deckWithoutBombsAndDefuses, ...defuseCards];
 
   // 5. Insert Exploding Kitten cards into the deck, equal to the number of players - 1.
-  const explodingKittens = fullDeck
-    .filter((card) => card.type === "exploding-kitten")
-    .slice(0, numPlayers - 1);
-  drawPile.push(...explodingKittens);
+  const bombs = fullDeck.filter(
+    (card) =>
+      card.type === "exploding-kitten" || card.type === "imploding-kitten",
+  );
+  drawPile.push(...shuffle(bombs).slice(0, numPlayers - 1));
 
   // 6. Shuffle the final draw pile.
   drawPile = shuffle(drawPile);

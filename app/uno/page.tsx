@@ -573,8 +573,8 @@ function UnoGame() {
       newHands[nextPlayer] = [...(newHands[nextPlayer] || []), ...drawnCards];
     }
 
-    let newWinner = null;
-    let message = null;
+    let newWinner: string | null = null;
+    let message: string | null = null;
 
     if (newHand.length === 1) message = `${playerName} hô UNO!`;
     if (newHand.length === 0) {
@@ -1063,9 +1063,9 @@ function UnoGame() {
               const baseIdx = players.includes(playerName)
                 ? players.indexOf(playerName)
                 : 0;
-              let topP = null,
-                leftP = null,
-                rightP = null;
+              let topP: string | null = null,
+                leftP: string | null = null,
+                rightP: string | null = null;
 
               if (players.length === 2) {
                 topP = players[(baseIdx + 1) % 2];
