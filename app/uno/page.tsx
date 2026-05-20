@@ -841,6 +841,14 @@ function UnoGame() {
     if (playerName !== hostName) return;
     setGameStarted(false);
     setReadyPlayers([]);
+    setDeck([]);
+    setDiscardPile([]);
+    setHands({});
+    setCurrentTurnIndex(0);
+    setDirection(1);
+    setActiveColor(null);
+    setWinner(null);
+    setHasDrawn(false);
     if (channel) {
       channel.send({
         type: "broadcast",
@@ -1177,40 +1185,56 @@ function UnoGame() {
             {/* Vị trí bài trên tay người chơi */}
             {gameStarted && hands[playerName] && (
               <div className="absolute bottom-0 left-0 w-full pointer-events-none">
-                <div className="custom-scrollbar flex w-full overflow-x-auto pt-24 pb-4 sm:pb-8 pointer-events-auto">
-                  <div className="flex items-end space-x-[-2rem] sm:space-x-[-1.5rem] px-8 transition-all hover:space-x-1 mx-auto">
-                    <AnimatePresence mode="popLayout">
-                      {hands[playerName].map((card) => {
-                        const topCard = discardPile[discardPile.length - 1];
-                        const isPlayable =
-                          players[currentTurnIndex] === playerName &&
-                          !winner &&
-                          (card.color === "black" ||
-                            card.color === activeColor ||
-                            card.value === topCard?.value);
-                        return renderCard(
-                          card,
-                          () => handlePlayCard(card),
-                          isPlayable,
-                          {
-                            initial: { opacity: 0, y: 50, scale: 0.8 },
-                            animate: { opacity: 1, y: 0, scale: 1 },
-                            exit: {
-                              opacity: 0,
-                              y: -50,
-                              scale: 0.5,
-                              transition: { duration: 0.2 },
+                <div className="custom-scrollbar flex flex-col w-full overflow-x-auto pt-24 pb-4 sm:pb-8 pointer-events-auto gap-y-2 sm:gap-y-4">
+                  {(hands[playerName].length > 10
+                    ? [
+                        hands[playerName].slice(
+                          0,
+                          Math.ceil(hands[playerName].length / 2),
+                        ),
+                        hands[playerName].slice(
+                          Math.ceil(hands[playerName].length / 2),
+                        ),
+                      ]
+                    : [hands[playerName]]
+                  ).map((rowCards, rowIdx) => (
+                    <div
+                      key={rowIdx}
+                      className="flex items-end space-x-[-2rem] sm:space-x-[-1.5rem] px-8 transition-all hover:space-x-1 mx-auto"
+                    >
+                      <AnimatePresence mode="popLayout">
+                        {rowCards.map((card) => {
+                          const topCard = discardPile[discardPile.length - 1];
+                          const isPlayable =
+                            players[currentTurnIndex] === playerName &&
+                            !winner &&
+                            (card.color === "black" ||
+                              card.color === activeColor ||
+                              card.value === topCard?.value);
+                          return renderCard(
+                            card,
+                            () => handlePlayCard(card),
+                            isPlayable,
+                            {
+                              initial: { opacity: 0, y: 50, scale: 0.8 },
+                              animate: { opacity: 1, y: 0, scale: 1 },
+                              exit: {
+                                opacity: 0,
+                                y: -50,
+                                scale: 0.5,
+                                transition: { duration: 0.2 },
+                              },
+                              transition: {
+                                type: "spring",
+                                stiffness: 260,
+                                damping: 20,
+                              },
                             },
-                            transition: {
-                              type: "spring",
-                              stiffness: 260,
-                              damping: 20,
-                            },
-                          },
-                        );
-                      })}
-                    </AnimatePresence>
-                  </div>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -1326,25 +1350,84 @@ function UnoGame() {
                     </span>
                   </div>
                 ) : (
-                  <div className="mb-4 flex items-center justify-between rounded-lg border-2 border-blue-500 bg-blue-50 p-3 text-center md:text-left">
-                    <span className="font-semibold text-zinc-800">
-                      Lượt của: {players[currentTurnIndex] || "..."}
-                    </span>
-                    {players[currentTurnIndex] === playerName && (
-                      <span className="animate-pulse rounded-full bg-blue-600 px-2 py-1 text-xs text-white">
-                        Lượt bạn
-                      </span>
-                    )}
+                  <div className="mb-6 flex w-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm relative">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-zinc-900"></div>
+                    <div className="p-4 sm:p-5 flex flex-col gap-3 relative">
+                      {/* Current Turn */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white font-bold shadow-sm ${players[currentTurnIndex] === playerName ? "bg-zinc-900 ring-4 ring-zinc-100" : "bg-zinc-500"}`}
+                          >
+                            {(
+                              players[currentTurnIndex]?.charAt(0) || ""
+                            ).toUpperCase()}
+                          </div>
+                          <div className="flex flex-col text-left">
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                              Lượt hiện tại
+                            </span>
+                            <span className="text-lg font-black text-zinc-900 leading-none mt-0.5">
+                              {players[currentTurnIndex] || "..."}
+                            </span>
+                          </div>
+                        </div>
+                        {players[currentTurnIndex] === playerName && (
+                          <div className="flex items-center gap-1.5 rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-800 animate-pulse shadow-sm border border-zinc-200">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-zinc-600"></span>
+                            </span>
+                            Tới lượt bạn!
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Divider */}
+                      <div className="w-full h-px bg-zinc-100"></div>
+
+                      {/* Next Turn */}
+                      <div className="flex items-center gap-3 opacity-80">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold border border-zinc-200 shadow-inner">
+                          {(
+                            players[
+                              getNextTurnIndex(currentTurnIndex, direction, 1)
+                            ]?.charAt(0) || ""
+                          ).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col text-left">
+                          <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
+                            Tiếp theo
+                          </span>
+                          <span className="text-sm font-bold text-zinc-700 leading-none mt-0.5">
+                            {players[
+                              getNextTurnIndex(currentTurnIndex, direction, 1)
+                            ] || "..."}
+                          </span>
+                        </div>
+                        <div className="ml-auto text-lg text-zinc-500 bg-zinc-50 rounded-full w-8 h-8 flex items-center justify-center border border-zinc-200">
+                          {direction === 1 ? "↻" : "↺"}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
-                {playerName === hostName && (
-                  <button
-                    onClick={handleEndGame}
-                    className="w-full cursor-pointer rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
-                  >
-                    Kết thúc trận
-                  </button>
-                )}
+                {playerName === hostName &&
+                  (!winner ? (
+                    <button
+                      onClick={handleEndGame}
+                      className="w-full cursor-pointer rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
+                    >
+                      Kết thúc trận
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleEndGame}
+                      className="w-full cursor-pointer rounded-lg border border-green-500 bg-green-600 px-4 py-2 text-sm font-bold text-white shadow-md transition-colors hover:bg-green-700"
+                    >
+                      Chơi lại
+                    </button>
+                  ))}
               </div>
             )}
 

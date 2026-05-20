@@ -11,6 +11,7 @@ import { CARD_DEFINITIONS, CardInstance, CardType } from "./constants";
 import { Card } from "./Card";
 import { dealCards } from "./utils";
 import { motion, AnimatePresence } from "framer-motion";
+import confetti from "canvas-confetti";
 
 const generateId = () => Math.random().toString(36).substring(2, 10);
 const shuffleArray = <T,>(array: T[]): T[] =>
@@ -83,9 +84,22 @@ function ExplodingKittensGame() {
     targetCardId: string | null;
     requestedType: CardType | null;
     nopeCount: number;
-    endTime: number;
   } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [localEndTime, setLocalEndTime] = useState<number | null>(null);
+  const [bombAlert, setBombAlert] = useState<{
+    message: string;
+    type: "defusing" | "exploded";
+  } | null>(null);
+
+  useEffect(() => {
+    if (bombAlert) {
+      const timer = setTimeout(() => {
+        setBombAlert(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [bombAlert]);
 
   const stateRef = useRef({
     hostName,
@@ -182,6 +196,9 @@ function ExplodingKittensGame() {
         if (data.favorRequest !== undefined) setFavorRequest(data.favorRequest);
         if (data.pendingAction !== undefined)
           setPendingAction(data.pendingAction);
+        if (data.bombAlert !== undefined) {
+          setBombAlert(data.bombAlert);
+        }
       })
       .on("broadcast", { event: "resolve-action" }, (payload) => {
         const data = payload.payload;
@@ -201,6 +218,25 @@ function ExplodingKittensGame() {
         ) {
           setPeekedCards(data.drawPile.slice(-3).reverse());
         }
+      })
+      .on("broadcast", { event: "reset-game" }, () => {
+        setGameStarted(false);
+        setReadyPlayers([]);
+        setDrawPile([]);
+        setDiscardPile([]);
+        setPlayerHands({});
+        setCurrentTurnIndex(0);
+        setWinner(null);
+        setDeadPlayers([]);
+        setTurnsLeft(1);
+        setActionLog([]);
+        setFavorRequest(null);
+        setPendingAction(null);
+        setCombo2Target(null);
+        setSelectedHandCards([]);
+        setPendingComboCards([]);
+        setPeekedCards(null);
+        setBombAlert(null);
       })
       .on("broadcast", { event: "request-join" }, (payload) => {
         const { playerName: newPlayer, requestedRole: role } = payload.payload;
@@ -360,6 +396,15 @@ function ExplodingKittensGame() {
     return nextIndex;
   };
 
+  const getNextAlivePlayerIndex = (currentIndex: number) => {
+    const state = stateRef.current;
+    return getNextAlivePlayerIndexState(
+      currentIndex,
+      state.players,
+      state.deadPlayers,
+    );
+  };
+
   const resolvePendingAction = useCallback(() => {
     const state = stateRef.current;
     if (!state.pendingAction) return;
@@ -387,22 +432,14 @@ function ExplodingKittensGame() {
     } else {
       if (cardType === "attack") {
         newLog.unshift(`${player} đánh lá Attack.`);
-        newTurnsLeft = 2;
-        nextTurnIdx = getNextAlivePlayerIndexState(
-          state.currentTurnIndex,
-          state.players,
-          state.deadPlayers,
-        );
+        newTurnsLeft = (state.turnsLeft || 1) + 1;
+        nextTurnIdx = getNextAlivePlayerIndex(state.currentTurnIndex);
       } else if (cardType === "skip") {
         newLog.unshift(`${player} đánh lá Skip.`);
         newTurnsLeft -= 1;
         if (newTurnsLeft <= 0) {
           newTurnsLeft = 1;
-          nextTurnIdx = getNextAlivePlayerIndexState(
-            state.currentTurnIndex,
-            state.players,
-            state.deadPlayers,
-          );
+          nextTurnIdx = getNextAlivePlayerIndex(state.currentTurnIndex);
         }
       } else if (cardType === "shuffle") {
         newLog.unshift(`${player} đánh lá Shuffle.`);
@@ -532,87 +569,124 @@ function ExplodingKittensGame() {
 
   useEffect(() => {
     if (pendingAction && hostName === playerName) {
-      const timeLeftMS = pendingAction.endTime - Date.now();
-      if (timeLeftMS > 0) {
-        const timer = setTimeout(() => {
-          resolvePendingAction();
-        }, timeLeftMS);
-        return () => clearTimeout(timer);
-      } else {
+      const timer = setTimeout(() => {
         resolvePendingAction();
-      }
+      }, 5000);
+      return () => clearTimeout(timer);
     }
   }, [pendingAction, hostName, playerName, resolvePendingAction]);
 
   useEffect(() => {
     if (pendingAction) {
+      setLocalEndTime(Date.now() + 5000);
+    } else {
+      setLocalEndTime(null);
+    }
+  }, [pendingAction]);
+
+  useEffect(() => {
+    if (localEndTime) {
       const updateTimer = () => {
-        const t = pendingAction.endTime - Date.now();
+        const t = localEndTime - Date.now();
         setTimeLeft(Math.max(0, Math.ceil(t / 1000)));
       };
       updateTimer();
       const interval = setInterval(updateTimer, 100);
       return () => clearInterval(interval);
     }
-  }, [pendingAction]);
+  }, [localEndTime]);
 
-  const getNextAlivePlayerIndex = (currentIndex: number) => {
-    let nextIndex = currentIndex;
-    let count = 0;
-    do {
-      nextIndex = (nextIndex + 1) % players.length;
-      count++;
-    } while (
-      deadPlayers.includes(players[nextIndex]) &&
-      count < players.length
-    );
-    return nextIndex;
-  };
+  // Hiệu ứng pháo hoa chúc mừng khi có người chiến thắng
+  useEffect(() => {
+    if (winner) {
+      const duration = 3000;
+      const end = Date.now() + duration;
+
+      const frame = () => {
+        confetti({
+          particleCount: 5,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 },
+          zIndex: 9999,
+        });
+        confetti({
+          particleCount: 5,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 },
+          zIndex: 9999,
+        });
+
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      };
+      frame();
+    }
+  }, [winner]);
 
   const handleDrawCard = () => {
+    const state = stateRef.current;
     if (
-      players[currentTurnIndex] !== playerName ||
-      winner ||
+      state.players[state.currentTurnIndex] !== playerName ||
+      state.winner ||
       isDefusing ||
-      deadPlayers.includes(playerName) ||
-      favorRequest ||
-      pendingAction
+      state.deadPlayers.includes(playerName) ||
+      state.favorRequest ||
+      state.pendingAction
     )
       return;
-    if (drawPile.length === 0) return;
+    if (state.drawPile.length === 0) return;
 
-    const newDrawPile = [...drawPile];
+    const newDrawPile = [...state.drawPile];
     const drawnCard = newDrawPile.pop()!;
 
     if (drawnCard.type === "exploding-kitten") {
-      const hasDefuse = myHand.some((c) => c.type === "defuse");
+      const hasDefuse = state.playerHands[playerName]?.some(
+        (c) => c.type === "defuse",
+      );
       if (hasDefuse) {
         setIsDefusing(true);
         setDrawnBomb(drawnCard);
         setDrawPile(newDrawPile);
 
+        const alertMsg = `${playerName} vừa rút trúng Mèo Nổ và đang Gỡ Bom!`;
+        setBombAlert({ message: alertMsg, type: "defusing" });
+
         const newLog = [
           `${playerName} rút trúng Mèo Nổ và đang dùng Defuse!`,
-          ...actionLog,
+          ...state.actionLog,
         ];
         setActionLog(newLog);
         if (channel)
           channel.send({
             type: "broadcast",
             event: "sync-game",
-            payload: { drawPile: newDrawPile, actionLog: newLog },
+            payload: {
+              drawPile: newDrawPile,
+              actionLog: newLog,
+              bombAlert: { message: alertMsg, type: "defusing" },
+            },
           });
       } else {
-        const newDeadPlayers = [...deadPlayers, playerName];
-        const newLog = [`💥 BOOM! ${playerName} đã nổ tung!`, ...actionLog];
+        const alertMsg = `${playerName} rút trúng Mèo Nổ và NỔ TUNG!`;
+        setBombAlert({ message: alertMsg, type: "exploded" });
+
+        const newDeadPlayers = [...state.deadPlayers, playerName];
+        const newLog = [
+          `💥 BOOM! ${playerName} đã nổ tung!`,
+          ...state.actionLog,
+        ];
 
         let newWinner = null;
-        if (newDeadPlayers.length === players.length - 1) {
-          newWinner = players.find((p) => !newDeadPlayers.includes(p)) || null;
-          newLog.unshift(`🏆 ${newWinner} giành chiến thắng!`);
+        if (newDeadPlayers.length === state.players.length - 1) {
+          newWinner =
+            state.players.find((p) => !newDeadPlayers.includes(p)) || null;
+          if (newWinner) newLog.unshift(`🏆 ${newWinner} giành chiến thắng!`);
         }
 
-        const nextTurnIdx = getNextAlivePlayerIndex(currentTurnIndex);
+        const nextTurnIdx = getNextAlivePlayerIndex(state.currentTurnIndex);
 
         setDeadPlayers(newDeadPlayers);
         setDrawPile(newDrawPile);
@@ -632,23 +706,27 @@ function ExplodingKittensGame() {
               turnsLeft: 1,
               winner: newWinner,
               actionLog: newLog,
+              bombAlert: { message: alertMsg, type: "exploded" },
             },
           });
         }
       }
     } else {
-      const newHand = [...myHand, drawnCard];
-      const newPlayerHands = { ...playerHands, [playerName]: newHand };
+      const newHand = [...(state.playerHands[playerName] || []), drawnCard];
+      const newPlayerHands = { ...state.playerHands, [playerName]: newHand };
 
-      let newTurnsLeft = turnsLeft - 1;
-      let nextTurnIdx = currentTurnIndex;
+      let newTurnsLeft = state.turnsLeft - 1;
+      let nextTurnIdx = state.currentTurnIndex;
 
       if (newTurnsLeft <= 0) {
         newTurnsLeft = 1;
-        nextTurnIdx = getNextAlivePlayerIndex(currentTurnIndex);
+        nextTurnIdx = getNextAlivePlayerIndex(state.currentTurnIndex);
       }
 
-      const newLog = [`${playerName} đã rút bài kết thúc lượt.`, ...actionLog];
+      const newLog = [
+        `${playerName} đã rút bài kết thúc lượt.`,
+        ...state.actionLog,
+      ];
 
       setDrawPile(newDrawPile);
       setPlayerHands(newPlayerHands);
@@ -707,6 +785,7 @@ function ExplodingKittensGame() {
     setIsDefusing(false);
     setDrawnBomb(null);
     setPlayerHands(newPlayerHands);
+    setBombAlert(null);
     setDiscardPile(newDiscardPile);
     setDrawPile(newDrawPile);
     setTurnsLeft(newTurnsLeft);
@@ -724,6 +803,7 @@ function ExplodingKittensGame() {
           turnsLeft: newTurnsLeft,
           currentTurnIndex: nextTurnIdx,
           actionLog: newLog,
+          bombAlert: null,
         },
       });
   };
@@ -824,7 +904,6 @@ function ExplodingKittensGame() {
     const newPendingAction = {
       ...pendingAction,
       nopeCount: pendingAction.nopeCount + 1,
-      endTime: Date.now() + 3000,
     };
 
     const newLog = [`${playerName} đánh NOPE!`, ...actionLog];
@@ -883,7 +962,6 @@ function ExplodingKittensGame() {
         targetCardId: null,
         requestedType: null,
         nopeCount: 0,
-        endTime: Date.now() + 3000,
       };
       setPlayerHands(newPlayerHands);
       setDiscardPile(newDiscardPile);
@@ -943,7 +1021,6 @@ function ExplodingKittensGame() {
       targetCardId,
       requestedType,
       nopeCount: 0,
-      endTime: Date.now() + 3000,
     };
 
     setPlayerHands(newPlayerHands);
@@ -1003,7 +1080,6 @@ function ExplodingKittensGame() {
       targetCardId: null,
       requestedType: null,
       nopeCount: 0,
-      endTime: Date.now() + 3000,
     };
 
     const newLog = [
@@ -1107,6 +1183,36 @@ function ExplodingKittensGame() {
         type: "broadcast",
         event: "room-sync",
         payload: newGameState,
+      });
+    }
+  };
+
+  const handleResetGame = () => {
+    if (playerName !== hostName) return;
+
+    setGameStarted(false);
+    setReadyPlayers([]);
+    setDrawPile([]);
+    setDiscardPile([]);
+    setPlayerHands({});
+    setCurrentTurnIndex(0);
+    setWinner(null);
+    setDeadPlayers([]);
+    setTurnsLeft(1);
+    setActionLog([]);
+    setFavorRequest(null);
+    setPendingAction(null);
+    setCombo2Target(null);
+    setSelectedHandCards([]);
+    setPendingComboCards([]);
+    setPeekedCards(null);
+    setBombAlert(null);
+
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "reset-game",
+        payload: {},
       });
     }
   };
@@ -1544,21 +1650,74 @@ function ExplodingKittensGame() {
 
           {gameStarted && (
             <div className="mt-6 flex w-full flex-col items-center xl:items-start space-y-4">
-              <div className="flex w-full max-w-sm flex-col items-center xl:items-start justify-center rounded-2xl bg-white p-5 shadow-sm border border-zinc-200">
-                <div className="text-lg font-black text-red-600 uppercase tracking-wider">
-                  LƯỢT CỦA: {players[currentTurnIndex]}
-                </div>
-                <div className="mt-1 text-sm font-semibold text-orange-800">
-                  Tiếp theo:{" "}
-                  {players[getNextAlivePlayerIndex(currentTurnIndex)]}
-                </div>
-                {turnsLeft > 1 && (
-                  <div className="mt-3 text-xs font-bold text-white bg-red-500 px-3 py-1.5 rounded-full animate-bounce shadow-md text-center">
-                    ⚔️ Đang bị Attack!
-                    <br />
-                    Còn {turnsLeft} lượt phải rút.
+              <div className="mb-6 flex w-full max-w-sm flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm relative">
+                <div className="absolute top-0 left-0 w-full h-1 bg-zinc-900"></div>
+                <div className="p-4 sm:p-5 flex flex-col gap-3 relative">
+                  {/* Current Turn */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white font-bold shadow-sm ${players[currentTurnIndex] === playerName ? "bg-zinc-900 ring-4 ring-zinc-100" : "bg-zinc-500"}`}
+                      >
+                        {(
+                          players[currentTurnIndex]?.charAt(0) || ""
+                        ).toUpperCase()}
+                      </div>
+                      <div className="flex flex-col text-left">
+                        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                          Lượt hiện tại
+                        </span>
+                        <span className="text-lg font-black text-zinc-900 leading-none mt-0.5">
+                          {players[currentTurnIndex] || "..."}
+                        </span>
+                      </div>
+                    </div>
+                    {players[currentTurnIndex] === playerName && (
+                      <div className="flex items-center gap-1.5 rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-bold text-zinc-800 animate-pulse shadow-sm border border-zinc-200">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-zinc-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-zinc-600"></span>
+                        </span>
+                        Tới lượt bạn!
+                      </div>
+                    )}
                   </div>
-                )}
+
+                  {turnsLeft > 1 && (
+                    <div className="mt-1 flex items-center justify-center gap-2 rounded-lg bg-red-50 py-2 border border-red-100 text-sm font-bold text-red-600 animate-pulse">
+                      <span>⚔️ Đang bị Attack! Phải rút:</span>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white shadow-sm">
+                        {turnsLeft}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Divider */}
+                  <div className="w-full h-px bg-zinc-100"></div>
+
+                  {/* Next Turn */}
+                  <div className="flex items-center gap-3 opacity-80">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-600 text-[10px] font-bold border border-zinc-200 shadow-inner">
+                      {(
+                        players[
+                          getNextAlivePlayerIndex(currentTurnIndex)
+                        ]?.charAt(0) || ""
+                      ).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col text-left">
+                      <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
+                        Tiếp theo
+                      </span>
+                      <span className="text-sm font-bold text-zinc-700 leading-none mt-0.5">
+                        {players[getNextAlivePlayerIndex(currentTurnIndex)] ||
+                          "..."}
+                      </span>
+                    </div>
+                    <div className="ml-auto text-lg text-zinc-500 bg-zinc-50 rounded-full w-8 h-8 flex items-center justify-center border border-zinc-200">
+                      ▶
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1571,6 +1730,17 @@ function ExplodingKittensGame() {
               Đổi trò chơi
             </Link>
           </div>
+
+          {bombAlert && (
+            <div className="mt-4 w-full max-w-sm rounded-xl border-4 border-red-500 bg-red-950 p-4 shadow-2xl xl:items-start text-center xl:text-left animate-pulse">
+              <div className="text-red-400 font-black text-xl mb-1 uppercase tracking-wider flex items-center justify-center xl:justify-start gap-2">
+                {bombAlert.type === "exploded" ? "💥 BOOM!" : "🧨 CẢNH BÁO"}
+              </div>
+              <p className="text-white text-sm font-medium">
+                {bombAlert.message}
+              </p>
+            </div>
+          )}
 
           {pendingAction && (
             <div className="mt-4 w-full max-w-sm rounded-xl border-4 border-red-500 bg-red-950 p-4 shadow-2xl xl:items-start text-center xl:text-left">
@@ -1665,6 +1835,11 @@ function ExplodingKittensGame() {
                       <span className="text-xs text-zinc-500 whitespace-nowrap">
                         {isDead ? "Đã nổ" : `${playerHands[p]?.length || 0} lá`}
                       </span>
+                      {isTurn && turnsLeft > 1 && !isDead && (
+                        <span className="absolute -bottom-3 text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded-full shadow-md whitespace-nowrap animate-bounce">
+                          ⚔️ Phải rút: {turnsLeft}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -1673,10 +1848,21 @@ function ExplodingKittensGame() {
               <div className="h-16 sm:h-24 w-full shrink-0" />
 
               {winner && (
-                <div className="text-center absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 bg-yellow-100 border-4 border-yellow-400 p-6 rounded-2xl shadow-2xl">
-                  <h2 className="text-2xl font-black text-yellow-700">
-                    🏆 CHIẾN THẮNG: {winner}
+                <div className="absolute left-1/2 top-1/2 z-30 flex w-[90%] max-w-sm -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-4 rounded-2xl border-4 border-yellow-400 bg-yellow-100 p-8 text-center shadow-2xl">
+                  <h2 className="text-3xl font-black tracking-widest text-yellow-700 drop-shadow-sm uppercase">
+                    🏆 CHIẾN THẮNG!
                   </h2>
+                  <div className="text-5xl font-black text-yellow-600 drop-shadow-md">
+                    {winner}
+                  </div>
+                  {playerName === hostName && (
+                    <button
+                      onClick={handleResetGame}
+                      className="mt-4 cursor-pointer rounded-xl bg-yellow-500 px-8 py-3 font-black text-white shadow-lg transition-transform hover:bg-yellow-600 active:scale-95 uppercase tracking-wider"
+                    >
+                      Chơi lại
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1774,6 +1960,13 @@ function ExplodingKittensGame() {
                     <p className="mt-3 text-center text-sm font-bold text-zinc-800 bg-white/80 px-3 py-1 rounded-full shadow-sm">
                       Rút bài ({drawPile.length})
                     </p>
+                    {players[currentTurnIndex] === playerName &&
+                      !winner &&
+                      turnsLeft > 1 && (
+                        <div className="absolute -bottom-10 whitespace-nowrap rounded-md bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-md animate-bounce z-20">
+                          👇 Phải rút: {turnsLeft} lượt
+                        </div>
+                      )}
                   </div>
                   {discardPile.length > 0 && (
                     <div className="flex flex-col items-center">
@@ -1814,43 +2007,86 @@ function ExplodingKittensGame() {
               </div>
 
               {/* Current Player's Hand */}
-              <div className="mt-8 flex flex-col items-center w-full z-20">
-                <div className="flex w-full justify-center -space-x-8 sm:-space-x-12 pb-6 px-2 hover:-space-x-2 sm:hover:-space-x-4 transition-all duration-300">
-                  <AnimatePresence>
-                    {myHand.map((cardInstance, idx) => {
-                      const isSelected = selectedHandCards.some(
-                        (c) => c.id === cardInstance.id,
-                      );
-                      return (
-                        <motion.div
-                          key={cardInstance.id}
-                          layout
-                          initial={{ opacity: 0, y: 50, scale: 0.8 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{
-                            opacity: 0,
-                            scale: 0.5,
-                            transition: { duration: 0.2 },
-                          }}
-                          transition={{
-                            type: "spring",
-                            stiffness: 300,
-                            damping: 25,
-                          }}
-                          className="relative hover:z-40 transition-transform duration-200"
-                          style={{ zIndex: isSelected ? 50 : idx }}
-                        >
-                          <Card
-                            card={CARD_DEFINITIONS[cardInstance.type]}
-                            variantIndex={cardInstance.variantIndex}
-                            onClick={() => toggleCardSelection(cardInstance)}
-                            className={`${players[currentTurnIndex] === playerName && !winner && cardInstance.type !== "defuse" && cardInstance.type !== "exploding-kitten" ? "cursor-pointer" : "opacity-80 cursor-not-allowed"} ${isSelected ? "ring-[5px] ring-blue-500 -translate-y-8 shadow-2xl" : "hover:-translate-y-6 shadow-xl"}`}
-                          />
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
-                </div>
+              <div className="mt-8 flex flex-col items-center w-full z-20 gap-y-2 sm:gap-y-4">
+                {(myHand.length > 10
+                  ? [
+                      myHand.slice(0, Math.ceil(myHand.length / 2)),
+                      myHand.slice(Math.ceil(myHand.length / 2)),
+                    ]
+                  : [myHand]
+                ).map((rowCards, rowIdx) => {
+                  const startIdx =
+                    rowIdx === 0 ? 0 : Math.ceil(myHand.length / 2);
+                  return (
+                    <div
+                      key={rowIdx}
+                      className="flex w-full justify-center -space-x-8 sm:-space-x-12 pb-6 px-2 hover:-space-x-2 sm:hover:-space-x-4 transition-all duration-300"
+                    >
+                      <AnimatePresence>
+                        {rowCards.map((cardInstance, localIdx) => {
+                          const idx = startIdx + localIdx;
+                          const isSelected = selectedHandCards.some(
+                            (c) => c.id === cardInstance.id,
+                          );
+                          const isNopeable =
+                            pendingAction &&
+                            cardInstance.type === "nope" &&
+                            !deadPlayers.includes(playerName);
+
+                          let cardClassName = `${players[currentTurnIndex] === playerName && !winner && cardInstance.type !== "defuse" && cardInstance.type !== "exploding-kitten" ? "cursor-pointer" : "opacity-80 cursor-not-allowed"} ${isSelected ? "ring-[5px] ring-blue-500 -translate-y-8 shadow-2xl" : "hover:-translate-y-6 shadow-xl"}`;
+
+                          if (isNopeable) {
+                            cardClassName =
+                              "cursor-pointer animate-pulse ring-[4px] ring-red-500 shadow-[0_0_30px_rgba(239,68,68,1)] -translate-y-8 hover:-translate-y-12 transition-all duration-300";
+                          } else if (pendingAction) {
+                            cardClassName =
+                              "opacity-40 cursor-not-allowed grayscale-[50%]";
+                          }
+
+                          return (
+                            <motion.div
+                              key={cardInstance.id}
+                              layout
+                              initial={{ opacity: 0, y: 50, scale: 0.8 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{
+                                opacity: 0,
+                                scale: 0.5,
+                                transition: { duration: 0.2 },
+                              }}
+                              transition={{
+                                type: "spring",
+                                stiffness: 300,
+                                damping: 25,
+                              }}
+                              className="relative hover:z-40 transition-transform duration-200"
+                              style={{
+                                zIndex: isNopeable
+                                  ? 100
+                                  : isSelected
+                                    ? 50
+                                    : idx,
+                              }}
+                            >
+                              <Card
+                                card={CARD_DEFINITIONS[cardInstance.type]}
+                                variantIndex={cardInstance.variantIndex}
+                                onClick={() => {
+                                  if (isNopeable) {
+                                    handlePlayNope(cardInstance);
+                                  } else {
+                                    toggleCardSelection(cardInstance);
+                                  }
+                                }}
+                                className={cardClassName}
+                              />
+                            </motion.div>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ) : (
@@ -1878,14 +2114,32 @@ function ExplodingKittensGame() {
               {players.map((p, i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-2"
+                  className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 p-2"
                 >
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700">
-                    {p.charAt(0).toUpperCase()}
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700">
+                      {p.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm font-medium text-zinc-800">
+                      {p} {p === hostName && "👑"} {playerName === p && "(Bạn)"}
+                    </span>
                   </div>
-                  <span className="text-sm font-medium text-zinc-800">
-                    {p} {p === hostName && "👑"} {playerName === p && "(Bạn)"}
-                  </span>
+                  {gameStarted && (
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-xs font-bold text-zinc-500">
+                        {deadPlayers.includes(p)
+                          ? "Đã nổ"
+                          : `${playerHands[p]?.length || 0} lá`}
+                      </span>
+                      {players[currentTurnIndex] === p &&
+                        turnsLeft > 1 &&
+                        !deadPlayers.includes(p) && (
+                          <span className="text-[10px] font-bold text-white bg-red-500 px-1.5 py-0.5 rounded shadow-sm animate-pulse">
+                            ⚔️ Rút: {turnsLeft}
+                          </span>
+                        )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
