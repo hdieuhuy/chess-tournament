@@ -1509,6 +1509,19 @@ function ExplodingKittensGame() {
     const { playerHands: initialHands, drawPile: initialDrawPile } =
       dealCards(players);
 
+    // Give me 1 defuse and 7 random cards
+    const myHand = initialHands[playerName];
+    if (myHand) {
+      const cardsToAdd = 8 - myHand.length; // Target 8 cards (1 defuse + 7 random)
+      if (cardsToAdd > 0) {
+        for (let i = 0; i < cardsToAdd; i++) {
+          if (initialDrawPile.length > 0) {
+            myHand.push(initialDrawPile.pop()!);
+          }
+        }
+      }
+    }
+
     const newGameState = {
       ...stateRef.current,
       gameStarted: true,
