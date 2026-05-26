@@ -3,6 +3,7 @@ import {
   GiWolfHead,
   GiFarmer,
   GiShield,
+  GiDirewolf,
   GiWitchFlight,
   GiMusket,
   GiWerewolf,
@@ -39,6 +40,8 @@ export const RoleIcon = ({
       return <FaUserTie className={className} />;
     case "cursed_wolf":
       return <GiWerewolf className={className} />;
+    case "white_wolf":
+      return <GiDirewolf className={className} />;
     case "fog_wolf":
       return <GiWolfHowl className={className} />;
     case "half_wolf":
@@ -80,6 +83,8 @@ export const getRoleColor = (id?: string) => {
       return "text-yellow-600";
     case "cursed_wolf":
       return "text-rose-700";
+    case "white_wolf":
+      return "text-zinc-300";
     case "fog_wolf":
       return "text-slate-600";
     case "half_wolf":
@@ -121,6 +126,8 @@ export const getRoleDescription = (id?: string) => {
       return "Có 2 mạng (sống sót 1 lần bị giết). Khi biểu quyết ban ngày, phiếu của Trưởng Làng được tính bằng 2.";
     case "cursed_wolf":
       return "Cùng Sói cắn người. Được quyền chọn lây nhiễm 1 lần/trận thay vì cắn chết. Người bị lây sẽ thành Sói vào hôm sau.";
+    case "white_wolf":
+      return "Phe thứ 3. Thức dậy cùng bầy Sói, nhưng mục tiêu của bạn là trở thành người sống sót cuối cùng. Cứ hai đêm một lần (bắt đầu từ đêm 2), bạn có thể giết một Sói khác.";
     case "fog_wolf":
       return "Cùng Sói cắn người. Ban ngày có thể tung sương mù 1 lần/trận để hủy bỏ biểu quyết và lập tức chuyển sang đêm.";
     case "half_wolf":
@@ -153,6 +160,7 @@ export const defaultRoles: RoleConfig[] = [
   { id: "hunter", name: "Thợ Săn", count: 0 },
   { id: "mayor", name: "Trưởng Làng", count: 0 },
   { id: "cursed_wolf", name: "Sói Nguyền", count: 0 },
+  { id: "white_wolf", name: "Sói Trắng", count: 0 },
   { id: "fog_wolf", name: "Sói Sương Mù", count: 0 },
   { id: "half_wolf", name: "Bán Sói", count: 0 },
   { id: "wolf_cub", name: "Sói Con", count: 0 },
