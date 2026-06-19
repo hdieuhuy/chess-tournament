@@ -3,32 +3,32 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { GomokuState, GameMode } from "../types";
-import { createEmptyBoard, BOARD_SIZE } from "../constants";
-import { checkWinner } from "../utils/game-logic";
+import { CheckersState } from "../types";
+import { INITIAL_BOARD, INITIAL_TIME } from "../constants";
+import { getValidMoves } from "../utils/game-logic";
 import toast from "react-hot-toast";
 
-interface GomokuContextValue extends GomokuState {
+interface CheckersContextValue extends CheckersState {
   roomId: string | null;
   playerName: string;
   isSpectator: boolean;
-  elapsedTime: number;
+  selectedPos: [number, number] | null;
+  validMoves: any[];
   handleCellClick: (row: number, col: number) => void;
   resetGame: () => void;
   handleKickPlayer: (targetName: string) => void;
-  handleSlotClick: (targetSlot: 1 | 2 | 3 | 4) => void;
+  handleSlotClick: (targetSlot: 1 | 2) => void;
   handleBecomeSpectator: () => void;
   handleRequestUndo: () => void;
   handleAcceptUndo: () => void;
   handleRejectUndo: () => void;
   handleStartClick: () => void;
   handleResign: () => void;
-  handleChangeGameMode: (mode: GameMode) => void;
 }
 
-const GomokuContext = createContext<GomokuContextValue | undefined>(undefined);
+const CheckersContext = createContext<CheckersContextValue | undefined>(undefined);
 
-export function GomokuProvider({
+export function CheckersProvider({
   children,
   roomId,
   playerName,
@@ -43,27 +43,26 @@ export function GomokuProvider({
   hasInitialized: boolean;
   isCreator: boolean;
 }) {
-  const [board, setBoard] = useState<(string | null)[][]>(createEmptyBoard());
-  const [isBlackNext, setIsBlackNext] = useState<boolean>(true);
+  const [board, setBoard] = useState<(string | null)[][]>(INITIAL_BOARD);
+  const [isBlackTurn, setIsBlackTurn] = useState<boolean>(true);
   const [winner, setWinner] = useState<string | null>(null);
-  const [winningCells, setWinningCells] = useState<number[][]>([]);
-  const [lastMove, setLastMove] = useState<[number, number] | null>(null);
+  const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null);
+  const [multiJumpPiece, setMultiJumpPiece] = useState<[number, number] | null>(null);
+  const [lastMove, setLastMove] = useState<{ from: [number, number]; to: [number, number] } | null>(null);
+  
   const [history, setHistory] = useState<any[]>([]);
   const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
-  const [gameMode, setGameMode] = useState<GameMode>("1v1");
-  const [turnIndex, setTurnIndex] = useState<number>(0);
 
   const [hostName, setHostName] = useState<string | null>(null);
   const [player1Name, setPlayer1Name] = useState<string | null>(null);
   const [player2Name, setPlayer2Name] = useState<string | null>(null);
-  const [player3Name, setPlayer3Name] = useState<string | null>(null);
-  const [player4Name, setPlayer4Name] = useState<string | null>(null);
   const [spectators, setSpectators] = useState<string[]>([]);
 
-  const [gameStartTime, setGameStartTime] = useState<number | null>(null);
-  const [elapsedTime, setElapsedTime] = useState<number>(0);
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [readyPlayers, setReadyPlayers] = useState<string[]>([]);
+  const [player1Time, setPlayer1Time] = useState<number>(INITIAL_TIME);
+  const [player2Time, setPlayer2Time] = useState<number>(INITIAL_TIME);
+  
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
   const isPlayer1 = playerName === player1Name;
@@ -76,19 +75,16 @@ export function GomokuProvider({
     player2Name,
     spectators,
     board,
-    isBlackNext,
+    isBlackTurn,
     winner,
-    winningCells,
     lastMove,
+    multiJumpPiece,
     history,
     undoRequestedBy,
-    gameStartTime,
     gameStarted,
     readyPlayers,
-    gameMode,
-    player3Name,
-    player4Name,
-    turnIndex,
+    player1Time,
+    player2Time,
   });
 
   useEffect(() => {
@@ -98,19 +94,16 @@ export function GomokuProvider({
       player2Name,
       spectators,
       board,
-      isBlackNext,
+      isBlackTurn,
       winner,
-      winningCells,
       lastMove,
+      multiJumpPiece,
       history,
       undoRequestedBy,
-      gameStartTime,
       gameStarted,
       readyPlayers,
-      gameMode,
-      player3Name,
-      player4Name,
-      turnIndex,
+      player1Time,
+      player2Time,
     };
   }, [
     hostName,
@@ -118,19 +111,16 @@ export function GomokuProvider({
     player2Name,
     spectators,
     board,
-    isBlackNext,
+    isBlackTurn,
     winner,
-    winningCells,
     lastMove,
+    multiJumpPiece,
     history,
     undoRequestedBy,
-    gameStartTime,
     gameStarted,
     readyPlayers,
-    gameMode,
-    player3Name,
-    player4Name,
-    turnIndex,
+    player1Time,
+    player2Time,
   ]);
 
   useEffect(() => {
@@ -143,32 +133,32 @@ export function GomokuProvider({
       stateRef.current.player1Name = playerName;
     }
 
-    const roomChannel = supabase.channel(`gomoku-room-${roomId}`);
+    const roomChannel = supabase.channel(`checkers-room-${roomId}`);
 
     roomChannel
       .on("broadcast", { event: "sync-move" }, (payload) => {
-        const data = payload.payload;
+        const { history: newHistory, ...data } = payload.payload;
         setBoard(data.board);
-        setIsBlackNext(data.isBlackNext);
+        setIsBlackTurn(data.isBlackTurn);
         setWinner(data.winner);
-        if (data.winningCells !== undefined) setWinningCells(data.winningCells);
         setLastMove(data.lastMove);
-        if (data.history) setHistory(data.history);
+        setMultiJumpPiece(data.multiJumpPiece !== undefined ? data.multiJumpPiece : null);
+        if (newHistory) setHistory(newHistory);
         setUndoRequestedBy(null);
-        if (data.turnIndex !== undefined) setTurnIndex(data.turnIndex);
-        if (data.gameStartTime) setGameStartTime(data.gameStartTime);
+        setPlayer1Time(data.player1Time);
+        setPlayer2Time(data.player2Time);
       })
       .on("broadcast", { event: "reset-game" }, () => {
-        setBoard(createEmptyBoard());
-        setIsBlackNext(true);
+        setBoard(INITIAL_BOARD);
+        setIsBlackTurn(true);
         setWinner(null);
-        setWinningCells([]);
+        setSelectedPos(null);
         setLastMove(null);
-        setGameStartTime(null);
-        setElapsedTime(0);
+        setMultiJumpPiece(null);
+        setPlayer1Time(INITIAL_TIME);
+        setPlayer2Time(INITIAL_TIME);
         setGameStarted(false);
         setReadyPlayers([]);
-        setTurnIndex(0);
       })
       .on("broadcast", { event: "player-ready" }, (payload) => {
         const { playerName: readyPlayer } = payload.payload;
@@ -176,9 +166,10 @@ export function GomokuProvider({
           prev.includes(readyPlayer) ? prev : [...prev, readyPlayer],
         );
       })
-      .on("broadcast", { event: "game-start" }, (payload) => {
+      .on("broadcast", { event: "game-start" }, () => {
         setGameStarted(true);
-        setGameStartTime(payload.payload.gameStartTime);
+        setPlayer1Time(INITIAL_TIME);
+        setPlayer2Time(INITIAL_TIME);
       })
       .on("broadcast", { event: "request-join" }, (payload) => {
         const { playerName: newPlayer, requestedRole: role } = payload.payload;
@@ -188,12 +179,8 @@ export function GomokuProvider({
           let newP2 = state.player2Name;
           const newSpecs = [...state.spectators];
 
-          const isAlreadyPlayer =
-            newPlayer === state.player1Name || newPlayer === newP2;
-          const isAlreadySpec =
-            newSpecs.includes(newPlayer) ||
-            newPlayer === state.player3Name ||
-            newPlayer === state.player4Name;
+          const isAlreadyPlayer = newPlayer === state.player1Name || newPlayer === newP2;
+          const isAlreadySpec = newSpecs.includes(newPlayer);
 
           if (!isAlreadyPlayer && !isAlreadySpec) {
             if (role === "player") {
@@ -204,22 +191,13 @@ export function GomokuProvider({
                 newP2 = newPlayer;
                 setPlayer2Name(newP2);
                 stateRef.current.player2Name = newP2;
-              } else if (state.gameMode === "2v2" && !state.player3Name) {
-                setPlayer3Name(newPlayer);
-                stateRef.current.player3Name = newPlayer;
-              } else if (state.gameMode === "2v2" && !state.player4Name) {
-                setPlayer4Name(newPlayer);
-                stateRef.current.player4Name = newPlayer;
               } else {
                 roomChannel.send({
                   type: "broadcast",
                   event: "join-rejected",
                   payload: {
                     playerName: newPlayer,
-                    reason:
-                      state.gameMode === "2v2"
-                        ? "Phòng đã đủ 4 người chơi!"
-                        : "Phòng đã đủ 2 người chơi!",
+                    reason: "Phòng đã đủ 2 người chơi, vui lòng tham gia với tư cách Khán giả!",
                   },
                 });
                 return;
@@ -251,6 +229,8 @@ export function GomokuProvider({
               player2Name: newP2,
               spectators: newSpecs,
               readyPlayers: [],
+              player1Time: INITIAL_TIME,
+              player2Time: INITIAL_TIME,
             },
           });
         }
@@ -260,23 +240,18 @@ export function GomokuProvider({
         setHostName(data.hostName);
         setPlayer1Name(data.player1Name);
         setPlayer2Name(data.player2Name);
-        if (data.player3Name !== undefined) setPlayer3Name(data.player3Name);
-        if (data.player4Name !== undefined) setPlayer4Name(data.player4Name);
         setSpectators(data.spectators);
         setBoard(data.board);
-        setIsBlackNext(data.isBlackNext);
+        setIsBlackTurn(data.isBlackTurn);
         setWinner(data.winner);
-        if (data.winningCells) setWinningCells(data.winningCells);
         setLastMove(data.lastMove);
+        setMultiJumpPiece(data.multiJumpPiece !== undefined ? data.multiJumpPiece : null);
         if (data.history) setHistory(data.history);
-        if (data.undoRequestedBy !== undefined)
-          setUndoRequestedBy(data.undoRequestedBy);
-        if (data.gameStartTime !== undefined)
-          setGameStartTime(data.gameStartTime);
+        if (data.undoRequestedBy !== undefined) setUndoRequestedBy(data.undoRequestedBy);
         if (data.gameStarted !== undefined) setGameStarted(data.gameStarted);
         if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
-        if (data.gameMode !== undefined) setGameMode(data.gameMode);
-        if (data.turnIndex !== undefined) setTurnIndex(data.turnIndex);
+        if (data.player1Time !== undefined) setPlayer1Time(data.player1Time);
+        if (data.player2Time !== undefined) setPlayer2Time(data.player2Time);
       })
       .on("broadcast", { event: "update-name" }, (payload) => {
         const { oldName, newName } = payload.payload;
@@ -284,11 +259,7 @@ export function GomokuProvider({
         setPlayer1Name((prev) => (prev === oldName ? newName : prev));
         setPlayer2Name((prev) => (prev === oldName ? newName : prev));
         setSpectators((prev) => prev.map((s) => (s === oldName ? newName : s)));
-        setPlayer3Name((prev) => (prev === oldName ? newName : prev));
-        setPlayer4Name((prev) => (prev === oldName ? newName : prev));
-        setReadyPlayers((prev) =>
-          prev.map((p) => (p === oldName ? newName : p)),
-        );
+        setReadyPlayers((prev) => prev.map((p) => (p === oldName ? newName : p)));
       })
       .on("broadcast", { event: "kick-player" }, (payload) => {
         if (payload.payload.playerName === playerName) {
@@ -302,14 +273,10 @@ export function GomokuProvider({
         if (state.hostName === playerName) {
           if (newRole === "player") {
             const newSpecs = state.spectators.filter((s) => s !== reqPlayer);
-            const newReadyPlayers = state.readyPlayers.filter(
-              (p) => p !== reqPlayer,
-            );
+            const newReadyPlayers = state.readyPlayers.filter((p) => p !== reqPlayer);
 
             let newP1 = state.player1Name === reqPlayer ? null : state.player1Name;
             let newP2 = state.player2Name === reqPlayer ? null : state.player2Name;
-            let newP3 = state.player3Name === reqPlayer ? null : state.player3Name;
-            let newP4 = state.player4Name === reqPlayer ? null : state.player4Name;
 
             let success = false;
 
@@ -318,12 +285,6 @@ export function GomokuProvider({
               success = true;
             } else if (targetSlot === 2 && !newP2) {
               newP2 = reqPlayer;
-              success = true;
-            } else if (targetSlot === 3 && state.gameMode === "2v2" && !newP3) {
-              newP3 = reqPlayer;
-              success = true;
-            } else if (targetSlot === 4 && state.gameMode === "2v2" && !newP4) {
-              newP4 = reqPlayer;
               success = true;
             }
 
@@ -334,27 +295,17 @@ export function GomokuProvider({
               } else if (!newP2) {
                 newP2 = reqPlayer;
                 success = true;
-              } else if (state.gameMode === "2v2" && !newP3) {
-                newP3 = reqPlayer;
-                success = true;
-              } else if (state.gameMode === "2v2" && !newP4) {
-                newP4 = reqPlayer;
-                success = true;
               }
             }
 
             if (success) {
               setPlayer1Name(newP1);
               setPlayer2Name(newP2);
-              setPlayer3Name(newP3);
-              setPlayer4Name(newP4);
               setSpectators(newSpecs);
               setReadyPlayers(newReadyPlayers);
 
               stateRef.current.player1Name = newP1;
               stateRef.current.player2Name = newP2;
-              stateRef.current.player3Name = newP3;
-              stateRef.current.player4Name = newP4;
               stateRef.current.spectators = newSpecs;
               stateRef.current.readyPlayers = newReadyPlayers;
 
@@ -367,27 +318,19 @@ export function GomokuProvider({
           } else if (newRole === "spectator") {
             const newP1 = state.player1Name === reqPlayer ? null : state.player1Name;
             const newP2 = state.player2Name === reqPlayer ? null : state.player2Name;
-            const newP3 = state.player3Name === reqPlayer ? null : state.player3Name;
-            const newP4 = state.player4Name === reqPlayer ? null : state.player4Name;
             const newSpecs = [...state.spectators];
             if (!newSpecs.includes(reqPlayer)) {
               newSpecs.push(reqPlayer);
             }
-            const newReadyPlayers = state.readyPlayers.filter(
-              (p) => p !== reqPlayer,
-            );
+            const newReadyPlayers = state.readyPlayers.filter((p) => p !== reqPlayer);
 
             setPlayer1Name(newP1);
             setPlayer2Name(newP2);
-            setPlayer3Name(newP3);
-            setPlayer4Name(newP4);
             setSpectators(newSpecs);
             setReadyPlayers(newReadyPlayers);
 
             stateRef.current.player1Name = newP1;
             stateRef.current.player2Name = newP2;
-            stateRef.current.player3Name = newP3;
-            stateRef.current.player4Name = newP4;
             stateRef.current.spectators = newSpecs;
             stateRef.current.readyPlayers = newReadyPlayers;
 
@@ -405,35 +348,25 @@ export function GomokuProvider({
 
         let newP1 = state.player1Name;
         let newP2 = state.player2Name;
-        let newP3 = state.player3Name;
-        let newP4 = state.player4Name;
         if (newP1 === leavingPlayer) newP1 = null;
         if (newP2 === leavingPlayer) newP2 = null;
-        if (newP3 === leavingPlayer) newP3 = null;
-        if (newP4 === leavingPlayer) newP4 = null;
 
         const newSpecs = state.spectators.filter((s) => s !== leavingPlayer);
-        const newReadyPlayers = state.readyPlayers.filter(
-          (p) => p !== leavingPlayer,
-        );
+        const newReadyPlayers = state.readyPlayers.filter((p) => p !== leavingPlayer);
 
         let newHostName = state.hostName;
         if (state.hostName === leavingPlayer) {
-          newHostName = newP1 || newP2 || newP3 || newP4 || newSpecs[0] || null;
+          newHostName = newP1 || newP2 || newSpecs[0] || null;
         }
 
         setPlayer1Name(newP1);
         setPlayer2Name(newP2);
-        setPlayer3Name(newP3);
-        setPlayer4Name(newP4);
         setSpectators(newSpecs);
         setReadyPlayers(newReadyPlayers);
         setHostName(newHostName);
 
         stateRef.current.player1Name = newP1;
         stateRef.current.player2Name = newP2;
-        stateRef.current.player3Name = newP3;
-        stateRef.current.player4Name = newP4;
         stateRef.current.spectators = newSpecs;
         stateRef.current.readyPlayers = newReadyPlayers;
         stateRef.current.hostName = newHostName;
@@ -504,204 +437,246 @@ export function GomokuProvider({
 
     const p1Ready = readyPlayers.includes(player1Name);
     const p2Ready = readyPlayers.includes(player2Name);
-    const p3Ready =
-      gameMode === "1v1" || (player3Name && readyPlayers.includes(player3Name));
-    const p4Ready =
-      gameMode === "1v1" || (player4Name && readyPlayers.includes(player4Name));
 
-    if (
-      p1Ready &&
-      p2Ready &&
-      p3Ready &&
-      p4Ready &&
-      (gameMode === "1v1" || (player3Name && player4Name))
-    ) {
+    if (p1Ready && p2Ready) {
       if (playerName === hostName) {
-        const startTime = Date.now();
         setGameStarted(true);
-        setGameStartTime(startTime);
+        setPlayer1Time(INITIAL_TIME);
+        setPlayer2Time(INITIAL_TIME);
         channel.send({
           type: "broadcast",
           event: "game-start",
-          payload: { gameStartTime: startTime },
+          payload: {},
         });
       }
     }
-  }, [
-    readyPlayers,
-    player1Name,
-    player2Name,
-    player3Name,
-    player4Name,
-    gameMode,
-    gameStarted,
-    playerName,
-    hostName,
-    channel,
-  ]);
+  }, [readyPlayers, player1Name, player2Name, gameStarted, playerName, hostName, channel]);
 
+  // Logic Đếm giờ
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (gameStartTime && !winner) {
-      interval = setInterval(() => {
-        setElapsedTime(Math.floor((Date.now() - gameStartTime) / 1000));
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [gameStartTime, winner]);
+    if (!gameStarted || winner) return;
+
+    const timer = setInterval(() => {
+      if (isBlackTurn) {
+        setPlayer1Time((t) => {
+          if (t <= 1) {
+            setWinner("R"); // Red wins on time
+            if (channel && playerName === hostName) {
+              channel.send({
+                type: "broadcast",
+                event: "sync-move",
+                payload: { ...stateRef.current, winner: "R", player1Time: 0 },
+              });
+            }
+            clearInterval(timer);
+            return 0;
+          }
+          return t - 1;
+        });
+      } else {
+        setPlayer2Time((t) => {
+          if (t <= 1) {
+            setWinner("B"); // Black wins on time
+            if (channel && playerName === hostName) {
+              channel.send({
+                type: "broadcast",
+                event: "sync-move",
+                payload: { ...stateRef.current, winner: "B", player2Time: 0 },
+              });
+            }
+            clearInterval(timer);
+            return 0;
+          }
+          return t - 1;
+        });
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [gameStarted, winner, isBlackTurn, channel, playerName, hostName]);
+
+  const validMoves = getValidMoves(board, isBlackTurn, multiJumpPiece);
 
   const handleCellClick = useCallback(
-    (row: number, col: number) => {
-      if (board[row][col] || winner || !gameStarted || isSpectator) return;
+    (r: number, c: number) => {
+      if (winner || !gameStarted || isSpectator) return;
 
-      const expectedPlayer =
-        gameMode === "2v2"
-          ? turnIndex === 0
-            ? player1Name
-            : turnIndex === 1
-              ? player2Name
-              : turnIndex === 2
-                ? player3Name
-                : player4Name
-          : isBlackNext
-            ? player1Name
-            : player2Name;
-      if (playerName !== expectedPlayer) return;
+      const myColor = isPlayer1 ? "B" : isPlayer2 ? "R" : null;
+      const currentTurnColor = isBlackTurn ? "B" : "R";
 
-      const currentState = {
-        board: stateRef.current.board,
-        isBlackNext: stateRef.current.isBlackNext,
-        winner: stateRef.current.winner,
-        winningCells: stateRef.current.winningCells,
-        lastMove: stateRef.current.lastMove,
-      };
-      const newHistory = [...stateRef.current.history, currentState];
-      setHistory(newHistory);
+      if (myColor !== currentTurnColor) return;
 
-      const currentPlayer = isBlackNext ? "B" : "W";
-      const newBoard = board.map((r) => [...r]);
-      newBoard[row][col] = currentPlayer;
+      const piece = board[r][c];
+      const isMyPiece =
+        piece &&
+        (isBlackTurn
+          ? piece === "b" || piece === "B"
+          : piece === "r" || piece === "R");
 
-      const winCells = checkWinner(newBoard, row, col, currentPlayer);
-      const nextTurnIndex = (turnIndex + 1) % (gameMode === "2v2" ? 4 : 2);
-      const nextTurn = nextTurnIndex % 2 === 0;
-      const newWinner = winCells ? currentPlayer : null;
-      const newWinningCells = winCells ? winCells : [];
+      if (isMyPiece) {
+        if (multiJumpPiece) {
+          if (r === multiJumpPiece[0] && c === multiJumpPiece[1]) {
+            setSelectedPos([r, c]);
+          }
+        } else {
+          const hasMoves = validMoves.some((m) => m.from[0] === r && m.from[1] === c);
+          if (hasMoves) {
+            setSelectedPos([r, c]);
+          }
+        }
+        return;
+      }
 
-      setBoard(newBoard);
-      setIsBlackNext(nextTurn);
-      setTurnIndex(nextTurnIndex);
-      setWinner(newWinner);
-      setWinningCells(newWinningCells);
-      setLastMove([row, col]);
+      if (selectedPos) {
+        const [fr, fc] = selectedPos;
+        const move = validMoves.find(
+          (m) =>
+            m.from[0] === fr &&
+            m.from[1] === fc &&
+            m.to[0] === r &&
+            m.to[1] === c,
+        );
 
-      if (channel) {
-        channel.send({
-          type: "broadcast",
-          event: "sync-move",
-          payload: {
-            board: newBoard,
-            isBlackNext: nextTurn,
-            turnIndex: nextTurnIndex,
-            winner: newWinner,
-            winningCells: newWinningCells,
-            lastMove: [row, col],
-            history: newHistory,
-            gameStartTime: gameStartTime,
-          },
-        });
+        if (move) {
+          const currentState = {
+            board: stateRef.current.board,
+            isBlackTurn: stateRef.current.isBlackTurn,
+            winner: stateRef.current.winner,
+            lastMove: stateRef.current.lastMove,
+            multiJumpPiece: stateRef.current.multiJumpPiece,
+            player1Time: stateRef.current.player1Time,
+            player2Time: stateRef.current.player2Time,
+          };
+          const newHistory = [...stateRef.current.history, currentState];
+          setHistory(newHistory);
+
+          const newBoard = board.map((row) => [...row]);
+          const p = newBoard[fr][fc] as string;
+          newBoard[fr][fc] = null;
+          newBoard[r][c] = p;
+
+          if (move.jumped) {
+            newBoard[move.jumped[0]][move.jumped[1]] = null;
+          }
+
+          let promoted = false;
+          if (p === "b" && r === 0) {
+            newBoard[r][c] = "B";
+            promoted = true;
+          } else if (p === "r" && r === 7) {
+            newBoard[r][c] = "R";
+            promoted = true;
+          }
+
+          let nextMultiJumpPiece: [number, number] | null = null;
+          let nextIsBlackTurn = isBlackTurn;
+
+          if (move.jumped && !promoted) {
+            const furtherMoves = getValidMoves(newBoard, isBlackTurn, [r, c]);
+            if (furtherMoves.length > 0 && furtherMoves[0].jumped) {
+              nextMultiJumpPiece = [r, c];
+              setSelectedPos([r, c]);
+            } else {
+              nextIsBlackTurn = !isBlackTurn;
+              setSelectedPos(null);
+            }
+          } else {
+            nextIsBlackTurn = !isBlackTurn;
+            setSelectedPos(null);
+          }
+
+          const nextPlayerMoves = getValidMoves(newBoard, nextIsBlackTurn, nextMultiJumpPiece);
+          let newWinner = null;
+          if (nextPlayerMoves.length === 0) {
+            newWinner = isBlackTurn ? "B" : "R";
+          } else {
+            const nextPlayerPiece = nextIsBlackTurn ? "b" : "r";
+            const nextPlayerKing = nextIsBlackTurn ? "B" : "R";
+            let hasPieces = false;
+            for (let rr = 0; rr < 8; rr++) {
+              for (let cc = 0; cc < 8; cc++) {
+                if (
+                  newBoard[rr][cc] === nextPlayerPiece ||
+                  newBoard[rr][cc] === nextPlayerKing
+                ) {
+                  hasPieces = true;
+                  break;
+                }
+              }
+            }
+            if (!hasPieces) {
+              newWinner = isBlackTurn ? "B" : "R";
+            }
+          }
+
+          setBoard(newBoard);
+          setIsBlackTurn(nextIsBlackTurn);
+          setMultiJumpPiece(nextMultiJumpPiece);
+          setLastMove({ from: [fr, fc], to: [r, c] });
+          if (newWinner) setWinner(newWinner);
+
+          if (channel) {
+            channel.send({
+              type: "broadcast",
+              event: "sync-move",
+              payload: {
+                board: newBoard,
+                isBlackTurn: nextIsBlackTurn,
+                multiJumpPiece: nextMultiJumpPiece,
+                lastMove: { from: [fr, fc], to: [r, c] },
+                winner: newWinner,
+                history: newHistory,
+                player1Time,
+                player2Time,
+              },
+            });
+          }
+        } else {
+          if (!multiJumpPiece) setSelectedPos(null);
+        }
       }
     },
     [
       board,
-      isBlackNext,
+      isBlackTurn,
       winner,
       channel,
-      gameStartTime,
-      isSpectator,
-      gameStarted,
-      gameMode,
-      turnIndex,
       player1Name,
       player2Name,
-      player3Name,
-      player4Name,
       playerName,
+      selectedPos,
+      multiJumpPiece,
+      isSpectator,
+      gameStarted,
+      validMoves,
+      isPlayer1,
+      isPlayer2,
+      player1Time,
+      player2Time,
     ]
   );
 
   const resetGame = () => {
-    setBoard(createEmptyBoard());
-    setIsBlackNext(true);
+    setBoard(INITIAL_BOARD);
+    setIsBlackTurn(true);
     setWinner(null);
-    setWinningCells([]);
+    setSelectedPos(null);
     setLastMove(null);
+    setMultiJumpPiece(null);
     setHistory([]);
     setUndoRequestedBy(null);
-    setGameStartTime(null);
-    setElapsedTime(0);
     setGameStarted(false);
     setReadyPlayers([]);
-    setTurnIndex(0);
+    setPlayer1Time(INITIAL_TIME);
+    setPlayer2Time(INITIAL_TIME);
     if (channel) {
       channel.send({ type: "broadcast", event: "reset-game" });
     }
   };
 
-  const handleChangeGameMode = (mode: GameMode) => {
-    if (playerName !== hostName || gameStarted) return;
-
-    const newSpecs = [...spectators];
-    let newP3 = player3Name;
-    let newP4 = player4Name;
-    let newReadyPlayers = [...readyPlayers];
-
-    if (mode === "1v1") {
-      if (newP3) {
-        newSpecs.push(newP3);
-        newReadyPlayers = newReadyPlayers.filter((p) => p !== newP3);
-        newP3 = null;
-      }
-      if (newP4) {
-        newSpecs.push(newP4);
-        newReadyPlayers = newReadyPlayers.filter((p) => p !== newP4);
-        newP4 = null;
-      }
-    }
-
-    setGameMode(mode);
-    setPlayer3Name(newP3);
-    setPlayer4Name(newP4);
-    setSpectators(newSpecs);
-    setReadyPlayers(newReadyPlayers);
-
-    stateRef.current.gameMode = mode;
-    stateRef.current.player3Name = newP3;
-    stateRef.current.player4Name = newP4;
-    stateRef.current.spectators = newSpecs;
-    stateRef.current.readyPlayers = newReadyPlayers;
-
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "room-sync",
-        payload: { ...stateRef.current },
-      });
-    }
-  };
-
   const handleKickPlayer = (targetName: string) => {
     if (playerName !== hostName || !channel) return;
-    if (
-      (targetName === player1Name ||
-        targetName === player2Name ||
-        targetName === player3Name ||
-        targetName === player4Name) &&
-      gameStarted && !winner
-    )
-      return;
+    if ((targetName === player1Name || targetName === player2Name) && gameStarted && !winner) return;
 
     channel.send({
       type: "broadcast",
@@ -709,7 +684,22 @@ export function GomokuProvider({
       payload: { playerName: targetName },
     });
 
-    if (targetName === player2Name) {
+    if (targetName === player1Name) {
+      setPlayer1Name(null);
+      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
+      if (gameStarted) resetGame();
+      setTimeout(() => {
+        channel.send({
+          type: "broadcast",
+          event: "room-sync",
+          payload: {
+            ...stateRef.current,
+            player1Name: null,
+            readyPlayers: stateRef.current.readyPlayers.filter((p) => p !== targetName),
+          },
+        });
+      }, 50);
+    } else if (targetName === player2Name) {
       setPlayer2Name(null);
       setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
       if (gameStarted) resetGame();
@@ -720,36 +710,6 @@ export function GomokuProvider({
           payload: {
             ...stateRef.current,
             player2Name: null,
-            readyPlayers: stateRef.current.readyPlayers.filter((p) => p !== targetName),
-          },
-        });
-      }, 50);
-    } else if (targetName === player3Name) {
-      setPlayer3Name(null);
-      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
-      if (gameStarted) resetGame();
-      setTimeout(() => {
-        channel.send({
-          type: "broadcast",
-          event: "room-sync",
-          payload: {
-            ...stateRef.current,
-            player3Name: null,
-            readyPlayers: stateRef.current.readyPlayers.filter((p) => p !== targetName),
-          },
-        });
-      }, 50);
-    } else if (targetName === player4Name) {
-      setPlayer4Name(null);
-      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
-      if (gameStarted) resetGame();
-      setTimeout(() => {
-        channel.send({
-          type: "broadcast",
-          event: "room-sync",
-          payload: {
-            ...stateRef.current,
-            player4Name: null,
             readyPlayers: stateRef.current.readyPlayers.filter((p) => p !== targetName),
           },
         });
@@ -765,12 +725,10 @@ export function GomokuProvider({
     }
   };
 
-  const handleSlotClick = (targetSlot: 1 | 2 | 3 | 4) => {
+  const handleSlotClick = (targetSlot: 1 | 2) => {
     if (!channel || (gameStarted && !winner)) return;
     if (targetSlot === 1 && player1Name) return;
     if (targetSlot === 2 && player2Name) return;
-    if (targetSlot === 3 && player3Name) return;
-    if (targetSlot === 4 && player4Name) return;
 
     if (playerName === hostName) {
       const state = stateRef.current;
@@ -779,8 +737,6 @@ export function GomokuProvider({
 
       let newP1 = state.player1Name === playerName ? null : state.player1Name;
       let newP2 = state.player2Name === playerName ? null : state.player2Name;
-      let newP3 = state.player3Name === playerName ? null : state.player3Name;
-      let newP4 = state.player4Name === playerName ? null : state.player4Name;
 
       let success = false;
 
@@ -790,26 +746,16 @@ export function GomokuProvider({
       } else if (targetSlot === 2 && !newP2) {
         newP2 = playerName;
         success = true;
-      } else if (targetSlot === 3 && state.gameMode === "2v2" && !newP3) {
-        newP3 = playerName;
-        success = true;
-      } else if (targetSlot === 4 && state.gameMode === "2v2" && !newP4) {
-        newP4 = playerName;
-        success = true;
       }
 
       if (success) {
         setPlayer1Name(newP1);
         setPlayer2Name(newP2);
-        setPlayer3Name(newP3);
-        setPlayer4Name(newP4);
         setSpectators(newSpecs);
         setReadyPlayers(newReadyPlayers);
 
         stateRef.current.player1Name = newP1;
         stateRef.current.player2Name = newP2;
-        stateRef.current.player3Name = newP3;
-        stateRef.current.player4Name = newP4;
         stateRef.current.spectators = newSpecs;
         stateRef.current.readyPlayers = newReadyPlayers;
 
@@ -835,8 +781,6 @@ export function GomokuProvider({
       const state = stateRef.current;
       const newP1 = state.player1Name === playerName ? null : state.player1Name;
       const newP2 = state.player2Name === playerName ? null : state.player2Name;
-      const newP3 = state.player3Name === playerName ? null : state.player3Name;
-      const newP4 = state.player4Name === playerName ? null : state.player4Name;
       const newSpecs = [...state.spectators];
       if (!newSpecs.includes(playerName)) {
         newSpecs.push(playerName);
@@ -845,15 +789,11 @@ export function GomokuProvider({
 
       setPlayer1Name(newP1);
       setPlayer2Name(newP2);
-      setPlayer3Name(newP3);
-      setPlayer4Name(newP4);
       setSpectators(newSpecs);
       setReadyPlayers(newReadyPlayers);
 
       stateRef.current.player1Name = newP1;
       stateRef.current.player2Name = newP2;
-      stateRef.current.player3Name = newP3;
-      stateRef.current.player4Name = newP4;
       stateRef.current.spectators = newSpecs;
       stateRef.current.readyPlayers = newReadyPlayers;
 
@@ -885,49 +825,32 @@ export function GomokuProvider({
   const handleAcceptUndo = () => {
     const state = stateRef.current;
     if (state.history.length > 0 && channel) {
-      let targetIndex = state.history.length - 1;
-      const requesterTurn = state.player1Name === state.undoRequestedBy || state.player3Name === state.undoRequestedBy; // B
-
-      while (targetIndex >= 0) {
-        if (state.history[targetIndex].isBlackNext === requesterTurn) {
-          break;
-        }
-        targetIndex--;
-      }
-
-      if (targetIndex < 0) {
-        toast.error("Không có nước cờ nào của bạn để đi lại.");
-        setUndoRequestedBy(null);
-        channel.send({
-          type: "broadcast",
-          event: "reject-undo",
-          payload: {},
-        });
-        return;
-      }
-
-      const prevState = state.history[targetIndex];
-      const newHistory = state.history.slice(0, targetIndex);
+      const prevState = state.history[state.history.length - 1];
+      const newHistory = state.history.slice(0, -1);
 
       setBoard(prevState.board);
-      setIsBlackNext(prevState.isBlackNext);
+      setIsBlackTurn(prevState.isBlackTurn);
       setWinner(prevState.winner);
-      if (prevState.winningCells) setWinningCells(prevState.winningCells);
       setLastMove(prevState.lastMove);
+      setMultiJumpPiece(prevState.multiJumpPiece);
+      setPlayer1Time(prevState.player1Time);
+      setPlayer2Time(prevState.player2Time);
       setHistory(newHistory);
       setUndoRequestedBy(null);
+      setSelectedPos(null);
 
       channel.send({
         type: "broadcast",
         event: "sync-move",
         payload: {
           board: prevState.board,
-          isBlackNext: prevState.isBlackNext,
+          isBlackTurn: prevState.isBlackTurn,
           winner: prevState.winner,
-          winningCells: prevState.winningCells,
           lastMove: prevState.lastMove,
+          multiJumpPiece: prevState.multiJumpPiece,
+          player1Time: prevState.player1Time,
+          player2Time: prevState.player2Time,
           history: newHistory,
-          gameStartTime: state.gameStartTime,
         },
       });
     }
@@ -958,10 +881,10 @@ export function GomokuProvider({
 
   const handleResign = () => {
     if (winner || !gameStarted || isSpectator) return;
-    const myColor = (isPlayer1 || playerName === player3Name) ? "B" : "W";
+    const myColor = isPlayer1 ? "B" : isPlayer2 ? "R" : null;
     if (!myColor) return;
 
-    const newWinner = myColor === "B" ? "W" : "B";
+    const newWinner = myColor === "B" ? "R" : "B";
     setWinner(newWinner);
 
     if (channel) {
@@ -976,29 +899,27 @@ export function GomokuProvider({
     }
   };
 
-  const value: GomokuContextValue = {
+  const value: CheckersContextValue = {
     roomId,
     playerName,
     isSpectator,
-    elapsedTime,
     hostName,
     player1Name,
     player2Name,
-    player3Name,
-    player4Name,
     spectators,
     board,
-    isBlackNext,
+    isBlackTurn,
     winner,
-    winningCells,
     lastMove,
+    multiJumpPiece,
     history,
     undoRequestedBy,
-    gameStartTime,
     gameStarted,
     readyPlayers,
-    gameMode,
-    turnIndex,
+    player1Time,
+    player2Time,
+    selectedPos,
+    validMoves,
     handleCellClick,
     resetGame,
     handleKickPlayer,
@@ -1009,20 +930,19 @@ export function GomokuProvider({
     handleRejectUndo,
     handleStartClick,
     handleResign,
-    handleChangeGameMode,
   };
 
   return (
-    <GomokuContext.Provider value={value}>
+    <CheckersContext.Provider value={value}>
       {children}
-    </GomokuContext.Provider>
+    </CheckersContext.Provider>
   );
 }
 
-export function useGomoku() {
-  const context = useContext(GomokuContext);
+export function useCheckers() {
+  const context = useContext(CheckersContext);
   if (context === undefined) {
-    throw new Error("useGomoku must be used within a GomokuProvider");
+    throw new Error("useCheckers must be used within a CheckersProvider");
   }
   return context;
 }

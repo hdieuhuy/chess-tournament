@@ -1,124 +1,116 @@
-import React, { useState } from "react";
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { useGomoku } from "../contexts/gomoku-context";
-import { Crown, Gamepad2, Eye, Users, PartyPopper, Undo2, Flag, RotateCcw, Link as LinkIcon, DoorOpen, Settings } from "lucide-react";
+import { useCheckers } from "../contexts/checkers-context";
+import { Users, UserPlus, Gamepad2, Eye, Flag, RotateCcw, Undo2, DoorOpen, Link as LinkIcon } from "lucide-react";
+import { FaCrown } from "react-icons/fa";
 
-interface GomokuSidebarProps {
-  isDarkMode: boolean;
-}
-
-export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
-  const [activeTab, setActiveTab] = useState<"players" | "spectators" | "controls">("players");
-  const [linkCopied, setLinkCopied] = useState(false);
-
+export function CheckersSidebar({ isDarkMode }: { isDarkMode: boolean }) {
   const {
-    gameMode,
     playerName,
+    hostName,
     player1Name,
     player2Name,
-    player3Name,
-    player4Name,
-    hostName,
+    spectators,
     gameStarted,
     winner,
     readyPlayers,
-    isBlackNext,
-    turnIndex,
-    elapsedTime,
-    history,
-    spectators,
     isSpectator,
-    handleKickPlayer,
-    handleChangeGameMode,
-    handleStartClick,
-    handleRequestUndo,
-    handleResign,
-    resetGame,
+    isBlackTurn,
+    player1Time,
+    player2Time,
     undoRequestedBy,
-    handleAcceptUndo,
-    handleRejectUndo,
+    history,
+    handleKickPlayer,
     handleSlotClick,
     handleBecomeSpectator,
-  } = useGomoku();
+    handleStartClick,
+    handleRequestUndo,
+    handleAcceptUndo,
+    handleRejectUndo,
+    resetGame,
+    handleResign,
+  } = useCheckers();
 
-  const playersCount = gameMode === "1v1"
-    ? [player1Name, player2Name].filter(Boolean).length
-    : [player1Name, player2Name, player3Name, player4Name].filter(Boolean).length;
+  const [activeTab, setActiveTab] = useState<"players" | "spectators">("players");
+  const [linkCopied, setLinkCopied] = useState(false);
 
-  const maxPlayers = gameMode === "1v1" ? 2 : 4;
+  const playersCount = [player1Name, player2Name].filter(Boolean).length;
+  const maxPlayers = 2;
 
   const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+    const m = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
     const s = (seconds % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
   };
 
-  const canUndo = () => {
-    if (isSpectator || history.length < 2) return false;
-    const isPlayer1 = playerName === player1Name;
-    const isPlayer2 = playerName === player2Name;
-    const requesterColor = (isPlayer1 || playerName === player3Name) ? "B" : "W";
-    if (!requesterColor) return false;
-    const requesterTurn = requesterColor === "B";
-
-    if (isBlackNext !== requesterTurn) return false;
-
-    for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].isBlackNext === requesterTurn) return true;
-    }
-    return false;
-  };
-
   const statusText = winner
-    ? `Winner: ${winner === "B" ? (gameMode === "2v2" ? "Đội X" : player1Name) : gameMode === "2v2" ? "Đội O" : player2Name}`
+    ? winner === "Draw"
+      ? "🤝 Hòa cờ!"
+      : `🎉 Chiến thắng: ${winner === "B" ? player1Name : player2Name}!`
     : gameStarted
-      ? `Đang chơi - Lượt: ${gameMode === "2v2"
-        ? turnIndex === 0 ? player1Name : turnIndex === 1 ? player2Name : turnIndex === 2 ? player3Name : player4Name
-        : isBlackNext ? player1Name : player2Name
-      }`
+      ? `Đang chơi - Lượt: ${isBlackTurn ? player1Name : player2Name}`
       : "Đang chờ bắt đầu...";
 
   return (
     <div className={`flex flex-col h-full rounded-2xl border shadow-sm overflow-hidden transition-colors ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-200"}`}>
-
+      
       {/* Undo Request Popup Layer */}
       {undoRequestedBy && undoRequestedBy !== playerName && !isSpectator && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm rounded-2xl">
-          <div className={`p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4 border transition-colors ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-200"}`}>
-            <p className={`mb-6 text-lg font-medium ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}>
-              <span className="font-bold text-purple-600">{undoRequestedBy}</span> muốn xin đi lại.
+          <div className={`p-6 rounded-xl shadow-2xl text-center max-w-[280px] w-full border ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-200"}`}>
+            <p className={`mb-6 text-sm font-medium ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}>
+              <span className="font-bold text-indigo-500">{undoRequestedBy}</span> muốn xin đi lại 1 nước.
             </p>
-            <div className="flex justify-center gap-4">
-              <button onClick={handleAcceptUndo} className="px-6 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm cursor-pointer">Đồng ý</button>
-              <button onClick={handleRejectUndo} className="px-6 py-2.5 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors shadow-sm cursor-pointer">Từ chối</button>
+            <div className="flex justify-center gap-3">
+              <button
+                onClick={handleAcceptUndo}
+                className="flex-1 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+              >
+                Đồng ý
+              </button>
+              <button
+                onClick={handleRejectUndo}
+                className="flex-1 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors shadow-sm"
+              >
+                Từ chối
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Header Info */}
-      <div className={`flex flex-col p-4 border-b transition-colors ${isDarkMode ? "bg-slate-900/50 border-slate-700" : "bg-zinc-50 border-zinc-200"}`}>
-        <div className="flex justify-between items-start mb-2">
-          <div>
-            <h1 className={`text-xl font-bold tracking-tight ${isDarkMode ? "text-slate-100" : "text-zinc-900"}`}>
-              Cờ Caro (Gomoku)
-            </h1>
-            <p className={`text-xs mt-1 font-medium flex items-center gap-1.5 ${winner ? "text-green-500" : isDarkMode ? "text-slate-400" : "text-zinc-500"}`}>
-              {winner && <PartyPopper className="w-3.5 h-3.5" />}
+      {undoRequestedBy === playerName && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-indigo-600 text-white px-4 py-2 text-xs rounded-full shadow-lg font-medium animate-pulse whitespace-nowrap">
+          Đang chờ đối thủ phản hồi...
+        </div>
+      )}
+
+      {/* Header: Game Status & Action Bar */}
+      <div className={`p-3 sm:p-4 border-b flex flex-col gap-3 transition-colors ${isDarkMode ? "bg-slate-800/80 border-slate-700" : "bg-zinc-50 border-zinc-200"}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col">
+            <h2 className={`text-base sm:text-lg font-bold transition-colors ${isDarkMode ? "text-slate-100" : "text-zinc-900"}`}>
+              Cờ Đam (Checkers)
+            </h2>
+            <p className={`text-xs sm:text-sm font-medium transition-colors ${
+              winner 
+                ? (isDarkMode ? "text-green-400" : "text-green-600")
+                : gameStarted 
+                  ? (isDarkMode ? "text-indigo-400" : "text-indigo-600")
+                  : (isDarkMode ? "text-slate-400" : "text-zinc-500")
+            }`}>
               {statusText}
             </p>
           </div>
-          {gameStarted && (
-            <div className={`text-2xl font-mono font-bold tracking-wider ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}>
-              {formatTime(elapsedTime)}
-            </div>
-          )}
         </div>
 
-        {/* ACTION BAR (Top ToolBar) */}
-        <div className="flex justify-between items-center w-full pt-2">
+        <div className="flex items-center justify-between pt-1">
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {gameStarted && !winner && !isSpectator && canUndo() && (
+            {gameStarted && !winner && !isSpectator && history.length > 0 && (
               <div className="relative group flex justify-center">
                 <button
                   onClick={handleRequestUndo}
@@ -127,7 +119,7 @@ export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
                 >
                   <Undo2 className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
-                <div className="absolute top-full mt-2 left-0 sm:left-1/2 sm:-translate-x-1/2 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-[60]">
+                <div className="absolute top-full mt-2 left-0 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-[60]">
                   Xin đi lại
                 </div>
               </div>
@@ -191,7 +183,7 @@ export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
         </div>
       </div>
 
-      {/* Tabs Header */}
+      {/* Tabs */}
       <div className={`flex border-b transition-colors shrink-0 ${isDarkMode ? "border-slate-700 bg-slate-800/80" : "border-zinc-200 bg-white"}`}>
         <button
           onClick={() => setActiveTab("players")}
@@ -202,7 +194,7 @@ export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
         >
           <Gamepad2 className="w-4 h-4" />
           <span>Phòng chơi</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${isDarkMode ? "bg-slate-700 text-slate-300" : "bg-zinc-200 text-zinc-700"}`}>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === "players" ? (isDarkMode ? "bg-indigo-900/50 text-indigo-300" : "bg-indigo-100 text-indigo-700") : (isDarkMode ? "bg-slate-700 text-slate-400" : "bg-zinc-100 text-zinc-500")}`}>
             {playersCount}/{maxPlayers}
           </span>
         </button>
@@ -215,32 +207,16 @@ export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
         >
           <Eye className="w-4 h-4" />
           <span>Khán giả</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${isDarkMode ? "bg-slate-700 text-slate-300" : "bg-zinc-200 text-zinc-700"}`}>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeTab === "spectators" ? (isDarkMode ? "bg-indigo-900/50 text-indigo-300" : "bg-indigo-100 text-indigo-700") : (isDarkMode ? "bg-slate-700 text-slate-400" : "bg-zinc-100 text-zinc-500")}`}>
             {spectators.length}
           </span>
         </button>
       </div>
 
-      {/* Tabs Content */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 relative">
-        {/* TAB 1: NGƯỜI CHƠI & LOBBY */}
+      {/* Tab Content */}
+      <div className={`flex-1 overflow-y-auto p-3 sm:p-4 custom-scrollbar transition-colors ${isDarkMode ? "bg-slate-800/50" : "bg-zinc-50/50"}`}>
         {activeTab === "players" && (
-          <div className="flex flex-col gap-5 h-full">
-            {playerName === hostName && !gameStarted && (
-              <div className={`p-3 rounded-xl border flex flex-col gap-3 transition-colors ${isDarkMode ? "bg-slate-900/50 border-slate-700" : "bg-white border-zinc-200 shadow-sm"}`}>
-                <span className={`text-sm font-semibold ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>Cài đặt phòng:</span>
-                <div className="flex gap-4">
-                  <label className={`flex items-center gap-2 text-sm cursor-pointer transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
-                    <input type="radio" name="inRoomGameMode" checked={gameMode === "1v1"} onChange={() => handleChangeGameMode("1v1")} className="accent-indigo-600" />
-                    1 vs 1
-                  </label>
-                  <label className={`flex items-center gap-2 text-sm cursor-pointer transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
-                    <input type="radio" name="inRoomGameMode" checked={gameMode === "2v2"} onChange={() => handleChangeGameMode("2v2")} className="accent-indigo-600" />
-                    2 vs 2
-                  </label>
-                </div>
-              </div>
-            )}
+          <div className="flex flex-col gap-4 h-full">
             {!gameStarted && (
               <div className={`p-4 rounded-xl border flex flex-col gap-3 transition-colors ${isDarkMode ? "bg-slate-900/50 border-slate-700" : "bg-zinc-50 border-zinc-200"}`}>
                 <div className="flex items-center justify-between">
@@ -249,34 +225,58 @@ export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
                 </div>
                 <button
                   onClick={handleStartClick}
-                  disabled={readyPlayers.includes(playerName || "") || isSpectator}
-                  className="w-full cursor-pointer rounded-lg bg-green-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
+                  disabled={readyPlayers.includes(playerName || "") || isSpectator || playersCount < 2}
+                  className={`w-full py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    readyPlayers.includes(playerName || "")
+                      ? "bg-green-600/50 text-white cursor-not-allowed"
+                      : isSpectator || playersCount < 2
+                        ? isDarkMode ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700" : "bg-zinc-200 text-zinc-400 cursor-not-allowed"
+                        : "bg-green-600 hover:bg-green-700 text-white shadow-sm"
+                  }`}
                 >
-                  {readyPlayers.includes(playerName || "") ? "Đã sẵn sàng..." : "Sẵn sàng"}
+                  {readyPlayers.includes(playerName || "")
+                    ? "Đã sẵn sàng"
+                    : isSpectator
+                      ? "Đang là khán giả"
+                      : playersCount < 2
+                        ? "Chờ đối thủ..."
+                        : "Sẵn sàng"}
                 </button>
               </div>
             )}
 
-            <div className="flex flex-col gap-4">
-              {/* Team X */}
+            <div className="flex flex-col gap-3">
+              <h3 className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? "text-slate-500" : "text-zinc-400"}`}>
+                Vị trí ghế ngồi
+              </h3>
+
+              {/* Ghế 1 - Quân Đen */}
               <div className="flex flex-col gap-2">
-                <h4 className={`text-sm font-bold transition-colors ${isDarkMode ? "text-green-400" : "text-green-600"}`}>
-                  Đội X (Đi trước)
+                <h4 className={`text-sm font-bold transition-colors ${isDarkMode ? "text-zinc-400" : "text-zinc-600"}`}>
+                  Quân Đen (Đi trước)
                 </h4>
-                <div className={`flex items-center justify-between border p-2.5 rounded-lg transition-colors ${isDarkMode ? "bg-slate-700/30 border-slate-600" : "bg-white border-zinc-200 shadow-sm"}`}>
+                <div className={`flex items-center justify-between border p-2.5 rounded-lg transition-colors ${
+                  isDarkMode 
+                    ? (isBlackTurn && gameStarted && !winner ? "bg-indigo-900/20 border-indigo-500" : "bg-slate-700/30 border-slate-600") 
+                    : (isBlackTurn && gameStarted && !winner ? "bg-indigo-50 border-indigo-300 shadow-sm" : "bg-white border-zinc-200 shadow-sm")
+                }`}>
                   {player1Name ? (
-                    <div className="flex items-center gap-2 overflow-hidden w-full">
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${isDarkMode ? "bg-green-900/50 text-green-300" : "bg-green-100 text-green-700"}`}>
+                    <div className="flex items-center gap-2 overflow-hidden w-full group">
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${isDarkMode ? "bg-zinc-900/50 text-zinc-300" : "bg-zinc-800 text-zinc-100"}`}>
                         {player1Name.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex flex-col overflow-hidden flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className={`text-sm font-medium truncate transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}>
-                            {player1Name} {playerName === player1Name && "(Bạn)"}
+                            {player1Name} {playerName === player1Name && "(Bạn)"} 
                           </span>
-                          {hostName === player1Name && <Crown className="w-3.5 h-3.5 text-yellow-500 shrink-0" />}
+                          {hostName === player1Name && <FaCrown className="w-3.5 h-3.5 text-yellow-500 shrink-0" />}
                         </div>
-                        {!gameStarted && (
+                        {gameStarted && !winner ? (
+                           <span className={`text-[11px] font-mono font-medium ${isBlackTurn ? "text-indigo-600 dark:text-indigo-400 font-bold" : "text-zinc-500"}`}>
+                             {formatTime(player1Time)}
+                           </span>
+                        ) : !gameStarted && (
                           <span className={`text-[10px] font-bold uppercase tracking-wider ${readyPlayers.includes(player1Name) ? "text-green-500" : "text-zinc-400"}`}>
                             {readyPlayers.includes(player1Name) ? "Sẵn Sàng" : "Chưa Sẵn Sàng"}
                           </span>
@@ -289,54 +289,25 @@ export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
                       )}
                     </div>
                   ) : (
-                    <button onClick={() => handleSlotClick(1)} className={`text-sm font-medium py-1 px-2 border border-dashed rounded w-full text-left transition-colors ${isDarkMode ? "text-slate-400 hover:text-green-400 border-slate-600 hover:border-green-500" : "text-zinc-500 hover:text-green-600 border-zinc-300 hover:border-green-400"}`}>
-                      + Ngồi vào ghế 1
+                    <button onClick={() => handleSlotClick(1)} className={`text-sm font-medium py-1 px-2 border border-dashed rounded w-full text-left transition-colors ${isDarkMode ? "text-slate-400 hover:text-zinc-400 border-slate-600 hover:border-zinc-500" : "text-zinc-500 hover:text-zinc-700 border-zinc-300 hover:border-zinc-400"}`}>
+                      + Ngồi vào ghế Đen
                     </button>
                   )}
                 </div>
-                {gameMode === "2v2" && (
-                  <div className={`flex items-center justify-between border p-2.5 rounded-lg transition-colors ${isDarkMode ? "bg-slate-700/30 border-slate-600" : "bg-white border-zinc-200 shadow-sm"}`}>
-                    {player3Name ? (
-                      <div className="flex items-center gap-2 overflow-hidden w-full">
-                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${isDarkMode ? "bg-green-900/50 text-green-300" : "bg-green-100 text-green-700"}`}>
-                          {player3Name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex flex-col overflow-hidden flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-sm font-medium truncate transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}>
-                              {player3Name} {playerName === player3Name && "(Bạn)"}
-                            </span>
-                            {hostName === player3Name && <Crown className="w-3.5 h-3.5 text-yellow-500 shrink-0" />}
-                          </div>
-                          {!gameStarted && (
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${readyPlayers.includes(player3Name) ? "text-green-500" : "text-zinc-400"}`}>
-                              {readyPlayers.includes(player3Name) ? "Sẵn Sàng" : "Chưa Sẵn Sàng"}
-                            </span>
-                          )}
-                        </div>
-                        {playerName === hostName && player3Name !== hostName && (!gameStarted || winner) && (
-                          <button onClick={() => handleKickPlayer(player3Name)} className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${isDarkMode ? "bg-red-900/30 text-red-400 hover:bg-red-900/50" : "bg-red-50 text-red-600 hover:bg-red-100"}`}>
-                            Kick
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <button onClick={() => handleSlotClick(3)} className={`text-sm font-medium py-1 px-2 border border-dashed rounded w-full text-left transition-colors ${isDarkMode ? "text-slate-400 hover:text-green-400 border-slate-600 hover:border-green-500" : "text-zinc-500 hover:text-green-600 border-zinc-300 hover:border-green-400"}`}>
-                        + Ngồi vào ghế 3
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
 
-              {/* Team O */}
+              {/* Ghế 2 - Quân Đỏ */}
               <div className="flex flex-col gap-2 mt-2">
                 <h4 className={`text-sm font-bold transition-colors ${isDarkMode ? "text-red-400" : "text-red-500"}`}>
-                  Đội O (Đi sau)
+                  Quân Đỏ (Đi sau)
                 </h4>
-                <div className={`flex items-center justify-between border p-2.5 rounded-lg transition-colors ${isDarkMode ? "bg-slate-700/30 border-slate-600" : "bg-white border-zinc-200 shadow-sm"}`}>
+                <div className={`flex items-center justify-between border p-2.5 rounded-lg transition-colors ${
+                  isDarkMode 
+                    ? (!isBlackTurn && gameStarted && !winner ? "bg-red-900/20 border-red-500" : "bg-slate-700/30 border-slate-600") 
+                    : (!isBlackTurn && gameStarted && !winner ? "bg-red-50 border-red-300 shadow-sm" : "bg-white border-zinc-200 shadow-sm")
+                }`}>
                   {player2Name ? (
-                    <div className="flex items-center gap-2 overflow-hidden w-full">
+                    <div className="flex items-center gap-2 overflow-hidden w-full group">
                       <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${isDarkMode ? "bg-red-900/50 text-red-300" : "bg-red-100 text-red-600"}`}>
                         {player2Name.charAt(0).toUpperCase()}
                       </div>
@@ -345,9 +316,13 @@ export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
                           <span className={`text-sm font-medium truncate transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}>
                             {player2Name} {playerName === player2Name && "(Bạn)"}
                           </span>
-                          {hostName === player2Name && <Crown className="w-3.5 h-3.5 text-yellow-500 shrink-0" />}
+                          {hostName === player2Name && <FaCrown className="w-3.5 h-3.5 text-yellow-500 shrink-0" />}
                         </div>
-                        {!gameStarted && (
+                        {gameStarted && !winner ? (
+                           <span className={`text-[11px] font-mono font-medium ${!isBlackTurn ? "text-red-600 dark:text-red-400 font-bold" : "text-zinc-500"}`}>
+                             {formatTime(player2Time)}
+                           </span>
+                        ) : !gameStarted && (
                           <span className={`text-[10px] font-bold uppercase tracking-wider ${readyPlayers.includes(player2Name) ? "text-green-500" : "text-zinc-400"}`}>
                             {readyPlayers.includes(player2Name) ? "Sẵn Sàng" : "Chưa Sẵn Sàng"}
                           </span>
@@ -361,43 +336,10 @@ export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
                     </div>
                   ) : (
                     <button onClick={() => handleSlotClick(2)} className={`text-sm font-medium py-1 px-2 border border-dashed rounded w-full text-left transition-colors ${isDarkMode ? "text-slate-400 hover:text-red-400 border-slate-600 hover:border-red-500" : "text-zinc-500 hover:text-red-500 border-zinc-300 hover:border-red-400"}`}>
-                      + Ngồi vào ghế 2
+                      + Ngồi vào ghế Đỏ
                     </button>
                   )}
                 </div>
-                {gameMode === "2v2" && (
-                  <div className={`flex items-center justify-between border p-2.5 rounded-lg transition-colors ${isDarkMode ? "bg-slate-700/30 border-slate-600" : "bg-white border-zinc-200 shadow-sm"}`}>
-                    {player4Name ? (
-                      <div className="flex items-center gap-2 overflow-hidden w-full">
-                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${isDarkMode ? "bg-red-900/50 text-red-300" : "bg-red-100 text-red-600"}`}>
-                          {player4Name.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex flex-col overflow-hidden flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-sm font-medium truncate transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}>
-                              {player4Name} {playerName === player4Name && "(Bạn)"}
-                            </span>
-                            {hostName === player4Name && <Crown className="w-3.5 h-3.5 text-yellow-500 shrink-0" />}
-                          </div>
-                          {!gameStarted && (
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${readyPlayers.includes(player4Name) ? "text-green-500" : "text-zinc-400"}`}>
-                              {readyPlayers.includes(player4Name) ? "Sẵn Sàng" : "Chưa Sẵn Sàng"}
-                            </span>
-                          )}
-                        </div>
-                        {playerName === hostName && player4Name !== hostName && (!gameStarted || winner) && (
-                          <button onClick={() => handleKickPlayer(player4Name)} className={`shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${isDarkMode ? "bg-red-900/30 text-red-400 hover:bg-red-900/50" : "bg-red-50 text-red-600 hover:bg-red-100"}`}>
-                            Kick
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <button onClick={() => handleSlotClick(4)} className={`text-sm font-medium py-1 px-2 border border-dashed rounded w-full text-left transition-colors ${isDarkMode ? "text-slate-400 hover:text-red-400 border-slate-600 hover:border-red-500" : "text-zinc-500 hover:text-red-500 border-zinc-300 hover:border-red-400"}`}>
-                        + Ngồi vào ghế 4
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
 
