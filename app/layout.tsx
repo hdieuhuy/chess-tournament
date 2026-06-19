@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { Fira_Sans } from "next/font/google";
+import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 
-const firaSans = Fira_Sans({
-  variable: "--font-fira-sans",
-  weight: ["300", "400", "500", "600", "700"],
+const beVietnamPro = Be_Vietnam_Pro({
+  variable: "--font-be-vietnam-pro",
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
   subsets: ["latin", "vietnamese"],
 });
 
@@ -19,9 +19,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${firaSans.variable} h-full antialiased`}>
+    <html lang="en" className={`${beVietnamPro.variable} h-full antialiased`}>
       <body
-        className={`min-h-full flex flex-col font-sans ${firaSans.className}`}
+        className={`min-h-full flex flex-col font-sans ${beVietnamPro.className}`}
       >
         {children}
       </body>
