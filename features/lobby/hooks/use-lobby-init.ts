@@ -54,7 +54,11 @@ export function useLobbyInit(
           setHasInitialized(true);
           if (onJoin) onJoin(savedName, joinedRole as "player" | "spectator", false);
         } else {
-          // New to this room, wait for modal to join
+          // Tự động tham gia với tư cách player nếu đã có tên trong localStorage
+          setRequestedRole("player");
+          setShowNameModal(false);
+          setHasInitialized(true);
+          if (onJoin) onJoin(savedName, "player", false);
         }
       }
     }

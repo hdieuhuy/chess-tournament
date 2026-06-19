@@ -1,18 +1,19 @@
 import React, { useState } from "react";
 import Link from "next/link";
-import { useChess } from "../contexts/chess-context";
-import { Crown, Gamepad2, Eye, Users, PartyPopper, Undo2, Flag, RotateCcw, Link as LinkIcon, DoorOpen, History } from "lucide-react";
+import { useXiangqi } from "../contexts/xiangqi-context";
+import { Crown, Gamepad2, Eye, PartyPopper, Undo2, Flag, RotateCcw, Link as LinkIcon, DoorOpen, History, Users } from "lucide-react";
 
-interface ChessSidebarProps {
+interface XiangqiSidebarProps {
   isDarkMode: boolean;
 }
 
-export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
+export function XiangqiSidebar({ isDarkMode }: XiangqiSidebarProps) {
   const [activeTab, setActiveTab] = useState<"players" | "spectators">("players");
   const [linkCopied, setLinkCopied] = useState(false);
 
   const {
     gameMode,
+    chessVariant,
     playerName,
     player1Name,
     player2Name,
@@ -29,6 +30,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
     isSpectator,
     handleKickPlayer,
     handleChangeGameMode,
+    handleChangeVariant,
     handleTimeChange,
     initialTime,
     handleStartClick,
@@ -41,7 +43,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
     handleRejectUndo,
     handleSlotClick,
     handleBecomeSpectator,
-  } = useChess();
+  } = useXiangqi();
 
   const playersCount = gameMode === "1v1"
     ? [player1Name, player2Name].filter(Boolean).length
@@ -53,37 +55,36 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
     if (isSpectator || history.length < 2) return false;
     const isPlayer1 = playerName === player1Name;
     const isPlayer2 = playerName === player2Name;
-    // P1 and P3 are White, P2 and P4 are Black
-    const requesterColor = (isPlayer1 || playerName === player3Name) ? "W" : (isPlayer2 || playerName === player4Name) ? "B" : null;
+    const requesterColor = (isPlayer1 || playerName === player3Name) ? "R" : (isPlayer2 || playerName === player4Name) ? "B" : null;
     if (!requesterColor) return false;
-    const requesterTurn = requesterColor === "W"; // true if White
+    const requesterTurn = requesterColor === "R"; 
 
-    if (displayState.isWhiteTurn !== requesterTurn) return false;
+    if (displayState.isRedTurn !== requesterTurn) return false;
 
     for (let i = history.length - 1; i >= 0; i--) {
-      if (history[i].isWhiteTurn === requesterTurn) return true;
+      if (history[i].isRedTurn === requesterTurn) return true;
     }
     return false;
   };
 
   const statusText = winner
-    ? `Winner: ${winner === "W" ? (gameMode === "2v2" ? "Đội Trắng" : player1Name) : gameMode === "2v2" ? "Đội Đen" : player2Name}`
+    ? `Winner: ${winner === "r" ? (gameMode === "2v2" ? "Đội Đỏ" : player1Name) : gameMode === "2v2" ? "Đội Đen" : player2Name}`
     : gameStarted
       ? `Đang chơi - Lượt: ${gameMode === "2v2"
         ? turnIndex === 0 ? player1Name : turnIndex === 1 ? player2Name : turnIndex === 2 ? player3Name : player4Name
-        : displayState.isWhiteTurn ? player1Name : player2Name
+        : displayState.isRedTurn ? player1Name : player2Name
       }`
       : "Đang chờ bắt đầu...";
 
   return (
     <div className={`flex flex-col h-full rounded-2xl border shadow-sm overflow-hidden transition-colors ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-200"}`}>
 
-      {/* Undo Request Popup Layer */}
+      {/* Undo Request Popup */}
       {undoRequestedBy && undoRequestedBy !== playerName && !isSpectator && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm rounded-2xl">
           <div className={`p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4 border transition-colors ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-zinc-200"}`}>
             <p className={`mb-6 text-lg font-medium ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`}>
-              <span className="font-bold text-purple-600">{undoRequestedBy}</span> muốn xin đi lại.
+              <span className="font-bold text-red-600">{undoRequestedBy}</span> muốn xin đi lại.
             </p>
             <div className="flex justify-center gap-4">
               <button onClick={handleAcceptUndo} className="px-6 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm cursor-pointer">Đồng ý</button>
@@ -98,7 +99,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
         <div className="flex justify-between items-start mb-2">
           <div>
             <h1 className={`text-xl font-bold tracking-tight ${isDarkMode ? "text-slate-100" : "text-zinc-900"}`}>
-              Cờ Vua (Chess)
+              Cờ Tướng (Xiangqi)
             </h1>
             <p className={`text-xs mt-1 font-medium flex items-center gap-1.5 ${winner ? "text-green-500" : isDarkMode ? "text-slate-400" : "text-zinc-500"}`}>
               {winner && <PartyPopper className="w-3.5 h-3.5" />}
@@ -107,7 +108,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
           </div>
         </div>
 
-        {/* ACTION BAR (Top ToolBar) */}
+        {/* ACTION BAR */}
         <div className="flex justify-between items-center w-full pt-2">
           <div className="flex items-center gap-1.5 sm:gap-2">
             {gameStarted && !winner && !isSpectator && canUndo() && (
@@ -201,7 +202,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
         <button
           onClick={() => setActiveTab("players")}
           className={`flex-1 py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${activeTab === "players"
-              ? isDarkMode ? "text-indigo-400 border-b-2 border-indigo-500" : "text-indigo-600 border-b-2 border-indigo-600"
+              ? isDarkMode ? "text-red-400 border-b-2 border-red-500" : "text-red-600 border-b-2 border-red-600"
               : isDarkMode ? "text-slate-400 hover:text-slate-300" : "text-zinc-500 hover:text-zinc-700"
             }`}
         >
@@ -214,7 +215,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
         <button
           onClick={() => setActiveTab("spectators")}
           className={`flex-1 py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-colors ${activeTab === "spectators"
-              ? isDarkMode ? "text-indigo-400 border-b-2 border-indigo-500" : "text-indigo-600 border-b-2 border-indigo-600"
+              ? isDarkMode ? "text-red-400 border-b-2 border-red-500" : "text-red-600 border-b-2 border-red-600"
               : isDarkMode ? "text-slate-400 hover:text-slate-300" : "text-zinc-500 hover:text-zinc-700"
             }`}
         >
@@ -236,28 +237,37 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
                 <span className={`text-sm font-semibold ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>Cài đặt phòng:</span>
                 <div className="flex gap-4">
                   <label className={`flex items-center gap-2 text-sm cursor-pointer transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
-                    <input type="radio" name="inRoomGameMode" checked={gameMode === "1v1"} onChange={() => handleChangeGameMode("1v1")} className="accent-indigo-600" />
+                    <input type="radio" name="inRoomGameMode" checked={gameMode === "1v1"} onChange={() => handleChangeGameMode("1v1")} className="accent-red-600" />
                     1 vs 1
                   </label>
                   <label className={`flex items-center gap-2 text-sm cursor-pointer transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
-                    <input type="radio" name="inRoomGameMode" checked={gameMode === "2v2"} onChange={() => handleChangeGameMode("2v2")} className="accent-indigo-600" />
+                    <input type="radio" name="inRoomGameMode" checked={gameMode === "2v2"} onChange={() => handleChangeGameMode("2v2")} className="accent-red-600" />
                     2 vs 2
                   </label>
                 </div>
-                {/* Chess specific: Time limit */}
+                <div className="flex gap-4">
+                  <label className={`flex items-center gap-2 text-sm cursor-pointer transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
+                    <input type="radio" name="inRoomVariant" checked={chessVariant === "standard"} onChange={() => handleChangeVariant("standard")} className="accent-red-600" />
+                    Cờ Chuẩn
+                  </label>
+                  <label className={`flex items-center gap-2 text-sm cursor-pointer transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
+                    <input type="radio" name="inRoomVariant" checked={chessVariant === "coup"} onChange={() => handleChangeVariant("coup")} className="accent-red-600" />
+                    Cờ Úp
+                  </label>
+                </div>
                 <div className="flex flex-col gap-2 mt-2">
                   <span className={`text-sm font-semibold ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>Thời gian mỗi bên:</span>
                   <div className="flex gap-4 items-center flex-wrap">
                     <label className={`flex items-center gap-2 text-sm cursor-pointer transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
-                      <input type="radio" name="inRoomTime" checked={initialTime === 600} onChange={() => handleTimeChange(600)} className="accent-indigo-600" />
+                      <input type="radio" name="inRoomTime" checked={initialTime === 600} onChange={() => handleTimeChange(600)} className="accent-red-600" />
                       10 Phút
                     </label>
                     <label className={`flex items-center gap-2 text-sm cursor-pointer transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
-                      <input type="radio" name="inRoomTime" checked={initialTime === 300} onChange={() => handleTimeChange(300)} className="accent-indigo-600" />
+                      <input type="radio" name="inRoomTime" checked={initialTime === 300} onChange={() => handleTimeChange(300)} className="accent-red-600" />
                       5 Phút
                     </label>
                     <div className={`flex items-center gap-2 text-sm transition-colors ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
-                      <input type="radio" name="inRoomTime" checked={initialTime !== 300 && initialTime !== 600} onChange={() => {}} className="accent-indigo-600" />
+                      <input type="radio" name="inRoomTime" checked={initialTime !== 300 && initialTime !== 600} onChange={() => {}} className="accent-red-600" />
                       Khác:
                       <input 
                         type="number" 
@@ -268,7 +278,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
                           const val = parseInt(e.target.value);
                           if (!isNaN(val) && val > 0) handleTimeChange(val * 60);
                         }}
-                        className={`w-16 px-2 py-1 text-xs border rounded outline-none transition-colors ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-200 focus:border-indigo-500" : "bg-white border-zinc-300 text-zinc-800 focus:border-indigo-500"}`}
+                        className={`w-16 px-2 py-1 text-xs border rounded outline-none transition-colors ${isDarkMode ? "bg-slate-800 border-slate-600 text-slate-200 focus:border-red-500" : "bg-white border-zinc-300 text-zinc-800 focus:border-red-500"}`}
                       />
                       phút
                     </div>
@@ -293,16 +303,16 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
             )}
 
             <div className="flex flex-col gap-4">
-              {/* Team White */}
+              {/* Team Red (Đi trước) */}
               <div className="flex flex-col gap-2">
-                <h4 className={`text-sm font-bold transition-colors flex items-center justify-between ${isDarkMode ? "text-slate-200" : "text-zinc-700"}`}>
-                  Đội Trắng (Đi trước)
+                <h4 className={`text-sm font-bold transition-colors flex items-center justify-between ${isDarkMode ? "text-red-400" : "text-red-700"}`}>
+                  Đội Đỏ (Đi trước)
                   {!gameStarted && playerName !== hostName && <span className={`text-xs font-medium ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}>10 phút</span>}
                 </h4>
                 <div className={`flex items-center justify-between border p-2.5 rounded-lg transition-colors ${isDarkMode ? "bg-slate-700/30 border-slate-600" : "bg-white border-zinc-200 shadow-sm"}`}>
                   {player1Name ? (
                     <div className="flex items-center gap-2 overflow-hidden w-full">
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors border shadow-sm ${isDarkMode ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-zinc-300 text-zinc-800"}`}>
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors border shadow-sm ${isDarkMode ? "bg-slate-800 border-red-900/50 text-white" : "bg-red-50 border-red-200 text-red-800"}`}>
                         {player1Name.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex flex-col overflow-hidden flex-1">
@@ -334,7 +344,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
                   <div className={`flex items-center justify-between border p-2.5 rounded-lg transition-colors ${isDarkMode ? "bg-slate-700/30 border-slate-600" : "bg-white border-zinc-200 shadow-sm"}`}>
                     {player3Name ? (
                       <div className="flex items-center gap-2 overflow-hidden w-full">
-                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors border shadow-sm ${isDarkMode ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-zinc-300 text-zinc-800"}`}>
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors border shadow-sm ${isDarkMode ? "bg-slate-800 border-red-900/50 text-white" : "bg-red-50 border-red-200 text-red-800"}`}>
                           {player3Name.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex flex-col overflow-hidden flex-1">
@@ -365,7 +375,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
                 )}
               </div>
 
-              {/* Team Black */}
+              {/* Team Black (Đi sau) */}
               <div className="flex flex-col gap-2 mt-2">
                 <h4 className={`text-sm font-bold transition-colors flex items-center justify-between ${isDarkMode ? "text-slate-400" : "text-zinc-800"}`}>
                   Đội Đen (Đi sau)
@@ -463,7 +473,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
                 {spectators.map((spec, idx) => (
                   <li key={idx} className={`group flex items-center justify-between space-x-3 rounded-xl border p-2 transition-all ${isDarkMode ? "bg-slate-700/30 border-slate-600" : "bg-white border-zinc-200 shadow-sm"}`}>
                     <div className="flex items-center space-x-3 overflow-hidden">
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold shadow-inner transition-colors ${isDarkMode ? "bg-indigo-900/50 text-indigo-300" : "bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700"}`}>
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold shadow-inner transition-colors ${isDarkMode ? "bg-red-900/50 text-red-300" : "bg-gradient-to-br from-red-100 to-orange-100 text-red-700"}`}>
                         {spec.charAt(0).toUpperCase()}
                       </div>
                       <span className={`text-sm font-medium truncate transition-colors ${isDarkMode ? "text-slate-200" : "text-zinc-800"}`} title={spec}>
@@ -485,3 +495,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
     </div>
   );
 }
+
+// Quick placeholder for missing Users icon since lucide-react doesn't export Users by default in my import list, but I used it. Let me just add it to import:
+// Wait, I didn't import Users from lucide-react in line 4. I'll just change Users to Eye in the fallback or import Users.
+// I will just add Users to the lucide-react import above in a second or it will fail.

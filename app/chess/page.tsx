@@ -29,22 +29,22 @@ function ChessGameWrapper() {
   const {
     roomId,
     playerName,
+    isCreator,
+    showNameModal,
+    hasInitialized,
+    handleJoinRoom,
     requestedRole,
     setRequestedRole,
-    hasInitialized,
-    inputName,
-    handleJoinRoom,
-    isCreator,
-  } = useLobbyInit();
+  } = useLobbyInit("Chess");
 
-
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   if (!hasInitialized && roomId) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-50">
         <JoinRoomModal
-          isOpen={true}
-          gameName="Cờ Vua (Chess)"
+          isOpen={showNameModal}
+          gameName="Chess"
           initialName={playerName || ""}
           hasRoomId={!!roomId}
           requestedRole={requestedRole}
@@ -242,7 +242,7 @@ function ChessGameContent() {
             {/* Board */}
             <ChessBoard
               isDarkMode={isDarkMode}
-              isDisabled={!gameStarted || showNameModal}
+              isDisabled={!gameStarted || showNameModal || (!!winner && !isInReview)}
             />
 
             {/* Player 1 (Bottom) */}
@@ -273,50 +273,50 @@ function ChessGameContent() {
             </div>
 
             {/* Status Text & Review Controls */}
-            <div className="text-center mt-6 flex flex-col justify-center">
-              {isInReview ? (
-                <div className={`flex items-center justify-center gap-4 px-4 py-2 rounded-full shadow-sm border ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-zinc-100 border-zinc-200"}`}>
-                  <button
-                    onClick={() =>
-                      setReviewIndex((prev) =>
-                        prev !== null ? Math.max(0, prev - 1) : 0
-                      )
-                    }
-                    disabled={reviewIndex === 0}
-                    className={`p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm ${isDarkMode ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-white hover:bg-zinc-50 text-zinc-700"}`}
-                    title="Trước"
-                  >
-                    <FaChevronLeft className="w-4 h-4" />
-                  </button>
-                  <div className="flex flex-col items-center">
-                    <span className="font-bold text-indigo-500 text-xs uppercase tracking-wider">Đang xem lại</span>
-                    <span className={`font-medium text-sm ${isDarkMode ? "text-slate-200" : "text-zinc-700"}`}>
-                      Nước đi {reviewIndex} / {history.length}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() =>
-                      setReviewIndex((prev) =>
-                        prev !== null
-                          ? Math.min(history.length, prev + 1)
-                          : 0
-                      )
-                    }
-                    disabled={(reviewIndex ?? 0) >= history.length}
-                    className={`p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm ${isDarkMode ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-white hover:bg-zinc-50 text-zinc-700"}`}
-                    title="Sau"
-                  >
-                    <FaChevronRight className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setReviewIndex(null)}
-                    className="ml-2 p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors shadow-sm"
-                    title="Thoát xem lại"
-                  >
-                    <FaTimes className="w-4 h-4" />
-                  </button>
+            {isInReview ? (
+              <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center justify-center gap-4 px-4 py-2 rounded-full shadow-2xl border z-[100] bg-slate-900/95 border-slate-700 backdrop-blur-md">
+                <button
+                  onClick={() =>
+                    setReviewIndex((prev) =>
+                      prev !== null ? Math.max(0, prev - 1) : 0
+                    )
+                  }
+                  disabled={reviewIndex === 0}
+                  className="p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm bg-slate-700 hover:bg-slate-600 text-white"
+                  title="Trước"
+                >
+                  <FaChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="flex flex-col items-center">
+                  <span className="font-bold text-indigo-400 text-xs uppercase tracking-wider">Đang xem lại</span>
+                  <span className="font-medium text-sm text-slate-200">
+                    Nước đi {reviewIndex} / {history.length}
+                  </span>
                 </div>
-              ) : (
+                <button
+                  onClick={() =>
+                    setReviewIndex((prev) =>
+                      prev !== null
+                        ? Math.min(history.length, prev + 1)
+                        : 0
+                    )
+                  }
+                  disabled={(reviewIndex ?? 0) >= history.length}
+                  className="p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm bg-slate-700 hover:bg-slate-600 text-white"
+                  title="Sau"
+                >
+                  <FaChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setReviewIndex(null)}
+                  className="ml-2 p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors shadow-sm"
+                  title="Thoát xem lại"
+                >
+                  <FaTimes className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="text-center mt-6 flex flex-col justify-center">
                 <p className={`text-lg font-medium ${isDarkMode ? "text-white" : "text-zinc-800"}`}>
                   {winner === "Draw"
                     ? "🤝 Hòa cờ!"
@@ -344,8 +344,8 @@ function ChessGameContent() {
                           : "Đen"
                       }` : ""}
                 </p>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

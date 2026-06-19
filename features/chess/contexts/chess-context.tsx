@@ -278,18 +278,30 @@ export function ChessProvider({
                 setPlayer4Name(newPlayer);
                 stateRef.current.player4Name = newPlayer;
               } else {
-                roomChannel.send({
-                  type: "broadcast",
-                  event: "join-rejected",
-                  payload: {
-                    playerName: newPlayer,
-                    reason:
-                      state.gameMode === "2v2"
-                        ? "Phòng đã đủ 4 người chơi!"
-                        : "Phòng đã đủ 2 người chơi!",
-                  },
-                });
-                return;
+                if (newSpecs.length < 10) {
+                  newSpecs.push(newPlayer);
+                  setSpectators(newSpecs);
+                  stateRef.current.spectators = newSpecs;
+                  
+                  roomChannel.send({
+                    type: "broadcast",
+                    event: "force-spectator",
+                    payload: { playerName: newPlayer }
+                  });
+                } else {
+                  roomChannel.send({
+                    type: "broadcast",
+                    event: "join-rejected",
+                    payload: {
+                      playerName: newPlayer,
+                      reason:
+                        state.gameMode === "2v2"
+                          ? "Phòng đã đủ 4 người chơi và khán giả!"
+                          : "Phòng đã đủ 2 người chơi và khán giả!",
+                    },
+                  });
+                  return;
+                }
               }
             } else {
               if (newSpecs.length < 10) {
@@ -374,7 +386,15 @@ export function ChessProvider({
       .on("broadcast", { event: "kick-player" }, (payload) => {
         if (payload.payload.playerName === playerName) {
           toast.error("Bạn đã bị chủ phòng kích khỏi phòng!");
-          router.replace("/");
+          if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
+          router.replace("/chess");
+          setTimeout(() => { window.location.reload() }, 1000);
+        }
+      })
+      .on("broadcast", { event: "force-spectator" }, (payload) => {
+        if (payload.payload.playerName === playerName) {
+          toast.success("Phòng đã đủ người chơi, bạn được xếp vào khán giả!");
+          localStorage.setItem(`joinedRoom_${roomId}`, "spectator");
         }
       })
       .on("broadcast", { event: "request-role-change" }, (payload) => {

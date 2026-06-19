@@ -34,11 +34,8 @@ export function JoinRoomModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={() => {}}>
+    <Modal isOpen={isOpen} title={`Chào mừng đến với ${gameName}`}>
       <div className="text-center">
-        <h2 className="mb-4 text-2xl font-bold text-gray-800">
-          Chào mừng đến với {gameName}
-        </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <input

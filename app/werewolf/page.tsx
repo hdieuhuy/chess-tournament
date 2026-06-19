@@ -3247,7 +3247,6 @@ function WerewolfGame() {
           dayVotes: {},
           accusedPlayer: null,
           executionVotes: {},
-          whiteWolfVictim: null,
           cursedWolfUsed: false,
           infectedPlayer: null,
           fogWolfUsed: false,
