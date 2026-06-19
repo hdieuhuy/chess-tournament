@@ -1,992 +1,141 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, Suspense } from "react";
-import Link from "next/link";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { supabase } from "@/lib/supabase";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import React, { Suspense, useState, useEffect } from "react";
+import { useLobbyInit } from "@/features/lobby/hooks/use-lobby-init";
+import { JoinRoomModal } from "@/features/lobby/components/join-room-modal";
 import { Modal } from "@/components/Modal";
-import confetti from "canvas-confetti";
-import toast from "react-hot-toast";
+import { ChessProvider, useChess } from "@/features/chess/contexts/chess-context";
+import { ChessSidebar } from "@/features/chess/components/chess-sidebar";
+import { ChessBoard } from "@/features/chess/components/chess-board";
 import { FaChevronLeft, FaChevronRight, FaTimes } from "react-icons/fa";
+import confetti from "canvas-confetti";
+import { PIECE_IMAGES } from "@/features/chess/constants";
 
-const INITIAL_BOARD: (string | null)[][] = [
-  ["r", "n", "b", "q", "k", "b", "n", "r"],
-  ["p", "p", "p", "p", "p", "p", "p", "p"],
-  [null, null, null, null, null, null, null, null],
-  [null, null, null, null, null, null, null, null],
-  [null, null, null, null, null, null, null, null],
-  [null, null, null, null, null, null, null, null],
-  ["P", "P", "P", "P", "P", "P", "P", "P"],
-  ["R", "N", "B", "Q", "K", "B", "N", "R"],
-];
-
-// Sử dụng hình ảnh SVG tiêu chuẩn quốc tế từ Wikimedia Commons cho giao diện thân thiện, dễ nhận diện hơn
-const PIECE_IMAGES: Record<string, string> = {
-  K: "https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg",
-  Q: "https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg",
-  R: "https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg",
-  B: "https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg",
-  N: "https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg",
-  P: "https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg",
-  k: "https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg",
-  q: "https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg",
-  r: "https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg",
-  b: "https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg",
-  n: "https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg",
-  p: "https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg",
-};
-
-const PIECE_VALUES: Record<string, number> = {
-  p: 1,
-  n: 3,
-  b: 3,
-  r: 5,
-  q: 9,
-  k: 0,
-  P: 1,
-  N: 3,
-  B: 3,
-  R: 5,
-  Q: 9,
-  K: 0,
-};
-
-// Kiểm tra quân cản đường chéo
-const getPiecesBetweenDiag = (
-  board: (string | null)[][],
-  r1: number,
-  c1: number,
-  r2: number,
-  c2: number,
-) => {
-  let count = 0;
-  const dr = Math.sign(r2 - r1);
-  const dc = Math.sign(c2 - c1);
-  let r = r1 + dr;
-  let c = c1 + dc;
-  while (r !== r2 && c !== c2) {
-    if (board[r][c]) count++;
-    r += dr;
-    c += dc;
-  }
-  return count;
-};
-
-// Kiểm tra nước đi hợp lệ cơ bản của một quân (chưa xét chiếu tướng hay nhập thành)
-const canMoveBasic = (
-  board: (string | null)[][],
-  fr: number,
-  fc: number,
-  tr: number,
-  tc: number,
-  epTarget: [number, number] | null,
-  isWhiteTurn: boolean,
-) => {
-  const piece = board[fr][fc];
-  if (!piece) return false;
-  const isW = piece === piece.toUpperCase();
-  if (isW !== isWhiteTurn) return false;
-  const target = board[tr][tc];
-
-  // Không thể ăn quân cùng màu
-  if (target && (target === target.toUpperCase()) === isW) return false;
-
-  const type = piece.toLowerCase();
-  const dr = tr - fr;
-  const dc = tc - fc;
-  const adr = Math.abs(dr);
-  const adc = Math.abs(dc);
-
-  if (type === "p") {
-    const dir = isW ? -1 : 1;
-    const startRow = isW ? 6 : 1;
-    // Tiến thẳng
-    if (dc === 0) {
-      if (dr === dir && !target) return true;
-      if (dr === 2 * dir && fr === startRow && !target && !board[fr + dir][fc])
-        return true;
-    }
-    // Ăn chéo (bao gồm cả ăn qua đường - en passant)
-    else if (adc === 1 && dr === dir) {
-      if (target) return true;
-      if (epTarget && epTarget[0] === tr && epTarget[1] === tc) return true;
-    }
-    return false;
-  }
-  if (type === "n") {
-    return (adr === 2 && adc === 1) || (adr === 1 && adc === 2);
-  }
-  if (type === "b") {
-    if (adr !== adc) return false;
-    return getPiecesBetweenDiag(board, fr, fc, tr, tc) === 0;
-  }
-  if (type === "r") {
-    if (adr !== 0 && adc !== 0) return false;
-    if (adr === 0) {
-      const min = Math.min(fc, tc);
-      const max = Math.max(fc, tc);
-      for (let c = min + 1; c < max; c++) if (board[fr][c]) return false;
-    } else {
-      const min = Math.min(fr, tr);
-      const max = Math.max(fr, tr);
-      for (let r = min + 1; r < max; r++) if (board[r][fc]) return false;
-    }
-    return true;
-  }
-  if (type === "q") {
-    if (adr === adc) return getPiecesBetweenDiag(board, fr, fc, tr, tc) === 0;
-    if (adr === 0) {
-      const min = Math.min(fc, tc);
-      const max = Math.max(fc, tc);
-      for (let c = min + 1; c < max; c++) if (board[fr][c]) return false;
-      return true;
-    }
-    if (adc === 0) {
-      const min = Math.min(fr, tr);
-      const max = Math.max(fr, tr);
-      for (let r = min + 1; r < max; r++) if (board[r][fc]) return false;
-      return true;
-    }
-    return false;
-  }
-  if (type === "k") {
-    if (adr <= 1 && adc <= 1) return true;
-    return false;
-  }
-  return false;
-};
-
-// Kiểm tra xem một ô có bị tấn công bởi phe đối thủ không
-const isAttacked = (
-  board: (string | null)[][],
-  r: number,
-  c: number,
-  byWhite: boolean,
-  epTarget: [number, number] | null,
-) => {
-  for (let ir = 0; ir < 8; ir++) {
-    for (let ic = 0; ic < 8; ic++) {
-      const p = board[ir][ic];
-      if (p) {
-        const pIsW = p === p.toUpperCase();
-        if (pIsW === byWhite) {
-          if (p.toLowerCase() === "p") {
-            const dir = pIsW ? -1 : 1;
-            if (r - ir === dir && Math.abs(c - ic) === 1) return true;
-          } else if (p.toLowerCase() === "k") {
-            if (Math.abs(r - ir) <= 1 && Math.abs(c - ic) <= 1) return true;
-          } else {
-            if (canMoveBasic(board, ir, ic, r, c, epTarget, byWhite))
-              return true;
-          }
-        }
+export default function ChessPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          Loading...
+        </div>
       }
-    }
-  }
-  return false;
-};
-
-// Tìm vị trí của vua
-const findKing = (board: (string | null)[][], isW: boolean) => {
-  const kChar = isW ? "K" : "k";
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      if (board[r][c] === kChar) return [r, c];
-    }
-  }
-  return null;
-};
-
-// Kiểm tra một nước đi có hợp lệ hoàn toàn (bao gồm an toàn tướng và nhập thành)
-const isLegalMove = (
-  board: (string | null)[][],
-  fr: number,
-  fc: number,
-  tr: number,
-  tc: number,
-  epTarget: [number, number] | null,
-  isWhiteTurn: boolean,
-  castlingRights: { wK: boolean; wQ: boolean; bK: boolean; bQ: boolean },
-) => {
-  const piece = board[fr][fc];
-  if (!piece) return false;
-
-  // Luật Nhập thành (Castling)
-  if (piece.toLowerCase() === "k" && Math.abs(tc - fc) === 2 && tr === fr) {
-    if (isWhiteTurn) {
-      if (fr !== 7 || fc !== 4) return false;
-      if (tc === 6) {
-        // Kingside
-        if (!castlingRights.wK) return false;
-        if (board[7][5] || board[7][6]) return false;
-        if (isAttacked(board, 7, 4, false, epTarget)) return false;
-        if (isAttacked(board, 7, 5, false, epTarget)) return false;
-        if (isAttacked(board, 7, 6, false, epTarget)) return false;
-        return true;
-      } else if (tc === 2) {
-        // Queenside
-        if (!castlingRights.wQ) return false;
-        if (board[7][1] || board[7][2] || board[7][3]) return false;
-        if (isAttacked(board, 7, 4, false, epTarget)) return false;
-        if (isAttacked(board, 7, 3, false, epTarget)) return false;
-        if (isAttacked(board, 7, 2, false, epTarget)) return false;
-        return true;
-      }
-    } else {
-      if (fr !== 0 || fc !== 4) return false;
-      if (tc === 6) {
-        // Kingside
-        if (!castlingRights.bK) return false;
-        if (board[0][5] || board[0][6]) return false;
-        if (isAttacked(board, 0, 4, true, epTarget)) return false;
-        if (isAttacked(board, 0, 5, true, epTarget)) return false;
-        if (isAttacked(board, 0, 6, true, epTarget)) return false;
-        return true;
-      } else if (tc === 2) {
-        // Queenside
-        if (!castlingRights.bQ) return false;
-        if (board[0][1] || board[0][2] || board[0][3]) return false;
-        if (isAttacked(board, 0, 4, true, epTarget)) return false;
-        if (isAttacked(board, 0, 3, true, epTarget)) return false;
-        if (isAttacked(board, 0, 2, true, epTarget)) return false;
-        return true;
-      }
-    }
-    return false;
-  }
-
-  if (!canMoveBasic(board, fr, fc, tr, tc, epTarget, isWhiteTurn)) return false;
-
-  // Giả lập nước đi
-  const tempBoard = board.map((row) => [...row]);
-  tempBoard[tr][tc] = piece;
-  tempBoard[fr][fc] = null;
-
-  // Xóa Tốt bị ăn khi dùng luật Bắt Tốt Qua Đường (En Passant)
-  if (
-    piece.toLowerCase() === "p" &&
-    Math.abs(tc - fc) === 1 &&
-    !board[tr][tc]
-  ) {
-    tempBoard[fr][tc] = null;
-  }
-
-  // Tìm vua và đảm bảo tướng không bị chiếu sau khi đi
-  const kPos = findKing(tempBoard, isWhiteTurn);
-  if (kPos && isAttacked(tempBoard, kPos[0], kPos[1], !isWhiteTurn, epTarget)) {
-    return false;
-  }
-
-  return true;
-};
-
-const INITIAL_TIME = 600; // 10 phút tính bằng giây
-
-function ChessGame() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-  const roomParam = searchParams.get("room");
-
-  const [board, setBoard] = useState<(string | null)[][]>(INITIAL_BOARD);
-  const [isWhiteTurn, setIsWhiteTurn] = useState<boolean>(true);
-  const [castlingRights, setCastlingRights] = useState({
-    wK: true,
-    wQ: true,
-    bK: true,
-    bQ: true,
-  });
-  const [enPassantTarget, setEnPassantTarget] = useState<
-    [number, number] | null
-  >(null);
-  const [captures, setCaptures] = useState<{ w: string[]; b: string[] }>({
-    w: [],
-    b: [],
-  });
-  const [winner, setWinner] = useState<string | null>(null);
-  const [selectedPos, setSelectedPos] = useState<[number, number] | null>(null);
-  const [lastMove, setLastMove] = useState<{
-    from: [number, number];
-    to: [number, number];
-  } | null>(null);
-  const [animatingMove, setAnimatingMove] = useState<{
-    id: string;
-    fr: number;
-    fc: number;
-    r: number;
-    c: number;
-  } | null>(null);
-  const [promotionPending, setPromotionPending] = useState<{
-    r: number;
-    c: number;
-    fr: number;
-    fc: number;
-    board: (string | null)[][];
-    epTarget: [number, number] | null;
-    castlingRights: { wK: boolean; wQ: boolean; bK: boolean; bQ: boolean };
-    captures: { w: string[]; b: string[] };
-    color: "W" | "B";
-  } | null>(null);
-  const [history, setHistory] = useState<
-    {
-      board: (string | null)[][];
-      isWhiteTurn: boolean;
-      turnIndex: number;
-      winner: string | null;
-      castlingRights: { wK: boolean; wQ: boolean; bK: boolean; bQ: boolean };
-      enPassantTarget: [number, number] | null;
-      captures: { w: string[]; b: string[] };
-      lastMove: { from: [number, number]; to: [number, number] } | null;
-      player1Time: number;
-      player2Time: number;
-    }[]
-  >([]);
-  const [reviewIndex, setReviewIndex] = useState<number | null>(null);
-  const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
-  const [gameMode, setGameMode] = useState<"1v1" | "2v2">("1v1");
-  const [player3Name, setPlayer3Name] = useState<string | null>(null);
-  const [player4Name, setPlayer4Name] = useState<string | null>(null);
-  const [turnIndex, setTurnIndex] = useState<number>(0); // 0: White 1, 1: Black 1, 2: White 2, 3: Black 2
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
-
-  const [roomId, setRoomId] = useState<string | null>(roomParam);
-  const [playerName, setPlayerName] = useState<string>("");
-  const [inputName, setInputName] = useState<string>("");
-
-  const [hostName, setHostName] = useState<string | null>(null);
-  const [player1Name, setPlayer1Name] = useState<string | null>(null);
-  const [player2Name, setPlayer2Name] = useState<string | null>(null);
-  const [spectators, setSpectators] = useState<string[]>([]);
-
-  const [showNameModal, setShowNameModal] = useState<boolean>(true);
-  const [linkCopied, setLinkCopied] = useState<boolean>(false);
-  const [gameStarted, setGameStarted] = useState<boolean>(false);
-  const [readyPlayers, setReadyPlayers] = useState<string[]>([]);
-  const [player1Time, setPlayer1Time] = useState<number>(INITIAL_TIME);
-  const [player2Time, setPlayer2Time] = useState<number>(INITIAL_TIME);
-  const [initialTime, setInitialTime] = useState<number>(INITIAL_TIME);
-  const [customTimeMinutes, setCustomTimeMinutes] = useState<number>(15);
-
-  const [hasInitialized, setHasInitialized] = useState<boolean>(false);
-  const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
-
-  const [requestedRole, setRequestedRole] = useState<"player" | "spectator">(
-    "player",
+    >
+      <ChessGameWrapper />
+    </Suspense>
   );
+}
 
-  const isPlayer1 = playerName === player1Name;
-  const isPlayer2 = playerName === player2Name;
-  const isSpectator = spectators.includes(playerName);
+function ChessGameWrapper() {
+  const {
+    roomId,
+    playerName,
+    requestedRole,
+    setRequestedRole,
+    hasInitialized,
+    inputName,
+    handleJoinRoom,
+    isCreator,
+  } = useLobbyInit();
+
+
+
+  if (!hasInitialized && roomId) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50">
+        <JoinRoomModal
+          isOpen={true}
+          gameName="Cờ Vua (Chess)"
+          initialName={playerName || ""}
+          hasRoomId={!!roomId}
+          requestedRole={requestedRole}
+          onRoleChange={setRequestedRole}
+          onSubmit={handleJoinRoom}
+        />
+      </div>
+    );
+  }
+
+  if (!roomId || !playerName) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50">
+        Đang khởi tạo phòng chơi...
+      </div>
+    );
+  }
+
+  return (
+    <ChessProvider
+      roomId={roomId}
+      playerName={playerName}
+      requestedRole={requestedRole}
+      isCreator={isCreator}
+      hasInitialized={hasInitialized}
+    >
+      <ChessGameContent />
+    </ChessProvider>
+  );
+}
+
+function ChessGameContent() {
+  const {
+    playerName,
+    player1Name,
+    player2Name,
+    player3Name,
+    player4Name,
+    player1Time,
+    player2Time,
+    isWhiteTurn,
+    winner,
+    history,
+    displayState,
+    gameStarted,
+    isSpectator,
+    gameMode,
+    turnIndex,
+    isInReview,
+    reviewIndex,
+    setReviewIndex,
+    undoRequestedBy,
+    handleAcceptUndo,
+    handleRejectUndo,
+    roomId,
+    captures,
+  } = useChess();
+
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const {
+    showNameModal,
+    setShowNameModal,
+    hasInitialized,
+    requestedRole,
+    setRequestedRole,
+    handleJoinRoom,
+  } = useLobbyInit("Chess");
 
   useEffect(() => {
-    const savedName = localStorage.getItem("playerName");
-    if (savedName) {
-      setPlayerName(savedName);
-      setInputName(savedName);
-
-      if (!roomParam) {
-        setShowNameModal(false);
-        setHasInitialized(true);
-        const newRoomId = Math.random().toString(36).substring(2, 10);
-        setRoomId(newRoomId);
-        setHostName(savedName);
-        setPlayer1Name(savedName);
-        localStorage.setItem(`joinedRoom_${newRoomId}`, "player");
-        router.replace(`${pathname}?room=${newRoomId}`);
-      } else {
-        const joinedRole = localStorage.getItem(`joinedRoom_${roomParam}`);
-        if (joinedRole) {
-          setRequestedRole(joinedRole as "player" | "spectator");
-          setShowNameModal(false);
-          setHasInitialized(true);
-        }
-      }
-    }
-    setIsCheckingStorage(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const savedTheme = localStorage.getItem("chessTheme");
+    if (savedTheme === "dark") setIsDarkMode(true);
   }, []);
 
-  const stateRef = useRef({
-    hostName,
-    player1Name,
-    player2Name,
-    spectators,
-    board,
-    isWhiteTurn,
-    winner,
-    castlingRights,
-    enPassantTarget,
-    captures,
-    lastMove,
-    history,
-    gameMode,
-    player3Name,
-    player4Name,
-    turnIndex,
-    undoRequestedBy,
-    gameStarted,
-    readyPlayers,
-    player1Time,
-    player2Time,
-    initialTime,
-  });
-
-  useEffect(() => {
-    stateRef.current = {
-      hostName,
-      player1Name,
-      player2Name,
-      spectators,
-      board,
-      isWhiteTurn,
-      winner,
-      castlingRights,
-      enPassantTarget,
-      captures,
-      lastMove,
-      history,
-      gameMode,
-      player3Name,
-      player4Name,
-      turnIndex,
-      undoRequestedBy,
-      gameStarted,
-      readyPlayers,
-      player1Time,
-      player2Time,
-      initialTime,
-    };
-  }, [
-    hostName,
-    player1Name,
-    player2Name,
-    spectators,
-    board,
-    isWhiteTurn,
-    winner,
-    castlingRights,
-    enPassantTarget,
-    captures,
-    lastMove,
-    history,
-    undoRequestedBy,
-    gameStarted,
-    readyPlayers,
-    player1Time,
-    player2Time,
-    initialTime,
-  ]);
-
-  const currentStateForReview = {
-    board,
-    isWhiteTurn,
-    turnIndex,
-    winner,
-    castlingRights,
-    enPassantTarget,
-    captures,
-    lastMove,
-    player1Time,
-    player2Time,
+  const toggleTheme = () => {
+    setIsDarkMode((prev) => {
+      const newMode = !prev;
+      localStorage.setItem("chessTheme", newMode ? "dark" : "light");
+      return newMode;
+    });
   };
-  const fullHistory = [...history, currentStateForReview];
-  const isInReview = reviewIndex !== null;
-  const displayState =
-    reviewIndex !== null && fullHistory[reviewIndex]
-      ? fullHistory[reviewIndex]
-      : currentStateForReview;
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const s = (seconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
 
   useEffect(() => {
-    if (!roomId || !playerName || !hasInitialized) return;
-    const roomChannel = supabase.channel(`chess-room-${roomId}`);
-
-    roomChannel
-      .on("broadcast", { event: "sync-move" }, (payload) => {
-        const { history: newHistory, ...data } = payload.payload;
-
-        if (data.lastMove) {
-          const { from, to } = data.lastMove;
-          const animId = Date.now().toString() + Math.random().toString();
-          setAnimatingMove({
-            id: animId,
-            fr: from[0],
-            fc: from[1],
-            r: to[0],
-            c: to[1],
-          });
-          setTimeout(() => {
-            setAnimatingMove((prev) => (prev?.id === animId ? null : prev));
-          }, 300);
-        }
-
-        setBoard(data.board);
-        setIsWhiteTurn(data.isWhiteTurn);
-        setWinner(data.winner);
-        setCastlingRights(data.castlingRights);
-        setEnPassantTarget(data.enPassantTarget);
-        if (data.captures) setCaptures(data.captures);
-        setLastMove(data.lastMove);
-        if (data.turnIndex !== undefined) setTurnIndex(data.turnIndex);
-        if (newHistory) setHistory(newHistory);
-        setUndoRequestedBy(null);
-        setPlayer1Time(data.player1Time);
-        setPlayer2Time(data.player2Time);
-      })
-      .on("broadcast", { event: "reset-game" }, () => {
-        setBoard(INITIAL_BOARD);
-        setIsWhiteTurn(true);
-        setWinner(null);
-        setCastlingRights({ wK: true, wQ: true, bK: true, bQ: true });
-        setEnPassantTarget(null);
-        setCaptures({ w: [], b: [] });
-        setTurnIndex(0);
-        setSelectedPos(null);
-        setLastMove(null);
-        setPlayer1Time(stateRef.current.initialTime);
-        setPlayer2Time(stateRef.current.initialTime);
-        setGameStarted(false);
-        setReadyPlayers([]);
-      })
-      .on("broadcast", { event: "player-ready" }, (payload) => {
-        const { playerName: readyPlayer } = payload.payload;
-        setReadyPlayers((prev) =>
-          prev.includes(readyPlayer) ? prev : [...prev, readyPlayer],
-        );
-      })
-      .on("broadcast", { event: "game-start" }, (payload) => {
-        setGameStarted(true);
-        // Reset timers for all clients
-        setPlayer1Time(stateRef.current.initialTime);
-        setPlayer2Time(stateRef.current.initialTime);
-      })
-      .on("broadcast", { event: "request-join" }, (payload) => {
-        const { playerName: newPlayer, requestedRole: role } = payload.payload;
-        const state = stateRef.current;
-
-        if (state.hostName === playerName) {
-          let newP2 = state.player2Name;
-          const newSpecs = [...state.spectators];
-
-          const isAlreadyPlayer =
-            newPlayer === state.player1Name || newPlayer === newP2;
-          const isAlreadySpec = newSpecs.includes(newPlayer);
-
-          if (!isAlreadyPlayer && !isAlreadySpec) {
-            if (role === "player") {
-              if (!newP2) {
-                newP2 = newPlayer;
-                setPlayer2Name(newP2);
-                stateRef.current.player2Name = newP2;
-              } else if (state.gameMode === "2v2" && !state.player3Name) {
-                setPlayer3Name(newPlayer);
-                stateRef.current.player3Name = newPlayer;
-              } else if (state.gameMode === "2v2" && !state.player4Name) {
-                setPlayer4Name(newPlayer);
-                stateRef.current.player4Name = newPlayer;
-              } else {
-                roomChannel.send({
-                  type: "broadcast",
-                  event: "join-rejected",
-                  payload: {
-                    playerName: newPlayer,
-                    reason:
-                      state.gameMode === "2v2"
-                        ? "Phòng đã đủ 4 người chơi!"
-                        : "Phòng đã đủ 2 người chơi!",
-                  },
-                });
-                return;
-              }
-            } else {
-              if (newSpecs.length < 10) {
-                newSpecs.push(newPlayer);
-                setSpectators(newSpecs);
-                stateRef.current.spectators = newSpecs;
-              } else {
-                roomChannel.send({
-                  type: "broadcast",
-                  event: "join-rejected",
-                  payload: {
-                    playerName: newPlayer,
-                    reason: "Phòng đã đầy người xem!",
-                  },
-                });
-                return;
-              }
-            }
-          }
-
-          roomChannel.send({
-            type: "broadcast",
-            event: "room-sync",
-            payload: {
-              hostName: state.hostName,
-              player1Name: state.player1Name,
-              player2Name: newP2,
-              spectators: newSpecs,
-              board: state.board,
-              isWhiteTurn: state.isWhiteTurn,
-              player3Name: state.player3Name,
-              player4Name: state.player4Name,
-              gameMode: state.gameMode,
-              turnIndex: state.turnIndex,
-              winner: state.winner,
-              castlingRights: state.castlingRights,
-              enPassantTarget: state.enPassantTarget,
-              captures: state.captures,
-              lastMove: state.lastMove,
-              history: state.history,
-              undoRequestedBy: state.undoRequestedBy,
-              gameStarted: state.gameStarted,
-              readyPlayers: [],
-              player1Time: state.gameStarted
-                ? state.player1Time
-                : state.initialTime,
-              player2Time: state.gameStarted
-                ? state.player2Time
-                : state.initialTime,
-              initialTime: state.initialTime,
-            },
-          });
-        }
-      })
-      .on("broadcast", { event: "room-sync" }, (payload) => {
-        const data = payload.payload;
-        setHostName(data.hostName);
-        setPlayer1Name(data.player1Name);
-        setPlayer2Name(data.player2Name);
-        setSpectators(data.spectators);
-        setBoard(data.board);
-        setIsWhiteTurn(data.isWhiteTurn);
-        if (data.player3Name !== undefined) setPlayer3Name(data.player3Name);
-        if (data.player4Name !== undefined) setPlayer4Name(data.player4Name);
-        if (data.gameMode !== undefined) setGameMode(data.gameMode);
-        if (data.turnIndex !== undefined) setTurnIndex(data.turnIndex);
-        setWinner(data.winner);
-        setCastlingRights(data.castlingRights);
-        setEnPassantTarget(data.enPassantTarget);
-        if (data.captures) setCaptures(data.captures);
-        setLastMove(data.lastMove);
-        if (data.history) setHistory(data.history);
-        if (data.undoRequestedBy !== undefined)
-          setUndoRequestedBy(data.undoRequestedBy);
-        if (data.gameStarted !== undefined) setGameStarted(data.gameStarted);
-        if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
-        if (data.player1Time !== undefined) setPlayer1Time(data.player1Time);
-        if (data.player2Time !== undefined) setPlayer2Time(data.player2Time);
-        if (data.initialTime !== undefined) setInitialTime(data.initialTime);
-      })
-      .on("broadcast", { event: "update-name" }, (payload) => {
-        const { oldName, newName } = payload.payload;
-        setHostName((prev) => (prev === oldName ? newName : prev));
-        setPlayer1Name((prev) => (prev === oldName ? newName : prev));
-        setPlayer2Name((prev) => (prev === oldName ? newName : prev));
-        setPlayer3Name((prev) => (prev === oldName ? newName : prev));
-        setPlayer4Name((prev) => (prev === oldName ? newName : prev));
-        setSpectators((prev) => prev.map((s) => (s === oldName ? newName : s)));
-        setReadyPlayers((prev) =>
-          prev.map((p) => (p === oldName ? newName : p)),
-        );
-      })
-      .on("broadcast", { event: "join-rejected" }, (payload) => {
-        if (payload.payload.playerName === playerName) {
-          toast.error(payload.payload.reason || "Không thể tham gia phòng!");
-          setHasInitialized(false);
-          setShowNameModal(true);
-          if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
-        }
-      })
-      .on("broadcast", { event: "kick-player" }, (payload) => {
-        if (payload.payload.playerName === playerName) {
-          toast.error("Bạn đã bị chủ phòng kích khỏi phòng!");
-          if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
-          router.replace("/");
-        }
-      })
-      .on("broadcast", { event: "request-role-change" }, (payload) => {
-        const { playerName: reqPlayer, newRole, targetSlot } = payload.payload;
-        const state = stateRef.current;
-        if (state.hostName === playerName) {
-          if (newRole === "player") {
-            const newSpecs = state.spectators.filter((s) => s !== reqPlayer);
-            const newReadyPlayers = state.readyPlayers.filter(
-              (p) => p !== reqPlayer,
-            );
-
-            let newP1 =
-              state.player1Name === reqPlayer ? null : state.player1Name;
-            let newP2 =
-              state.player2Name === reqPlayer ? null : state.player2Name;
-            let newP3 =
-              state.player3Name === reqPlayer ? null : state.player3Name;
-            let newP4 =
-              state.player4Name === reqPlayer ? null : state.player4Name;
-
-            let success = false;
-
-            if (targetSlot === 1 && !newP1) {
-              newP1 = reqPlayer;
-              success = true;
-            } else if (targetSlot === 2 && !newP2) {
-              newP2 = reqPlayer;
-              success = true;
-            } else if (targetSlot === 3 && state.gameMode === "2v2" && !newP3) {
-              newP3 = reqPlayer;
-              success = true;
-            } else if (targetSlot === 4 && state.gameMode === "2v2" && !newP4) {
-              newP4 = reqPlayer;
-              success = true;
-            }
-
-            if (!success && !targetSlot) {
-              if (!newP1) {
-                newP1 = reqPlayer;
-                success = true;
-              } else if (!newP2) {
-                newP2 = reqPlayer;
-                success = true;
-              } else if (state.gameMode === "2v2" && !newP3) {
-                newP3 = reqPlayer;
-                success = true;
-              } else if (state.gameMode === "2v2" && !newP4) {
-                newP4 = reqPlayer;
-                success = true;
-              }
-            }
-
-            if (success) {
-              setPlayer1Name(newP1);
-              setPlayer2Name(newP2);
-              setPlayer3Name(newP3);
-              setPlayer4Name(newP4);
-              setSpectators(newSpecs);
-              setReadyPlayers(newReadyPlayers);
-
-              stateRef.current.player1Name = newP1;
-              stateRef.current.player2Name = newP2;
-              stateRef.current.player3Name = newP3;
-              stateRef.current.player4Name = newP4;
-              stateRef.current.spectators = newSpecs;
-              stateRef.current.readyPlayers = newReadyPlayers;
-
-              roomChannel.send({
-                type: "broadcast",
-                event: "room-sync",
-                payload: {
-                  ...stateRef.current,
-                },
-              });
-            }
-          } else if (newRole === "spectator") {
-            const newP1 =
-              state.player1Name === reqPlayer ? null : state.player1Name;
-            const newP2 =
-              state.player2Name === reqPlayer ? null : state.player2Name;
-            const newP3 =
-              state.player3Name === reqPlayer ? null : state.player3Name;
-            const newP4 =
-              state.player4Name === reqPlayer ? null : state.player4Name;
-            const newSpecs = [...state.spectators];
-            if (!newSpecs.includes(reqPlayer)) {
-              newSpecs.push(reqPlayer);
-            }
-            const newReadyPlayers = state.readyPlayers.filter(
-              (p) => p !== reqPlayer,
-            );
-
-            setPlayer1Name(newP1);
-            setPlayer2Name(newP2);
-            setPlayer3Name(newP3);
-            setPlayer4Name(newP4);
-            setSpectators(newSpecs);
-            setReadyPlayers(newReadyPlayers);
-
-            stateRef.current.player1Name = newP1;
-            stateRef.current.player2Name = newP2;
-            stateRef.current.player3Name = newP3;
-            stateRef.current.player4Name = newP4;
-            stateRef.current.spectators = newSpecs;
-            stateRef.current.readyPlayers = newReadyPlayers;
-
-            roomChannel.send({
-              type: "broadcast",
-              event: "room-sync",
-              payload: { ...stateRef.current },
-            });
-          }
-        }
-      })
-      .on("broadcast", { event: "leave-room" }, (payload) => {
-        const state = stateRef.current;
-        const leavingPlayer = payload.payload.playerName;
-
-        let newP1 = state.player1Name;
-        let newP2 = state.player2Name;
-        let newP3 = state.player3Name;
-        let newP4 = state.player4Name;
-        if (newP1 === leavingPlayer) newP1 = null;
-        if (newP2 === leavingPlayer) newP2 = null;
-        if (newP3 === leavingPlayer) newP3 = null;
-        if (newP4 === leavingPlayer) newP4 = null;
-
-        const newSpecs = state.spectators.filter((s) => s !== leavingPlayer);
-        const newReadyPlayers = state.readyPlayers.filter(
-          (p) => p !== leavingPlayer,
-        );
-
-        let newHostName = state.hostName;
-        if (state.hostName === leavingPlayer) {
-          newHostName = newP1 || newP2 || newP3 || newP4 || newSpecs[0] || null;
-        }
-
-        setPlayer1Name(newP1);
-        setPlayer2Name(newP2);
-        setPlayer3Name(newP3);
-        setPlayer4Name(newP4);
-        setSpectators(newSpecs);
-        setReadyPlayers(newReadyPlayers);
-        setHostName(newHostName);
-
-        stateRef.current.player1Name = newP1;
-        stateRef.current.player2Name = newP2;
-        stateRef.current.player3Name = newP3;
-        stateRef.current.player4Name = newP4;
-        stateRef.current.spectators = newSpecs;
-        stateRef.current.readyPlayers = newReadyPlayers;
-        stateRef.current.hostName = newHostName;
-
-        if (newHostName === playerName) {
-          setTimeout(() => {
-            roomChannel.send({
-              type: "broadcast",
-              event: "room-sync",
-              payload: { ...stateRef.current },
-            });
-          }, 50);
-        }
-      })
-      .on("broadcast", { event: "request-undo" }, (payload) => {
-        setUndoRequestedBy(payload.payload.playerName);
-      })
-      .on("broadcast", { event: "reject-undo" }, () => {
-        const state = stateRef.current;
-        if (playerName === state.undoRequestedBy) {
-          toast.error("Đối thủ đã từ chối yêu cầu đi lại.");
-        }
-        setUndoRequestedBy(null);
-      })
-      .on("broadcast", { event: "change-time" }, (payload) => {
-        setInitialTime(payload.payload.initialTime);
-        setPlayer1Time(payload.payload.initialTime);
-        setPlayer2Time(payload.payload.initialTime);
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          roomChannel.send({
-            type: "broadcast",
-            event: "request-join",
-            payload: { playerName, requestedRole },
-          });
-        }
-      });
-
-    setChannel(roomChannel);
-    return () => {
-      supabase.removeChannel(roomChannel);
-    };
-  }, [roomId, playerName, hasInitialized, requestedRole]);
-
-  useEffect(() => {
-    if (gameStarted || !player1Name || !player2Name || !channel) return;
-
-    const p1Ready = readyPlayers.includes(player1Name);
-    const p2Ready = readyPlayers.includes(player2Name);
-    const p3Ready =
-      gameMode === "1v1" || (player3Name && readyPlayers.includes(player3Name));
-    const p4Ready =
-      gameMode === "1v1" || (player4Name && readyPlayers.includes(player4Name));
-
-    if (
-      p1Ready &&
-      p2Ready &&
-      p3Ready &&
-      p4Ready &&
-      (gameMode === "1v1" || (player3Name && player4Name))
-    ) {
-      if (playerName === hostName) {
-        const startTime = Date.now();
-        setGameStarted(true);
-        setPlayer1Time(initialTime);
-        setPlayer2Time(initialTime);
-        channel.send({
-          type: "broadcast",
-          event: "game-start",
-          payload: {},
-        });
-      }
-    }
-  }, [
-    readyPlayers,
-    player1Name,
-    player2Name,
-    player3Name,
-    player4Name,
-    gameMode,
-    gameStarted,
-    playerName,
-    hostName,
-    channel,
-    initialTime,
-  ]);
-
-  // Timer logic
-  useEffect(() => {
-    if (!gameStarted || winner) return;
-
-    const timer = setInterval(() => {
-      if (isWhiteTurn) {
-        setPlayer1Time((t) => {
-          if (t <= 1) {
-            setWinner("B"); // Black wins on time
-            if (channel && playerName === hostName) {
-              channel.send({
-                type: "broadcast",
-                event: "sync-move",
-                payload: { ...stateRef.current, winner: "B", player1Time: 0 },
-              });
-            }
-            clearInterval(timer);
-            return 0;
-          }
-          return t - 1;
-        });
-      } else {
-        setPlayer2Time((t) => {
-          if (t <= 1) {
-            setWinner("W"); // White wins on time
-            if (channel && playerName === hostName) {
-              channel.send({
-                type: "broadcast",
-                event: "sync-move",
-                payload: { ...stateRef.current, winner: "W", player2Time: 0 },
-              });
-            }
-            clearInterval(timer);
-            return 0;
-          }
-          return t - 1;
-        });
-      }
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [gameStarted, winner, isWhiteTurn, channel, playerName, hostName]);
-
-  useEffect(() => {
-    if (winner && winner !== "Draw") {
-      const duration = 3000;
-      const end = Date.now() + duration;
+    if (winner) {
       const frame = () => {
         confetti({
           particleCount: 5,
@@ -1002,1753 +151,204 @@ function ChessGame() {
           origin: { x: 1 },
           zIndex: 9999,
         });
-        if (Date.now() < end) requestAnimationFrame(frame);
       };
-      frame();
+      const interval = setInterval(frame, 250);
+      setTimeout(() => clearInterval(interval), 3000);
+      return () => clearInterval(interval);
     }
   }, [winner]);
 
-  const handleJoinRoom = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputName.trim()) return;
-
-    const newName = inputName.trim();
-    setPlayerName(newName);
-    localStorage.setItem("playerName", newName);
-    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, requestedRole);
-    setShowNameModal(false);
-
-    if (!hasInitialized) {
-      setHasInitialized(true);
-      if (!roomId) {
-        const newRoomId = Math.random().toString(36).substring(2, 10);
-        setRoomId(newRoomId);
-        setHostName(newName);
-        setPlayer1Name(newName);
-        localStorage.setItem(`joinedRoom_${newRoomId}`, "player");
-        router.replace(`${pathname}?room=${newRoomId}`);
-      }
-    } else {
-      if (channel) {
-        channel.send({
-          type: "broadcast",
-          event: "update-name",
-          payload: { oldName: playerName, newName: newName },
-        });
-      }
-      if (hostName === playerName) setHostName(newName);
-      if (player1Name === playerName) setPlayer1Name(newName);
-      if (player2Name === playerName) setPlayer2Name(newName);
-      if (spectators.includes(playerName)) {
-        setSpectators(spectators.map((s) => (s === playerName ? newName : s)));
-      }
-    }
-  };
-
-  const handleTimeChange = (newTimeSeconds: number) => {
-    if (playerName !== hostName || gameStarted) return;
-    setInitialTime(newTimeSeconds);
-    setPlayer1Time(newTimeSeconds);
-    setPlayer2Time(newTimeSeconds);
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "change-time",
-        payload: { initialTime: newTimeSeconds },
-      });
-    }
-  };
-
-  const executeMove = useCallback(
-    (
-      newBoard: (string | null)[][],
-      newEpTarget: [number, number] | null,
-      newCastlingRights: { wK: boolean; wQ: boolean; bK: boolean; bQ: boolean },
-      newCaptures: { w: string[]; b: string[] },
-      fr: number,
-      fc: number,
-      r: number,
-      c: number,
-    ) => {
-      const animId = Date.now().toString() + Math.random().toString();
-      setAnimatingMove({ id: animId, fr, fc, r, c });
-      setTimeout(() => {
-        setAnimatingMove((prev) => (prev?.id === animId ? null : prev));
-      }, 300);
-
-      const currentState = {
-        board: stateRef.current.board,
-        isWhiteTurn: stateRef.current.isWhiteTurn,
-        turnIndex: stateRef.current.turnIndex,
-        winner: stateRef.current.winner,
-        castlingRights: stateRef.current.castlingRights,
-        enPassantTarget: stateRef.current.enPassantTarget,
-        captures: stateRef.current.captures,
-        lastMove: stateRef.current.lastMove,
-        player1Time: stateRef.current.player1Time,
-        player2Time: stateRef.current.player2Time,
-      };
-      const newHistory = [...stateRef.current.history, currentState];
-      setHistory(newHistory);
-
-      const nextTurnIndex =
-        (stateRef.current.turnIndex + 1) %
-        (stateRef.current.gameMode === "2v2" ? 4 : 2);
-      const nextTurn = nextTurnIndex % 2 === 0;
-
-      // Kiểm tra xem đối thủ có bị chiếu bí hoặc bí nước (hòa) không
-      let opponentHasValidMove = false;
-      for (let tr = 0; tr < 8 && !opponentHasValidMove; tr++) {
-        for (let tc = 0; tc < 8 && !opponentHasValidMove; tc++) {
-          const op = newBoard[tr][tc];
-          if (op && (op === op.toUpperCase()) === nextTurn) {
-            for (let t_r = 0; t_r < 8 && !opponentHasValidMove; t_r++) {
-              for (let t_c = 0; t_c < 8 && !opponentHasValidMove; t_c++) {
-                if (
-                  isLegalMove(
-                    newBoard,
-                    tr,
-                    tc,
-                    t_r,
-                    t_c,
-                    newEpTarget,
-                    nextTurn,
-                    newCastlingRights,
-                  )
-                ) {
-                  opponentHasValidMove = true;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      let newWinner = null;
-      if (!opponentHasValidMove) {
-        const oppKingPos = findKing(newBoard, nextTurn);
-        const inCheck =
-          oppKingPos &&
-          isAttacked(
-            newBoard,
-            oppKingPos[0],
-            oppKingPos[1],
-            !nextTurn,
-            newEpTarget,
-          );
-        newWinner = inCheck ? (isWhiteTurn ? "W" : "B") : "Draw";
-      }
-
-      setBoard(newBoard);
-      setIsWhiteTurn(nextTurn);
-      setTurnIndex(nextTurnIndex);
-      setWinner(newWinner);
-      setCastlingRights(newCastlingRights);
-      setEnPassantTarget(newEpTarget);
-      setCaptures(newCaptures);
-      setSelectedPos(null);
-      setLastMove({ from: [fr, fc], to: [r, c] });
-
-      if (channel) {
-        channel.send({
-          type: "broadcast",
-          event: "sync-move",
-          payload: {
-            board: newBoard,
-            isWhiteTurn: nextTurn,
-            turnIndex: nextTurnIndex,
-            winner: newWinner,
-            castlingRights: newCastlingRights,
-            enPassantTarget: newEpTarget,
-            captures: newCaptures,
-            lastMove: { from: [fr, fc], to: [r, c] },
-            history: newHistory,
-            player1Time: player1Time,
-            player2Time: player2Time,
-          },
-        });
-      }
-    },
-    [isWhiteTurn, channel, player1Time, player2Time],
-  );
-
-  const handlePromotionSelect = useCallback(
-    (promotedPiece: string) => {
-      if (!promotionPending) return;
-      const {
-        r,
-        c,
-        fr,
-        fc,
-        board: pBoard,
-        epTarget,
-        castlingRights,
-        captures: pCaptures,
-      } = promotionPending;
-      const newBoard = pBoard.map((row) => [...row]);
-      newBoard[r][c] = promotedPiece;
-
-      setPromotionPending(null);
-      executeMove(newBoard, epTarget, castlingRights, pCaptures, fr, fc, r, c);
-    },
-    [promotionPending, executeMove],
-  );
-
-  const handleCellClick = useCallback(
-    (r: number, c: number) => {
-      if (
-        winner ||
-        !gameStarted ||
-        isSpectator ||
-        promotionPending ||
-        isInReview
-      )
-        return;
-
-      const expectedPlayer =
-        gameMode === "2v2"
-          ? turnIndex === 0
-            ? player1Name
-            : turnIndex === 1
-              ? player2Name
-              : turnIndex === 2
-                ? player3Name
-                : player4Name
-          : isWhiteTurn
-            ? player1Name
-            : player2Name;
-
-      if (playerName !== expectedPlayer) return;
-
-      const myColor = isPlayer1 || playerName === player3Name ? "W" : "B";
-      const currentTurn = isWhiteTurn ? "W" : "B";
-
-      const piece = board[r][c];
-      const isWhitePiece = piece ? piece === piece.toUpperCase() : null;
-
-      if (
-        piece &&
-        ((myColor === "W" && isWhitePiece) ||
-          (myColor === "B" && !isWhitePiece))
-      ) {
-        setSelectedPos([r, c]);
-        return;
-      }
-
-      if (selectedPos) {
-        const [fr, fc] = selectedPos;
-        if (
-          isLegalMove(
-            board,
-            fr,
-            fc,
-            r,
-            c,
-            enPassantTarget,
-            isWhiteTurn,
-            castlingRights,
-          )
-        ) {
-          const newBoard = board.map((row) => [...row]);
-          let capturedPiece = board[r][c];
-          const p = board[fr][fc] as string;
-          newBoard[r][c] = p;
-          newBoard[fr][fc] = null;
-
-          let newEpTarget: [number, number] | null = null;
-          const newCastlingRights = { ...castlingRights };
-
-          // En Passant
-          if (
-            p.toLowerCase() === "p" &&
-            Math.abs(c - fc) === 1 &&
-            !board[r][c]
-          ) {
-            newBoard[fr][c] = null;
-            capturedPiece = isWhiteTurn ? "p" : "P";
-          }
-          if (p.toLowerCase() === "p" && Math.abs(r - fr) === 2) {
-            newEpTarget = [(r + fr) / 2, fc];
-          }
-
-          const newCaptures = { w: [...captures.w], b: [...captures.b] };
-          if (capturedPiece) {
-            if (isWhiteTurn) newCaptures.w.push(capturedPiece);
-            else newCaptures.b.push(capturedPiece);
-          }
-
-          // Castling logic (Di chuyển xe)
-          if (p.toLowerCase() === "k" && Math.abs(c - fc) === 2) {
-            if (c === 6) {
-              newBoard[r][5] = newBoard[r][7];
-              newBoard[r][7] = null;
-            } else if (c === 2) {
-              newBoard[r][3] = newBoard[r][0];
-              newBoard[r][0] = null;
-            }
-          }
-
-          // Cập nhật Castling Rights
-          if (p === "K") {
-            newCastlingRights.wK = false;
-            newCastlingRights.wQ = false;
-          }
-          if (p === "k") {
-            newCastlingRights.bK = false;
-            newCastlingRights.bQ = false;
-          }
-          if (p === "R" && fr === 7 && fc === 0) newCastlingRights.wQ = false;
-          if (p === "R" && fr === 7 && fc === 7) newCastlingRights.wK = false;
-          if (p === "r" && fr === 0 && fc === 0) newCastlingRights.bQ = false;
-          if (p === "r" && fr === 0 && fc === 7) newCastlingRights.bK = false;
-
-          if (board[r][c] === "R" && r === 7 && c === 0)
-            newCastlingRights.wQ = false;
-          if (board[r][c] === "R" && r === 7 && c === 7)
-            newCastlingRights.wK = false;
-          if (board[r][c] === "r" && r === 0 && c === 0)
-            newCastlingRights.bQ = false;
-          if (board[r][c] === "r" && r === 0 && c === 7)
-            newCastlingRights.bK = false;
-
-          // Thay vì tự động phong cấp thành Hậu, mở popup chọn
-          if ((p === "P" && r === 0) || (p === "p" && r === 7)) {
-            setPromotionPending({
-              r,
-              c,
-              fr,
-              fc,
-              board: newBoard,
-              epTarget: newEpTarget,
-              castlingRights: newCastlingRights,
-              captures: newCaptures,
-              color: isWhiteTurn ? "W" : "B",
-            });
-            return;
-          }
-
-          executeMove(
-            newBoard,
-            newEpTarget,
-            newCastlingRights,
-            newCaptures,
-            fr,
-            fc,
-            r,
-            c,
-          );
-        } else {
-          setSelectedPos(null);
-        }
-      }
-    },
-    [
-      board,
-      isWhiteTurn,
-      winner,
-      channel,
-      player1Name,
-      player2Name,
-      player3Name,
-      player4Name,
-      gameMode,
-      turnIndex,
-      playerName,
-      selectedPos,
-      isSpectator,
-      castlingRights,
-      enPassantTarget,
-      captures,
-      gameStarted,
-      promotionPending,
-      executeMove,
-    ],
-  );
-
-  const resetGame = () => {
-    setBoard(INITIAL_BOARD);
-    setIsWhiteTurn(true);
-    setWinner(null);
-    setCastlingRights({ wK: true, wQ: true, bK: true, bQ: true });
-    setEnPassantTarget(null);
-    setCaptures({ w: [], b: [] });
-    setSelectedPos(null);
-    setLastMove(null);
-    setHistory([]);
-    setUndoRequestedBy(null);
-    setPromotionPending(null);
-    setGameStarted(false);
-    setReadyPlayers([]);
-    setPlayer1Time(initialTime);
-    setPlayer2Time(initialTime);
-    if (channel) {
-      channel.send({ type: "broadcast", event: "reset-game" });
-    }
-  };
-
-  const handleKickPlayer = (targetName: string) => {
-    if (playerName !== hostName || !channel) return;
-    if (targetName === player2Name && gameStarted) return;
-
-    channel.send({
-      type: "broadcast",
-      event: "kick-player",
-      payload: { playerName: targetName },
-    });
-
-    if (targetName === player2Name) {
-      setPlayer2Name(null);
-      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
-      if (gameStarted) {
-        resetGame();
-      }
-      setTimeout(() => {
-        channel.send({
-          type: "broadcast",
-          event: "room-sync",
-          payload: {
-            ...stateRef.current,
-            player2Name: null,
-            readyPlayers: stateRef.current.readyPlayers.filter(
-              (p) => p !== targetName,
-            ),
-          },
-        });
-      }, 50);
-    } else if (targetName === player3Name) {
-      setPlayer3Name(null);
-      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
-      if (gameStarted) resetGame();
-      setTimeout(() => {
-        channel.send({
-          type: "broadcast",
-          event: "room-sync",
-          payload: {
-            ...stateRef.current,
-            player3Name: null,
-            readyPlayers: stateRef.current.readyPlayers.filter(
-              (p) => p !== targetName,
-            ),
-          },
-        });
-      }, 50);
-    } else if (targetName === player4Name) {
-      setPlayer4Name(null);
-      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
-      if (gameStarted) resetGame();
-      setTimeout(() => {
-        channel.send({
-          type: "broadcast",
-          event: "room-sync",
-          payload: {
-            ...stateRef.current,
-            player4Name: null,
-            readyPlayers: stateRef.current.readyPlayers.filter(
-              (p) => p !== targetName,
-            ),
-          },
-        });
-      }, 50);
-    } else if (spectators.includes(targetName)) {
-      const newSpecs = spectators.filter((s) => s !== targetName);
-      setSpectators(newSpecs);
-      channel.send({
-        type: "broadcast",
-        event: "room-sync",
-        payload: { ...stateRef.current, spectators: newSpecs },
-      });
-    }
-  };
-
-  const handleSlotClick = (targetSlot: 1 | 2 | 3 | 4) => {
-    if (!channel || gameStarted) return;
-
-    if (targetSlot === 1 && player1Name) return;
-    if (targetSlot === 2 && player2Name) return;
-    if (targetSlot === 3 && player3Name) return;
-    if (targetSlot === 4 && player4Name) return;
-
-    if (playerName === hostName) {
-      const state = stateRef.current;
-      const newSpecs = state.spectators.filter((s) => s !== playerName);
-      const newReadyPlayers = state.readyPlayers.filter(
-        (p) => p !== playerName,
-      );
-
-      let newP1 = state.player1Name === playerName ? null : state.player1Name;
-      let newP2 = state.player2Name === playerName ? null : state.player2Name;
-      let newP3 = state.player3Name === playerName ? null : state.player3Name;
-      let newP4 = state.player4Name === playerName ? null : state.player4Name;
-
-      let success = false;
-
-      if (targetSlot === 1 && !newP1) {
-        newP1 = playerName;
-        success = true;
-      } else if (targetSlot === 2 && !newP2) {
-        newP2 = playerName;
-        success = true;
-      } else if (targetSlot === 3 && state.gameMode === "2v2" && !newP3) {
-        newP3 = playerName;
-        success = true;
-      } else if (targetSlot === 4 && state.gameMode === "2v2" && !newP4) {
-        newP4 = playerName;
-        success = true;
-      }
-
-      if (success) {
-        setPlayer1Name(newP1);
-        setPlayer2Name(newP2);
-        setPlayer3Name(newP3);
-        setPlayer4Name(newP4);
-        setSpectators(newSpecs);
-        setReadyPlayers(newReadyPlayers);
-
-        stateRef.current.player1Name = newP1;
-        stateRef.current.player2Name = newP2;
-        stateRef.current.player3Name = newP3;
-        stateRef.current.player4Name = newP4;
-        stateRef.current.spectators = newSpecs;
-        stateRef.current.readyPlayers = newReadyPlayers;
-
-        channel.send({
-          type: "broadcast",
-          event: "room-sync",
-          payload: { ...stateRef.current },
-        });
-      }
-    } else {
-      channel.send({
-        type: "broadcast",
-        event: "request-role-change",
-        payload: { playerName, newRole: "player", targetSlot },
-      });
-    }
-
-    setRequestedRole("player");
-    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
-  };
-
-  const handleBecomeSpectator = () => {
-    if (!channel || (gameStarted && !winner)) return;
-
-    if (playerName === hostName) {
-      const state = stateRef.current;
-      const newP1 = state.player1Name === playerName ? null : state.player1Name;
-      const newP2 = state.player2Name === playerName ? null : state.player2Name;
-      const newP3 = state.player3Name === playerName ? null : state.player3Name;
-      const newP4 = state.player4Name === playerName ? null : state.player4Name;
-      const newSpecs = [...state.spectators];
-      if (!newSpecs.includes(playerName)) {
-        newSpecs.push(playerName);
-      }
-      const newReadyPlayers = state.readyPlayers.filter(
-        (p) => p !== playerName,
-      );
-
-      setPlayer1Name(newP1);
-      setPlayer2Name(newP2);
-      setPlayer3Name(newP3);
-      setPlayer4Name(newP4);
-      setSpectators(newSpecs);
-      setReadyPlayers(newReadyPlayers);
-
-      stateRef.current.player1Name = newP1;
-      stateRef.current.player2Name = newP2;
-      stateRef.current.player3Name = newP3;
-      stateRef.current.player4Name = newP4;
-      stateRef.current.spectators = newSpecs;
-      stateRef.current.readyPlayers = newReadyPlayers;
-
-      channel.send({
-        type: "broadcast",
-        event: "room-sync",
-        payload: { ...stateRef.current },
-      });
-    } else {
-      channel.send({
-        type: "broadcast",
-        event: "request-role-change",
-        payload: { playerName, newRole: "spectator" },
-      });
-    }
-
-    setRequestedRole("spectator");
-    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "spectator");
-  };
-
-  const handleRequestUndo = () => {
-    if (channel && !isSpectator) {
-      setUndoRequestedBy(playerName);
-      channel.send({
-        type: "broadcast",
-        event: "request-undo",
-        payload: { playerName },
-      });
-    }
-  };
-
-  const handleAcceptUndo = () => {
-    const state = stateRef.current;
-    if (state.history.length > 0 && channel) {
-      const prevState = state.history[state.history.length - 1];
-      const newHistory = state.history.slice(0, -1);
-
-      setBoard(prevState.board);
-      setIsWhiteTurn(prevState.isWhiteTurn);
-      if (prevState.turnIndex !== undefined) setTurnIndex(prevState.turnIndex);
-      setWinner(prevState.winner);
-      setCastlingRights(prevState.castlingRights);
-      setEnPassantTarget(prevState.enPassantTarget);
-      setCaptures(prevState.captures);
-      setLastMove(prevState.lastMove);
-      setPlayer1Time(prevState.player1Time);
-      setPlayer2Time(prevState.player2Time);
-      setHistory(newHistory);
-      setUndoRequestedBy(null);
-
-      channel.send({
-        type: "broadcast",
-        event: "sync-move",
-        payload: {
-          board: prevState.board,
-          isWhiteTurn: prevState.isWhiteTurn,
-          turnIndex: prevState.turnIndex,
-          winner: prevState.winner,
-          castlingRights: prevState.castlingRights,
-          enPassantTarget: prevState.enPassantTarget,
-          captures: prevState.captures,
-          lastMove: prevState.lastMove,
-          player1Time: prevState.player1Time,
-          player2Time: prevState.player2Time,
-          history: newHistory,
-        },
-      });
-    }
-  };
-
-  const handleRejectUndo = () => {
-    setUndoRequestedBy(null);
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "reject-undo",
-        payload: {},
-      });
-    }
-  };
-
-  const handleStartClick = () => {
-    if (!playerName || readyPlayers.includes(playerName)) return;
-    setReadyPlayers((prev) => [...prev, playerName]);
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "player-ready",
-        payload: { playerName },
-      });
-    }
-  };
-
-  const handleResign = () => {
-    if (winner || !gameStarted || isSpectator) return;
-    const myColor =
-      isPlayer1 || playerName === player3Name
-        ? "W"
-        : isPlayer2 || playerName === player4Name
-          ? "B"
-          : null;
-    if (!myColor) return;
-
-    const newWinner = myColor === "W" ? "B" : "W";
-    setWinner(newWinner);
-
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "sync-move",
-        payload: {
-          ...stateRef.current,
-          winner: newWinner,
-        },
-      });
-    }
-  };
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, "0");
-    const s = (seconds % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
-  };
-
-  const handleChangeGameMode = (mode: "1v1" | "2v2") => {
-    if (playerName !== hostName || gameStarted) return;
-
-    const newSpecs = [...spectators];
-    let newP3 = player3Name;
-    let newP4 = player4Name;
-    let newReadyPlayers = [...readyPlayers];
-
-    if (mode === "1v1") {
-      if (newP3) {
-        newSpecs.push(newP3);
-        newReadyPlayers = newReadyPlayers.filter((p) => p !== newP3);
-        newP3 = null;
-      }
-      if (newP4) {
-        newSpecs.push(newP4);
-        newReadyPlayers = newReadyPlayers.filter((p) => p !== newP4);
-        newP4 = null;
-      }
-    }
-
-    setGameMode(mode);
-    setPlayer3Name(newP3);
-    setPlayer4Name(newP4);
-    setSpectators(newSpecs);
-    setReadyPlayers(newReadyPlayers);
-
-    stateRef.current.gameMode = mode;
-    stateRef.current.player3Name = newP3;
-    stateRef.current.player4Name = newP4;
-    stateRef.current.spectators = newSpecs;
-    stateRef.current.readyPlayers = newReadyPlayers;
-
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "room-sync",
-        payload: { ...stateRef.current },
-      });
-    }
-  };
-
-  const wKPos = findKing(board, true);
-  const bKPos = findKing(board, false);
-  const isWhiteInCheck = wKPos
-    ? isAttacked(board, wKPos[0], wKPos[1], false, enPassantTarget)
-    : false;
-  const isBlackInCheck = bKPos
-    ? isAttacked(board, bKPos[0], bKPos[1], true, enPassantTarget)
-    : false;
-
-  if (isCheckingStorage) {
-    return (
-      <div className="flex min-h-screen items-center justify-center font-medium text-zinc-500">
-        Đang tải...
-      </div>
-    );
-  }
-
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12">
-      <style>{`
-        @keyframes slidePiece {
-          0% { transform: translate(var(--start-x), var(--start-y)); }
-          100% { transform: translate(0px, 0px); }
-        }
-        .animating-piece {
-          animation: slidePiece 0.25s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-        }
-      `}</style>
-      {undoRequestedBy && undoRequestedBy !== playerName && !isSpectator && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4 border border-zinc-200">
-            <p className="mb-6 text-lg font-medium text-zinc-800">
-              <span className="font-bold text-purple-600">
-                {undoRequestedBy}
-              </span>{" "}
-              muốn xin đi lại 1 nước.
-            </p>
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={handleAcceptUndo}
-                className="px-6 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm cursor-pointer"
-              >
-                Đồng ý
-              </button>
-              <button
-                onClick={handleRejectUndo}
-                className="px-6 py-2.5 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors shadow-sm cursor-pointer"
-              >
-                Từ chối
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {undoRequestedBy === playerName && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg font-medium animate-pulse">
-          Đang chờ đối thủ phản hồi yêu cầu đi lại...
-        </div>
-      )}
-
+    <main
+      className={`flex h-[100dvh] flex-col items-center justify-center p-4 lg:p-6 transition-colors duration-300 overflow-hidden ${isDarkMode ? "bg-slate-900" : "bg-zinc-50"}`}
+    >
+      {/* Floating Buttons: Settings & Theme */}
       {hasInitialized && (
-        <div className="fixed left-4 top-4 z-50">
-          <button
-            onClick={() => setShowNameModal(true)}
-            className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-zinc-900 text-xl font-bold text-white shadow-lg transition-transform hover:scale-105 hover:bg-zinc-800"
-            title="Chỉnh sửa tên"
-          >
-            {playerName ? playerName.charAt(0).toUpperCase() : "👤"}
-          </button>
+        <div className="fixed right-4 top-4 z-50 flex gap-3">
+          <div className="relative group flex justify-center">
+            <button
+              onClick={() => setShowNameModal(true)}
+              className={`flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full shadow-lg transition-all hover:scale-105 ${isDarkMode ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200"}`}
+            >
+              <div className="w-5 h-5 flex items-center justify-center font-bold">
+                {playerName ? playerName.charAt(0).toUpperCase() : "U"}
+              </div>
+            </button>
+            <div className="absolute top-full mt-2 right-0 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+              Đổi tên người chơi
+            </div>
+          </div>
+          <div className="relative group flex justify-center">
+            <button
+              onClick={toggleTheme}
+              className={`flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full shadow-lg transition-all hover:scale-105 ${
+                isDarkMode
+                  ? "bg-slate-800 text-yellow-400 hover:bg-slate-700"
+                  : "bg-white text-slate-800 hover:bg-zinc-100 border border-zinc-200"
+              }`}
+            >
+              {isDarkMode ? "☀️" : "🌙"}
+            </button>
+            <div className="absolute top-full mt-2 right-0 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+              {isDarkMode ? "Giao diện sáng" : "Giao diện tối"}
+            </div>
+          </div>
         </div>
       )}
 
-      <Modal
+      <JoinRoomModal
         isOpen={showNameModal}
-        title={
-          hasInitialized
-            ? "Chỉnh sửa tên"
-            : roomParam
-              ? "Tham gia phòng chơi"
-              : "Tạo phòng chơi mới"
-        }
-      >
-        <form onSubmit={handleJoinRoom} className="flex flex-col space-y-4">
-          <p className="text-center text-sm text-zinc-500">
-            {hasInitialized
-              ? "Cập nhật tên hiển thị của bạn."
-              : `Vui lòng nhập tên của bạn để ${roomParam ? "bắt đầu trận cờ vua" : "tạo phòng"}.`}
-          </p>
-          <input
-            type="text"
-            value={inputName}
-            onChange={(e) => setInputName(e.target.value)}
-            placeholder="Nhập tên..."
-            className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            required
-            autoFocus
-          />
+        gameName="Cờ Vua"
+        initialName={playerName || ""}
+        hasRoomId={!!roomId}
+        requestedRole={requestedRole}
+        onRoleChange={setRequestedRole}
+        onSubmit={handleJoinRoom}
+      />
 
-          {!hasInitialized && roomParam && (
-            <div className="flex flex-col space-y-2">
-              <label className="text-sm font-medium text-zinc-700">
-                Bạn muốn tham gia với tư cách:
-              </label>
-              {!hasInitialized && !roomParam && (
-                <div className="flex flex-col space-y-2 mb-4">
-                  <label className="text-sm font-medium text-zinc-700">
-                    Chế độ chơi:
-                  </label>
-                  <div className="flex flex-col gap-2 sm:gap-4">
-                    <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
-                      <input
-                        type="radio"
-                        name="gameMode"
-                        value="1v1"
-                        checked={gameMode === "1v1"}
-                        onChange={() => setGameMode("1v1")}
-                        className="accent-zinc-900"
-                      />
-                      <span>1 vs 1</span>
-                    </label>
-                    <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
-                      <input
-                        type="radio"
-                        name="gameMode"
-                        value="2v2"
-                        checked={gameMode === "2v2"}
-                        onChange={() => setGameMode("2v2")}
-                        className="accent-zinc-900"
-                      />
-                      <span>2 vs 2 (Đồng đội)</span>
-                    </label>
+      <div className="grid w-full h-full max-h-full max-w-[1600px] flex-1 grid-cols-1 lg:grid-cols-[380px_1fr] gap-4 lg:gap-8 overflow-hidden pt-14 lg:pt-0">
+        <div className="w-full h-full overflow-hidden">
+          <ChessSidebar isDarkMode={isDarkMode} />
+        </div>
+        <div className="flex items-center justify-center w-full h-full overflow-hidden">
+          <div className="flex flex-col items-center justify-center relative w-full h-full max-w-[800px]">
+            {/* Player 2 (Top) */}
+            <div className={`flex w-full justify-between items-end mb-4 transition-opacity ${!player2Name ? "opacity-50" : "opacity-100"}`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-xl font-bold shadow-md ${isDarkMode ? "bg-slate-800 text-white" : "bg-zinc-800 text-white"}`}>
+                  {player2Name ? player2Name.charAt(0).toUpperCase() : "?"}
+                </div>
+                <div className="flex flex-col">
+                  <span className={`font-bold text-lg ${isDarkMode ? "text-white" : "text-zinc-900"}`}>
+                    {gameMode === "2v2" ? `Đội Đen (${player2Name || "..."} & ${player4Name || "..."})` : player2Name || "Đang chờ..."}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm opacity-60 ${isDarkMode ? "text-slate-300" : "text-zinc-600"}`}>Đen</span>
+                    {captures.b.length > 0 && (
+                      <div className="flex items-center gap-0.5 ml-2">
+                        {captures.b.map((piece, idx) => (
+                          <img key={idx} src={PIECE_IMAGES[piece]} alt={piece} className="w-4 h-4 opacity-80" />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
-              <div className="flex gap-4">
-                <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
-                  <input
-                    type="radio"
-                    name="role"
-                    value="player"
-                    checked={requestedRole === "player"}
-                    onChange={(e) =>
-                      setRequestedRole(e.target.value as "player" | "spectator")
-                    }
-                    className="accent-zinc-900"
-                  />
-                  <span>Người chơi</span>
-                </label>
-                <label className="flex cursor-pointer items-center space-x-2 text-sm text-zinc-700">
-                  <input
-                    type="radio"
-                    name="role"
-                    value="spectator"
-                    checked={requestedRole === "spectator"}
-                    onChange={(e) =>
-                      setRequestedRole(e.target.value as "player" | "spectator")
-                    }
-                    className="accent-zinc-900"
-                  />
-                  <span>Người xem</span>
-                </label>
+              </div>
+              <div className={`text-3xl font-mono font-medium tracking-wider px-4 py-2 rounded-lg border ${isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-zinc-100 border-zinc-200 text-zinc-900"}`}>
+                {formatTime(player2Time)}
               </div>
             </div>
-          )}
 
-          <button
-            type="submit"
-            className="w-full cursor-pointer rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
-          >
-            {hasInitialized
-              ? "Cập nhật"
-              : roomParam
-                ? "Vào phòng"
-                : "Tạo phòng & Lấy link"}
-          </button>
-        </form>
-      </Modal>
+            {/* Board */}
+            <ChessBoard
+              isDarkMode={isDarkMode}
+              isDisabled={!gameStarted || showNameModal}
+            />
 
-      <div className="grid w-full max-w-full flex-1 grid-cols-1 place-items-center gap-8 px-2 md:px-8 xl:grid-cols-[300px_auto_300px]">
-        <div className="mb-8 flex w-full max-w-md flex-col items-center text-center xl:mb-0 xl:items-start xl:justify-self-start xl:pl-8 xl:text-left">
-          <h1 className="mb-2 text-3xl font-light tracking-tight text-zinc-900">
-            Cờ Vua (Chess)
-          </h1>
+            {/* Player 1 (Bottom) */}
+            <div className={`flex w-full justify-between items-start mt-4 transition-opacity ${!player1Name ? "opacity-50" : "opacity-100"}`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 border-2 rounded-lg flex items-center justify-center text-xl font-bold shadow-sm ${isDarkMode ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-zinc-200 text-zinc-800"}`}>
+                  {player1Name ? player1Name.charAt(0).toUpperCase() : "?"}
+                </div>
+                <div className="flex flex-col">
+                  <span className={`font-bold text-lg ${isDarkMode ? "text-white" : "text-zinc-900"}`}>
+                    {gameMode === "2v2" ? `Đội Trắng (${player1Name || "..."} & ${player3Name || "..."})` : player1Name || "Đang chờ..."}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm opacity-60 ${isDarkMode ? "text-slate-300" : "text-zinc-600"}`}>Trắng</span>
+                    {captures.w.length > 0 && (
+                      <div className="flex items-center gap-0.5 ml-2">
+                        {captures.w.map((piece, idx) => (
+                          <img key={idx} src={PIECE_IMAGES[piece]} alt={piece} className="w-4 h-4 opacity-80" />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className={`text-3xl font-mono font-medium tracking-wider px-4 py-2 rounded-lg border ${isDarkMode ? "bg-slate-800 border-slate-700 text-white" : "bg-zinc-100 border-zinc-200 text-zinc-900"}`}>
+                {formatTime(player1Time)}
+              </div>
+            </div>
 
-          {!showNameModal && (
-            <>
-              {player2Name ? (
-                <div className="flex flex-col items-center gap-2 text-sm text-zinc-500 xl:items-start justify-center">
-                  <span className="font-semibold text-zinc-700">Trận đấu:</span>
-                  <div className="flex flex-col gap-1 items-center xl:items-start">
-                    <span className="font-semibold text-zinc-800">
-                      {gameMode === "2v2"
-                        ? `Đội Trắng: ${player1Name || "..."} & ${player3Name || "..."}`
-                        : `Trắng: ${player1Name || "..."}`}
-                    </span>
-                    <span className="font-bold text-zinc-400">VS</span>
-                    <span className="font-semibold text-zinc-800">
-                      {gameMode === "2v2"
-                        ? `Đội Đen: ${player2Name || "..."} & ${player4Name || "..."}`
-                        : `Đen: ${player2Name || "..."}`}
+            {/* Status Text & Review Controls */}
+            <div className="text-center mt-6 flex flex-col justify-center">
+              {isInReview ? (
+                <div className={`flex items-center justify-center gap-4 px-4 py-2 rounded-full shadow-sm border ${isDarkMode ? "bg-slate-800 border-slate-700" : "bg-zinc-100 border-zinc-200"}`}>
+                  <button
+                    onClick={() =>
+                      setReviewIndex((prev) =>
+                        prev !== null ? Math.max(0, prev - 1) : 0
+                      )
+                    }
+                    disabled={reviewIndex === 0}
+                    className={`p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm ${isDarkMode ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-white hover:bg-zinc-50 text-zinc-700"}`}
+                    title="Trước"
+                  >
+                    <FaChevronLeft className="w-4 h-4" />
+                  </button>
+                  <div className="flex flex-col items-center">
+                    <span className="font-bold text-indigo-500 text-xs uppercase tracking-wider">Đang xem lại</span>
+                    <span className={`font-medium text-sm ${isDarkMode ? "text-slate-200" : "text-zinc-700"}`}>
+                      Nước đi {reviewIndex} / {history.length}
                     </span>
                   </div>
-                  {playerName === hostName && !gameStarted && (
-                    <button
-                      onClick={() => {
-                        if (player2Name) handleKickPlayer(player2Name);
-                        if (player3Name) handleKickPlayer(player3Name);
-                        if (player4Name) handleKickPlayer(player4Name);
-                      }}
-                      className="mt-2 rounded bg-red-100 px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
-                    >
-                      Kick All (Trừ Host)
-                    </button>
-                  )}
+                  <button
+                    onClick={() =>
+                      setReviewIndex((prev) =>
+                        prev !== null
+                          ? Math.min(history.length, prev + 1)
+                          : 0
+                      )
+                    }
+                    disabled={(reviewIndex ?? 0) >= history.length}
+                    className={`p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm ${isDarkMode ? "bg-slate-700 hover:bg-slate-600 text-white" : "bg-white hover:bg-zinc-50 text-zinc-700"}`}
+                    title="Sau"
+                  >
+                    <FaChevronRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setReviewIndex(null)}
+                    className="ml-2 p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors shadow-sm"
+                    title="Thoát xem lại"
+                  >
+                    <FaTimes className="w-4 h-4" />
+                  </button>
                 </div>
               ) : (
-                <div className="mt-4 flex w-full flex-col items-center xl:items-start">
-                  <p className="mb-3 text-sm text-zinc-500">
-                    Đang chờ đối thủ tham gia...
-                  </p>
-                  <div className="flex w-full items-center space-x-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm">
-                    <span className="flex-1 select-all truncate text-left text-xs text-zinc-500">
-                      {typeof window !== "undefined"
-                        ? window.location.href
-                        : ""}
-                    </span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(window.location.href);
-                        setLinkCopied(true);
-                        setTimeout(() => setLinkCopied(false), 2000);
-                      }}
-                      className="cursor-pointer whitespace-nowrap rounded-md bg-black px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-800"
-                    >
-                      {linkCopied ? "Đã copy!" : "Copy Link"}
-                    </button>
-                  </div>
-                  {isSpectator && !gameStarted && (
-                    <div className="mt-4 w-full rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700 text-center">
-                      Vui lòng chọn ghế Người chơi ở khung bên phải để tham gia.
-                    </div>
-                  )}
-                </div>
+                <p className={`text-lg font-medium ${isDarkMode ? "text-white" : "text-zinc-800"}`}>
+                  {winner === "Draw"
+                    ? "🤝 Hòa cờ!"
+                    : winner
+                    ? `🎉 Chiến thắng: ${
+                        winner === "W"
+                          ? gameMode === "2v2"
+                            ? "Đội Trắng"
+                            : player1Name
+                          : gameMode === "2v2"
+                          ? "Đội Đen"
+                          : player2Name
+                      }!`
+                    : gameStarted ? `Lượt đi: ${
+                        gameMode === "2v2"
+                          ? turnIndex === 0
+                            ? player1Name
+                            : turnIndex === 1
+                            ? player2Name
+                            : turnIndex === 2
+                            ? player3Name
+                            : player4Name
+                          : displayState.isWhiteTurn
+                          ? "Trắng"
+                          : "Đen"
+                      }` : ""}
+                </p>
               )}
-
-              <div className="mt-6 w-full">
-                {gameStarted ? (
-                  <div className="w-full space-y-4 text-left xl:text-left text-center">
-                    <div
-                      className={`rounded-lg border-2 p-3 transition-colors ${displayState.isWhiteTurn && !displayState.winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"} ${isWhiteInCheck && !displayState.winner ? "border-red-500 bg-red-50 ring-1 ring-red-500" : ""}`}
-                    >
-                      <div className="flex justify-between items-baseline">
-                        <div className="flex flex-col items-start">
-                          <span className="font-semibold text-zinc-800">
-                            {gameMode === "2v2"
-                              ? `Đội Trắng (${player1Name} & ${player3Name})`
-                              : `${player1Name} (Trắng)`}
-                          </span>
-                          {isWhiteInCheck && !displayState.winner && (
-                            <span className="text-xs font-bold text-red-600 animate-bounce mt-1">
-                              ⚠️ CHIẾU TƯỚNG!
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
-                          {formatTime(player1Time)}
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      className={`rounded-lg border-2 p-3 transition-colors ${!displayState.isWhiteTurn && !displayState.winner ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white"} ${isBlackInCheck && !displayState.winner ? "border-red-500 bg-red-50 ring-1 ring-red-500" : ""}`}
-                    >
-                      <div className="flex justify-between items-baseline">
-                        <div className="flex flex-col items-start">
-                          <span className="font-semibold text-zinc-800">
-                            {gameMode === "2v2"
-                              ? `Đội Đen (${player2Name} & ${player4Name})`
-                              : `${player2Name} (Đen)`}
-                          </span>
-                          {isBlackInCheck && !displayState.winner && (
-                            <span className="text-xs font-bold text-red-600 animate-bounce mt-1">
-                              ⚠️ CHIẾU TƯỚNG!
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-2xl font-mono font-medium tracking-wider text-zinc-800">
-                          {formatTime(player2Time)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="pt-2 text-center xl:text-left">
-                      {isInReview ? (
-                        <div className="p-2 bg-indigo-50 border border-indigo-200 rounded-lg">
-                          <p className="text-sm font-bold text-indigo-700 text-center">
-                            Đang xem lại ván đấu
-                          </p>
-                          <p className="text-sm font-medium text-zinc-800 text-center">
-                            Lượt đi của:{" "}
-                            {displayState.isWhiteTurn ? "Trắng" : "Đen"}
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-sm font-medium text-zinc-800">
-                          {winner === "Draw"
-                            ? "🤝 Hòa cờ!"
-                            : winner
-                              ? `🎉 Chiến thắng: ${winner === "W" ? (gameMode === "2v2" ? "Đội Trắng" : player1Name) : gameMode === "2v2" ? "Đội Đen" : player2Name}!`
-                              : `Lượt đi: ${
-                                  gameMode === "2v2"
-                                    ? turnIndex === 0
-                                      ? player1Name
-                                      : turnIndex === 1
-                                        ? player2Name
-                                        : turnIndex === 2
-                                          ? player3Name
-                                          : player4Name
-                                    : isWhiteTurn
-                                      ? "Trắng"
-                                      : "Đen"
-                                }`}
-                        </p>
-                      )}
-                    </div>
-                    {!isInReview && gameStarted && !winner && !isSpectator && (
-                      <button
-                        onClick={handleResign}
-                        className="mt-2 w-full cursor-pointer rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100"
-                      >
-                        Bỏ cuộc
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  !isSpectator && (
-                    <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm">
-                      <h3 className="text-base font-semibold text-zinc-800">
-                        Trận đấu sắp bắt đầu!
-                      </h3>
-                      <p className="text-sm text-zinc-500">
-                        {readyPlayers.length}/{gameMode === "2v2" ? 4 : 2} người
-                        chơi đã sẵn sàng.
-                      </p>
-
-                      {playerName === hostName && (
-                        <div className="w-full mt-2 mb-2 p-3 bg-zinc-50 rounded-lg border border-zinc-200 text-left">
-                          <label className="block text-sm font-semibold text-zinc-700 mb-2">
-                            Chế độ chơi:
-                          </label>
-                          <div className="flex flex-col gap-2 sm:gap-4 mb-4 border-b pb-4">
-                            <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="inRoomGameMode"
-                                checked={gameMode === "1v1"}
-                                onChange={() => handleChangeGameMode("1v1")}
-                                className="accent-zinc-900"
-                              />
-                              1 vs 1
-                            </label>
-                            <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="inRoomGameMode"
-                                checked={gameMode === "2v2"}
-                                onChange={() => handleChangeGameMode("2v2")}
-                                className="accent-zinc-900"
-                              />
-                              2 vs 2 (Đồng đội)
-                            </label>
-                          </div>
-                          <label className="block text-sm font-semibold text-zinc-700 mb-2">
-                            Thời gian mỗi bên:
-                          </label>
-                          <div className="flex flex-col gap-2">
-                            <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="timeOption"
-                                checked={initialTime === 600}
-                                onChange={() => handleTimeChange(600)}
-                                className="accent-zinc-900"
-                              />
-                              10 phút
-                            </label>
-                            <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="timeOption"
-                                checked={initialTime === 300}
-                                onChange={() => handleTimeChange(300)}
-                                className="accent-zinc-900"
-                              />
-                              5 phút
-                            </label>
-                            <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="timeOption"
-                                checked={
-                                  initialTime !== 600 && initialTime !== 300
-                                }
-                                onChange={() =>
-                                  handleTimeChange(customTimeMinutes * 60)
-                                }
-                                className="accent-zinc-900"
-                              />
-                              Tùy chọn (phút):
-                              <input
-                                type="number"
-                                min="1"
-                                max="120"
-                                value={
-                                  initialTime !== 600 && initialTime !== 300
-                                    ? Math.round(initialTime / 60)
-                                    : customTimeMinutes
-                                }
-                                onChange={(e) => {
-                                  const val = parseInt(e.target.value) || 1;
-                                  setCustomTimeMinutes(val);
-                                  if (
-                                    initialTime !== 600 &&
-                                    initialTime !== 300
-                                  ) {
-                                    handleTimeChange(val * 60);
-                                  }
-                                }}
-                                className="w-16 px-2 py-1 text-sm border border-zinc-300 rounded focus:outline-none focus:ring-1 focus:ring-zinc-900"
-                                disabled={
-                                  initialTime === 600 || initialTime === 300
-                                }
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      )}
-                      {playerName !== hostName && (
-                        <p className="text-sm font-medium text-zinc-700">
-                          Thời gian: {Math.round(initialTime / 60)} phút
-                        </p>
-                      )}
-
-                      <button
-                        onClick={handleStartClick}
-                        disabled={readyPlayers.includes(playerName || "")}
-                        className="mt-2 w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
-                      >
-                        {readyPlayers.includes(playerName || "")
-                          ? "Đã sẵn sàng, chờ đối thủ..."
-                          : "Sẵn sàng bắt đầu"}
-                      </button>
-                    </div>
-                  )
-                )}
-              </div>
-            </>
-          )}
-
-          <div className="mt-10 flex w-full flex-wrap justify-center gap-4 xl:justify-start">
-            {isInReview ? (
-              <div className="flex items-center justify-center xl:justify-start gap-2 w-full bg-zinc-100 p-2 rounded-lg">
-                <button
-                  onClick={() =>
-                    setReviewIndex((prev) =>
-                      prev !== null ? Math.max(0, prev - 1) : 0,
-                    )
-                  }
-                  disabled={reviewIndex === 0}
-                  className="p-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="Trước"
-                >
-                  <FaChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="font-medium text-zinc-700 text-sm whitespace-nowrap">
-                  Nước đi {reviewIndex} / {fullHistory.length - 1}
-                </span>
-                <button
-                  onClick={() =>
-                    setReviewIndex((prev) =>
-                      prev !== null
-                        ? Math.min(fullHistory.length - 1, prev + 1)
-                        : 0,
-                    )
-                  }
-                  disabled={(reviewIndex ?? 0) >= fullHistory.length - 1}
-                  className="p-2 bg-zinc-200 hover:bg-zinc-300 text-zinc-700 rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="Sau"
-                >
-                  <FaChevronRight className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setReviewIndex(null)}
-                  className="ml-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-md transition-colors flex items-center gap-2"
-                >
-                  <FaTimes />
-                  Thoát
-                </button>
-              </div>
-            ) : (
-              <>
-                {gameStarted &&
-                  !winner &&
-                  !isSpectator &&
-                  history.length > 0 && (
-                    <button
-                      onClick={handleRequestUndo}
-                      disabled={!!undoRequestedBy}
-                      className="cursor-pointer rounded-full border border-purple-300 bg-purple-50 px-6 py-2 text-sm font-medium text-purple-700 shadow-sm transition-colors hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Xin đi lại
-                    </button>
-                  )}
-                {winner && playerName === hostName && history.length > 0 && (
-                  <button
-                    onClick={() => setReviewIndex(0)}
-                    className="cursor-pointer rounded-full bg-indigo-600 px-6 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-                  >
-                    Xem lại ván đấu
-                  </button>
-                )}
-                {playerName === hostName && (
-                  <button
-                    onClick={resetGame}
-                    disabled={!player2Name}
-                    className="cursor-pointer rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Chơi lại
-                  </button>
-                )}
-                <Link
-                  href="/"
-                  className="cursor-pointer rounded-full bg-zinc-900 px-6 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-                >
-                  Đổi trò chơi
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="flex w-full flex-col items-center pb-8">
-          <div
-            className={`transition-opacity ${!gameStarted || showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
-          >
-            <div className="relative pl-5 pb-5 sm:pl-6 sm:pb-6">
-              {/* Tọa độ hàng dọc (1-8) */}
-              <div className="absolute top-0 bottom-5 sm:bottom-6 left-0 flex w-5 sm:w-6 flex-col text-xs sm:text-sm font-bold text-zinc-500 select-none">
-                {(isPlayer2 || playerName === player4Name
-                  ? [1, 2, 3, 4, 5, 6, 7, 8]
-                  : [8, 7, 6, 5, 4, 3, 2, 1]
-                ).map((n) => (
-                  <div
-                    key={n}
-                    className="flex flex-1 items-center justify-center"
-                  >
-                    {n}
-                  </div>
-                ))}
-              </div>
-
-              {/* Tọa độ hàng ngang (A-H) */}
-              <div className="absolute bottom-0 left-5 sm:left-6 right-0 flex h-5 sm:h-6 text-xs sm:text-sm font-bold text-zinc-500 select-none">
-                {(isPlayer2 || playerName === player4Name
-                  ? ["H", "G", "F", "E", "D", "C", "B", "A"]
-                  : ["A", "B", "C", "D", "E", "F", "G", "H"]
-                ).map((l) => (
-                  <div
-                    key={l}
-                    className="flex flex-1 items-center justify-center"
-                  >
-                    {l}
-                  </div>
-                ))}
-              </div>
-
-              <div className="relative grid grid-cols-8 grid-rows-8 w-[88vw] md:w-[70vh] md:max-w-[720px] aspect-square border-4 border-[#8B5A2B] shadow-2xl">
-                {/* Promotion Modal Overlay */}
-                {promotionPending && (
-                  <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-                    <div className="bg-white p-4 sm:p-6 rounded-xl shadow-2xl flex gap-4">
-                      {["q", "r", "b", "n"].map((type) => {
-                        const piece =
-                          promotionPending.color === "W"
-                            ? type.toUpperCase()
-                            : type;
-                        return (
-                          <button
-                            key={type}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePromotionSelect(piece);
-                            }}
-                            className="w-14 h-14 sm:w-20 sm:h-20 hover:bg-blue-50 hover:scale-105 transition-all rounded-lg flex items-center justify-center border-2 border-transparent hover:border-blue-200 shadow-sm bg-zinc-50"
-                          >
-                            <img
-                              src={PIECE_IMAGES[piece]}
-                              alt={piece}
-                              className="w-10 h-10 sm:w-16 sm:h-16"
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                {(() => {
-                  const shouldFlip = isPlayer2 || playerName === player4Name;
-                  return (
-                    shouldFlip
-                      ? [...displayState.board].reverse()
-                      : displayState.board
-                  ).map((row, mappedR) => {
-                    const r = shouldFlip ? 7 - mappedR : mappedR;
-                    return (shouldFlip ? [...row].reverse() : row).map(
-                      (piece, mappedC) => {
-                        const c = shouldFlip ? 7 - mappedC : mappedC;
-
-                        const isLight = (r + c) % 2 === 0;
-                        const bgClass = isLight
-                          ? "bg-[#F0D9B5]"
-                          : "bg-[#B58863]";
-
-                        const isSelected =
-                          !isInReview &&
-                          selectedPos?.[0] === r &&
-                          selectedPos?.[1] === c;
-                        const isLastMove =
-                          (displayState.lastMove?.from[0] === r &&
-                            displayState.lastMove?.from[1] === c) ||
-                          (displayState.lastMove?.to[0] === r &&
-                            displayState.lastMove?.to[1] === c);
-                        const isValidTarget =
-                          selectedPos &&
-                          !piece &&
-                          isLegalMove(
-                            board,
-                            selectedPos[0],
-                            selectedPos[1],
-                            r,
-                            c,
-                            enPassantTarget,
-                            isWhiteTurn,
-                            castlingRights,
-                          );
-                        const canCapture =
-                          selectedPos &&
-                          piece &&
-                          isLegalMove(
-                            board,
-                            selectedPos[0],
-                            selectedPos[1],
-                            r,
-                            c,
-                            enPassantTarget,
-                            isWhiteTurn,
-                            castlingRights,
-                          );
-
-                        const isAnimatingThisPiece =
-                          animatingMove &&
-                          animatingMove.r === r &&
-                          animatingMove.c === c;
-                        let startX = 0,
-                          startY = 0;
-                        if (isAnimatingThisPiece) {
-                          const visualFromR = shouldFlip
-                            ? 7 - animatingMove.fr
-                            : animatingMove.fr;
-                          const visualFromC = shouldFlip
-                            ? 7 - animatingMove.fc
-                            : animatingMove.fc;
-                          const visualToR = shouldFlip
-                            ? 7 - animatingMove.r
-                            : animatingMove.r;
-                          const visualToC = shouldFlip
-                            ? 7 - animatingMove.c
-                            : animatingMove.c;
-                          startX = (visualFromC - visualToC) * 100;
-                          startY = (visualFromR - visualToR) * 100;
-                        }
-
-                        const animationStyle = isAnimatingThisPiece
-                          ? ({
-                              "--start-x": `${startX}%`,
-                              "--start-y": `${startY}%`,
-                            } as React.CSSProperties)
-                          : {};
-
-                        return (
-                          <div
-                            key={`${r}-${c}`}
-                            className={`relative w-full h-full flex items-center justify-center cursor-pointer ${bgClass} ${isAnimatingThisPiece ? "z-40" : ""}`}
-                            onClick={() => handleCellClick(r, c)}
-                          >
-                            {/* Highlight moves */}
-                            {isSelected && (
-                              <div className="absolute inset-0 bg-blue-400/50 z-10" />
-                            )}
-                            {isLastMove && !isSelected && (
-                              <div className="absolute inset-0 bg-yellow-400/40 z-10" />
-                            )}
-                            {isValidTarget && (
-                              <div className="w-[30%] h-[30%] bg-black/20 rounded-full z-20" />
-                            )}
-                            {canCapture && (
-                              <div className="absolute inset-0 border-[6px] border-black/20 rounded-full z-20 scale-90" />
-                            )}
-
-                            {/* Piece */}
-                            {piece && (
-                              <img
-                                src={PIECE_IMAGES[piece]}
-                                alt={piece}
-                                draggable={false}
-                                style={animationStyle}
-                                className={`relative z-30 w-[80%] h-[80%] select-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)] ${isAnimatingThisPiece ? "animating-piece" : ""}`}
-                              />
-                            )}
-                          </div>
-                        );
-                      },
-                    );
-                  });
-                })()}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Cột phải: Thông tin người xem và Tù binh */}
-        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8 flex flex-col">
-          {/* Khung người chơi */}
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
-            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
-                <span className="text-lg">🎮</span> Người chơi
-              </h3>
-              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
-                {gameMode === "1v1"
-                  ? [player1Name, player2Name].filter(Boolean).length + "/2"
-                  : [player1Name, player2Name, player3Name, player4Name].filter(
-                      Boolean,
-                    ).length + "/4"}
-              </span>
-            </div>
-
-            <div className="p-4 sm:p-6 flex flex-col gap-4">
-              {/* Team White */}
-              <div className="flex flex-col gap-2">
-                <h4 className="text-sm font-bold text-zinc-800">Đội Trắng</h4>
-                {/* Slot 1 */}
-                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
-                  {player1Name ? (
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-bold text-zinc-700">
-                        {player1Name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="text-sm font-medium text-zinc-800 truncate">
-                        {player1Name} {playerName === player1Name && "(Bạn)"}{" "}
-                        {hostName === player1Name && "👑"}
-                      </span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleSlotClick(1)}
-                      className="text-sm text-zinc-500 hover:text-zinc-800 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-zinc-400 w-full text-left transition-colors"
-                    >
-                      + Tham gia (Người chơi 1)
-                    </button>
-                  )}
-                </div>
-                {/* Slot 3 */}
-                {gameMode === "2v2" && (
-                  <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
-                    {player3Name ? (
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-bold text-zinc-700">
-                          {player3Name.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="text-sm font-medium text-zinc-800 truncate">
-                          {player3Name} {playerName === player3Name && "(Bạn)"}{" "}
-                          {hostName === player3Name && "👑"}
-                        </span>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleSlotClick(3)}
-                        className="text-sm text-zinc-500 hover:text-zinc-800 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-zinc-400 w-full text-left transition-colors"
-                      >
-                        + Tham gia (Người chơi 3)
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Team Black */}
-              <div className="flex flex-col gap-2 mt-2">
-                <h4 className="text-sm font-bold text-zinc-800">Đội Đen</h4>
-                {/* Slot 2 */}
-                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
-                  {player2Name ? (
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-bold text-white">
-                        {player2Name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="text-sm font-medium text-zinc-800 truncate">
-                        {player2Name} {playerName === player2Name && "(Bạn)"}{" "}
-                        {hostName === player2Name && "👑"}
-                      </span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleSlotClick(2)}
-                      className="text-sm text-zinc-500 hover:text-zinc-800 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-zinc-400 w-full text-left transition-colors"
-                    >
-                      + Tham gia (Người chơi 2)
-                    </button>
-                  )}
-                </div>
-                {/* Slot 4 */}
-                {gameMode === "2v2" && (
-                  <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
-                    {player4Name ? (
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-bold text-white">
-                          {player4Name.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="text-sm font-medium text-zinc-800 truncate">
-                          {player4Name} {playerName === player4Name && "(Bạn)"}{" "}
-                          {hostName === player4Name && "👑"}
-                        </span>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleSlotClick(4)}
-                        className="text-sm text-zinc-500 hover:text-zinc-800 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-zinc-400 w-full text-left transition-colors"
-                      >
-                        + Tham gia (Người chơi 4)
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {!isSpectator && !gameStarted && (
-                <button
-                  onClick={handleBecomeSpectator}
-                  className="mt-2 text-sm text-zinc-500 hover:text-zinc-700 underline text-center w-full"
-                >
-                  Rời ghế, trở thành khán giả
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
-            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
-                <span className="text-lg">👀</span> Người xem
-              </h3>
-              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
-                {spectators.length}/10
-              </span>
-            </div>
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1 custom-scrollbar">
-              {spectators.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 text-center">
-                  <span className="text-3xl mb-2 opacity-20">🪑</span>
-                  <p className="text-sm text-zinc-400 font-medium">
-                    Chưa có người xem
-                  </p>
-                </div>
-              ) : (
-                <ul className="space-y-2">
-                  {spectators.map((spec, idx) => (
-                    <li
-                      key={idx}
-                      className="group flex items-center justify-between space-x-3 rounded-xl border border-transparent p-2 transition-all hover:bg-zinc-50 hover:border-zinc-100"
-                    >
-                      <div className="flex items-center space-x-3 overflow-hidden">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-sm font-bold text-indigo-700 shadow-inner">
-                          {spec.charAt(0).toUpperCase()}
-                        </div>
-                        <span
-                          className="text-sm font-medium text-zinc-800 truncate"
-                          title={spec}
-                        >
-                          {spec}
-                        </span>
-                      </div>
-                      {playerName === hostName && (
-                        <button
-                          onClick={() => handleKickPlayer(spec)}
-                          className="shrink-0 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 opacity-100 xl:opacity-0 transition-all hover:bg-red-100 xl:group-hover:opacity-100 focus:opacity-100"
-                          title="Kích người xem"
-                        >
-                          Kick
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          {/* Khung Tù binh & Điểm */}
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col mt-8">
-            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
-                <span className="text-lg">⚔️</span> Tù binh & Điểm
-              </h3>
-            </div>
-            <div className="p-4 sm:p-6 flex flex-col gap-4">
-              {/* White side */}
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-semibold text-zinc-800">
-                    Trắng (Đã ăn)
-                  </span>
-                  {(() => {
-                    const wScore = captures.w.reduce(
-                      (acc, p) => acc + (PIECE_VALUES[p] || 0),
-                      0,
-                    );
-                    const bScore = captures.b.reduce(
-                      (acc, p) => acc + (PIECE_VALUES[p] || 0),
-                      0,
-                    );
-                    const wAdvantage = wScore > bScore ? wScore - bScore : 0;
-                    return wAdvantage > 0 ? (
-                      <span className="text-xs font-bold text-green-600">
-                        +{wAdvantage}
-                      </span>
-                    ) : null;
-                  })()}
-                </div>
-                <div className="flex flex-wrap gap-1 min-h-[32px] items-center bg-zinc-50 p-2 rounded-lg border border-zinc-100">
-                  {captures.w.length > 0 ? (
-                    [...captures.w]
-                      .sort(
-                        (a, b) =>
-                          (PIECE_VALUES[b] || 0) - (PIECE_VALUES[a] || 0),
-                      )
-                      .map((p, i) => (
-                        <img
-                          key={i}
-                          src={PIECE_IMAGES[p]}
-                          alt={p}
-                          className="w-6 h-6 drop-shadow-sm"
-                        />
-                      ))
-                  ) : (
-                    <span className="text-xs text-zinc-400 italic">
-                      Chưa ăn quân nào
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Black side */}
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-semibold text-zinc-800">
-                    Đen (Đã ăn)
-                  </span>
-                  {(() => {
-                    const wScore = captures.w.reduce(
-                      (acc, p) => acc + (PIECE_VALUES[p] || 0),
-                      0,
-                    );
-                    const bScore = captures.b.reduce(
-                      (acc, p) => acc + (PIECE_VALUES[p] || 0),
-                      0,
-                    );
-                    const bAdvantage = bScore > wScore ? bScore - wScore : 0;
-                    return bAdvantage > 0 ? (
-                      <span className="text-xs font-bold text-green-600">
-                        +{bAdvantage}
-                      </span>
-                    ) : null;
-                  })()}
-                </div>
-                <div className="flex flex-wrap gap-1 min-h-[32px] items-center bg-zinc-50 p-2 rounded-lg border border-zinc-100">
-                  {captures.b.length > 0 ? (
-                    [...captures.b]
-                      .sort(
-                        (a, b) =>
-                          (PIECE_VALUES[b] || 0) - (PIECE_VALUES[a] || 0),
-                      )
-                      .map((p, i) => (
-                        <img
-                          key={i}
-                          src={PIECE_IMAGES[p]}
-                          alt={p}
-                          className="w-6 h-6 drop-shadow-sm"
-                        />
-                      ))
-                  ) : (
-                    <span className="text-xs text-zinc-400 italic">
-                      Chưa ăn quân nào
-                    </span>
-                  )}
-                </div>
-              </div>
             </div>
           </div>
         </div>
       </div>
     </main>
-  );
-}
-
-export default function ChessPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center font-medium text-zinc-500">
-          Đang tải bàn cờ Vua...
-        </div>
-      }
-    >
-      <ChessGame />
-    </Suspense>
   );
 }
