@@ -1,7 +1,7 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Ship, Shot, ActiveAnimation } from "./types";
-import { BOARD_SIZE, ROWS, COLS } from "./constants";
+import { Ship, Shot, ActiveAnimation } from "../types";
+import { BOARD_SIZE, ROWS, COLS } from "../constants";
 
 type BoardProps = {
   title: string;
@@ -55,7 +55,7 @@ export const Board: React.FC<BoardProps> = ({
         </div>
 
         <div
-          className={`relative grid grid-cols-10 grid-rows-10 w-[95vw] sm:w-[80vw] md:w-[42vh] md:max-w-[420px] aspect-square border-2 border-zinc-800 bg-[#E3F2FD] ${interactive ? "" : "pointer-events-none"}`}
+          className={`relative grid grid-cols-10 grid-rows-10 w-[95vw] sm:w-[90vw] md:w-[50vh] md:max-w-[504px] aspect-square border-2 border-zinc-800 bg-[#E3F2FD] ${interactive ? "" : "pointer-events-none"}`}
         >
           {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, i) => {
             const r = Math.floor(i / BOARD_SIZE);

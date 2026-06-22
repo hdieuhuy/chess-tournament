@@ -1,1829 +1,372 @@
 "use client";
 
-import React, { useState, useEffect, useRef, Suspense } from "react";
-import Link from "next/link";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { supabase } from "@/lib/supabase";
-import type { RealtimeChannel } from "@supabase/supabase-js";
-import { Modal } from "@/components/Modal";
+import React, { Suspense, useState, useEffect } from "react";
+import { useLobbyInit } from "@/features/lobby/hooks/use-lobby-init";
+import { JoinRoomModal } from "@/features/lobby/components/join-room-modal";
+import { BattleshipProvider, useBattleship } from "@/features/battleship/contexts/battleship-context";
+import { BattleshipSidebar } from "@/features/battleship/components/battleship-sidebar";
+import { Board } from "@/features/battleship/components/battleship-board";
 import confetti from "canvas-confetti";
-import toast from "react-hot-toast";
-import { Ship, Shot, ActiveAnimation } from "./types";
-import { getInitialShips, BOARD_SIZE } from "./constants";
-import { Board } from "./Board";
-
-function BattleshipGame() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-  const roomParam = searchParams.get("room");
-
-  const [p1Ships, setP1Ships] = useState<Ship[]>([]);
-  const [p2Ships, setP2Ships] = useState<Ship[]>([]);
-  const [p1Shots, setP1Shots] = useState<Shot[]>([]);
-  const [p2Shots, setP2Shots] = useState<Shot[]>([]);
-
-  const [isPlayer1Turn, setIsPlayer1Turn] = useState<boolean>(true);
-  const [winner, setWinner] = useState<string | null>(null);
-  const [history, setHistory] = useState<any[]>([]);
-  const [undoRequestedBy, setUndoRequestedBy] = useState<string | null>(null);
-  const [activeAnimation, setActiveAnimation] =
-    useState<ActiveAnimation | null>(null);
-
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
-
-  const [roomId, setRoomId] = useState<string | null>(roomParam);
-  const [playerName, setPlayerName] = useState<string>("");
-  const [inputName, setInputName] = useState<string>("");
-
-  const [hostName, setHostName] = useState<string | null>(null);
-  const [player1Name, setPlayer1Name] = useState<string | null>(null);
-  const [player2Name, setPlayer2Name] = useState<string | null>(null);
-  const [spectators, setSpectators] = useState<string[]>([]);
-
-  const [showNameModal, setShowNameModal] = useState<boolean>(true);
-  const [linkCopied, setLinkCopied] = useState<boolean>(false);
-  const [gameStartTime, setGameStartTime] = useState<number | null>(null);
-  const [elapsedTime, setElapsedTime] = useState<number>(0);
-  const [gameStarted, setGameStarted] = useState<boolean>(false);
-  const [readyPlayers, setReadyPlayers] = useState<string[]>([]);
-  const [placingPlayers, setPlacingPlayers] = useState<string[]>([]);
-
-  const [hasInitialized, setHasInitialized] = useState<boolean>(false);
-  const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
-
-  const [requestedRole, setRequestedRole] = useState<"player" | "spectator">(
-    "player",
-  );
-
-  const prevShotsCountRef = useRef(0);
-  const sunkShipsCountRef = useRef({ p1: 0, p2: 0 });
-
-  // States sắp xếp thuyền
-  const [myShips, setMyShips] = useState<Ship[]>(getInitialShips());
-  const draggedShipRef = useRef<{ id: number; segment: number } | null>(null);
-  const placedCount = myShips.filter((s) => s.positions.length > 0).length;
-
-  const isPlayer1 = playerName === player1Name;
-  const isPlayer2 = playerName === player2Name;
-  const isSpectator = spectators.includes(playerName);
-
-  useEffect(() => {
-    const savedName = localStorage.getItem("playerName");
-    if (savedName) {
-      setPlayerName(savedName);
-      setInputName(savedName);
-
-      if (!roomParam) {
-        setShowNameModal(false);
-        setHasInitialized(true);
-        const newRoomId = Math.random().toString(36).substring(2, 10);
-        setRoomId(newRoomId);
-        setHostName(savedName);
-        setPlayer1Name(savedName);
-        localStorage.setItem(`joinedRoom_${newRoomId}`, "player");
-        router.replace(`${pathname}?room=${newRoomId}`);
-      } else {
-        const joinedRole = localStorage.getItem(`joinedRoom_${roomParam}`);
-        if (joinedRole) {
-          setRequestedRole(joinedRole as "player" | "spectator");
-          setShowNameModal(false);
-          setHasInitialized(true);
-        }
-      }
-    }
-    setIsCheckingStorage(false);
-  }, []);
-
-  const stateRef = useRef({
-    hostName,
-    player1Name,
-    player2Name,
-    spectators,
-    p1Ships,
-    p2Ships,
-    p1Shots,
-    p2Shots,
-    isPlayer1Turn,
-    winner,
-    gameStartTime,
-    gameStarted,
-    placingPlayers,
-    readyPlayers,
-    history,
-    undoRequestedBy,
-  });
-
-  useEffect(() => {
-    stateRef.current = {
-      hostName,
-      player1Name,
-      player2Name,
-      spectators,
-      p1Ships,
-      p2Ships,
-      p1Shots,
-      p2Shots,
-      isPlayer1Turn,
-      winner,
-      gameStartTime,
-      gameStarted,
-      placingPlayers,
-      readyPlayers,
-      history,
-      undoRequestedBy,
-    };
-  }, [
-    hostName,
-    player1Name,
-    player2Name,
-    spectators,
-    p1Ships,
-    p2Ships,
-    p1Shots,
-    p2Shots,
-    isPlayer1Turn,
-    winner,
-    gameStartTime,
-    gameStarted,
-    placingPlayers,
-    readyPlayers,
-    history,
-    undoRequestedBy,
-  ]);
-
-  const channelRef = useRef(channel);
-  const playerNameRef = useRef(playerName);
-  useEffect(() => {
-    channelRef.current = channel;
-    playerNameRef.current = playerName;
-  }, [channel, playerName]);
-
-  useEffect(() => {
-    const handleUnload = () => {
-      if (channelRef.current && playerNameRef.current) {
-        channelRef.current.send({
-          type: "broadcast",
-          event: "leave-room",
-          payload: { playerName: playerNameRef.current },
-        });
-      }
-    };
-
-    window.addEventListener("beforeunload", handleUnload);
-    return () => {
-      window.removeEventListener("beforeunload", handleUnload);
-      handleUnload();
-    };
-  }, []);
-
-  // Network Effect
-  useEffect(() => {
-    if (!roomId || !playerName || !hasInitialized) return;
-
-    const roomChannel = supabase.channel(`battleship-room-${roomId}`);
-
-    roomChannel
-      .on("broadcast", { event: "sync-move" }, (payload) => {
-        const {
-          p1Shots: s1,
-          p2Shots: s2,
-          isPlayer1Turn: pt,
-          winner: w,
-          history: h,
-        } = payload.payload;
-        setP1Shots(s1);
-        setP2Shots(s2);
-        setIsPlayer1Turn(pt);
-        setWinner(w);
-        if (h) setHistory(h);
-        setUndoRequestedBy(null);
-      })
-      .on("broadcast", { event: "reset-game" }, () => {
-        setP1Ships([]);
-        setP2Ships([]);
-        setP1Shots([]);
-        setP2Shots([]);
-        setIsPlayer1Turn(true);
-        setWinner(null);
-        setGameStarted(false);
-        setReadyPlayers([]);
-        setGameStartTime(null);
-        setPlacingPlayers([]);
-        setElapsedTime(0);
-        setMyShips(getInitialShips());
-        setHistory([]);
-        setUndoRequestedBy(null);
-      })
-      .on("broadcast", { event: "player-ready" }, (payload) => {
-        const { playerName: readyPlayer, ships } = payload.payload;
-
-        if (readyPlayer === stateRef.current.player1Name) {
-          setP1Ships(ships);
-        } else if (readyPlayer === stateRef.current.player2Name) {
-          setP2Ships(ships);
-        }
-
-        setReadyPlayers((prev) =>
-          prev.includes(readyPlayer) ? prev : [...prev, readyPlayer],
-        );
-      })
-      .on("broadcast", { event: "player-placing" }, (payload) => {
-        const { playerName: placingPlayer } = payload.payload;
-        setPlacingPlayers((prev) =>
-          prev.includes(placingPlayer) ? prev : [...prev, placingPlayer],
-        );
-      })
-      .on("broadcast", { event: "game-start" }, (payload) => {
-        setGameStarted(true);
-        setGameStartTime(payload.payload.gameStartTime);
-      })
-      .on("broadcast", { event: "request-join" }, (payload) => {
-        const { playerName: newPlayer, requestedRole: role } = payload.payload;
-        const state = stateRef.current;
-
-        if (state.hostName === playerName) {
-          let newP2 = state.player2Name;
-          const newSpecs = [...state.spectators];
-
-          const isAlreadyPlayer =
-            newPlayer === state.player1Name || newPlayer === newP2;
-          const isAlreadySpec = newSpecs.includes(newPlayer);
-
-          if (!isAlreadyPlayer && !isAlreadySpec) {
-            if (role === "player") {
-              if (!state.player1Name) {
-                setPlayer1Name(newPlayer);
-                stateRef.current.player1Name = newPlayer;
-              } else if (!newP2) {
-                newP2 = newPlayer;
-                setPlayer2Name(newP2);
-                stateRef.current.player2Name = newP2;
-              } else {
-                roomChannel.send({
-                  type: "broadcast",
-                  event: "join-rejected",
-                  payload: {
-                    playerName: newPlayer,
-                    reason:
-                      "Phòng đã đủ 2 người chơi, vui lòng tham gia với tư cách Người xem!",
-                  },
-                });
-                return;
-              }
-            } else {
-              if (newSpecs.length < 10) {
-                newSpecs.push(newPlayer);
-                setSpectators(newSpecs);
-                stateRef.current.spectators = newSpecs;
-              } else {
-                roomChannel.send({
-                  type: "broadcast",
-                  event: "join-rejected",
-                  payload: {
-                    playerName: newPlayer,
-                    reason: "Phòng đã đầy người xem!",
-                  },
-                });
-                return;
-              }
-            }
-          }
-
-          roomChannel.send({
-            type: "broadcast",
-            event: "room-sync",
-            payload: {
-              ...stateRef.current,
-              player1Name: stateRef.current.player1Name,
-              player2Name: newP2,
-              spectators: newSpecs,
-              readyPlayers: state.readyPlayers,
-              placingPlayers: state.placingPlayers,
-              history: state.history,
-              undoRequestedBy: state.undoRequestedBy,
-            },
-          });
-        }
-      })
-      .on("broadcast", { event: "room-sync" }, (payload) => {
-        const data = payload.payload;
-        setHostName(data.hostName);
-        setPlayer1Name(data.player1Name);
-        setPlayer2Name(data.player2Name);
-        setSpectators(data.spectators);
-
-        setP1Ships(data.p1Ships || []);
-        setP2Ships(data.p2Ships || []);
-        setP1Shots(data.p1Shots || []);
-        setP2Shots(data.p2Shots || []);
-        if (data.isPlayer1Turn !== undefined)
-          setIsPlayer1Turn(data.isPlayer1Turn);
-
-        setWinner(data.winner);
-        if (data.gameStartTime !== undefined)
-          setGameStartTime(data.gameStartTime);
-        if (data.gameStarted !== undefined) setGameStarted(data.gameStarted);
-        if (data.placingPlayers) setPlacingPlayers(data.placingPlayers);
-        if (data.readyPlayers) setReadyPlayers(data.readyPlayers);
-        if (data.history) setHistory(data.history);
-        if (data.undoRequestedBy !== undefined)
-          setUndoRequestedBy(data.undoRequestedBy);
-
-        if (playerName === data.player1Name && data.p1Ships?.length === 5) {
-          setMyShips(data.p1Ships);
-        }
-        if (playerName === data.player2Name && data.p2Ships?.length === 5) {
-          setMyShips(data.p2Ships);
-        }
-      })
-      .on("broadcast", { event: "update-name" }, (payload) => {
-        const { oldName, newName } = payload.payload;
-        setHostName((prev) => (prev === oldName ? newName : prev));
-        setPlayer1Name((prev) => (prev === oldName ? newName : prev));
-        setPlayer2Name((prev) => (prev === oldName ? newName : prev));
-        setSpectators((prev) => prev.map((s) => (s === oldName ? newName : s)));
-        setReadyPlayers((prev) =>
-          prev.map((p) => (p === oldName ? newName : p)),
-        );
-      })
-      .on("broadcast", { event: "join-rejected" }, (payload) => {
-        if (payload.payload.playerName === playerName) {
-          toast.error(payload.payload.reason || "Không thể tham gia phòng!");
-          setHasInitialized(false);
-          setShowNameModal(true);
-          if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
-        }
-      })
-      .on("broadcast", { event: "kick-player" }, (payload) => {
-        if (payload.payload.playerName === playerName) {
-          toast.error("Bạn đã bị chủ phòng kích khỏi phòng!");
-          if (roomId) localStorage.removeItem(`joinedRoom_${roomId}`);
-          router.replace("/");
-        }
-      })
-      .on("broadcast", { event: "request-role-change" }, (payload) => {
-        const { playerName: reqPlayer, newRole, targetSlot } = payload.payload;
-        const state = stateRef.current;
-        if (state.hostName === playerName) {
-          if (newRole === "player") {
-            const newSpecs = state.spectators.filter((s) => s !== reqPlayer);
-            const newReadyPlayers = state.readyPlayers.filter(
-              (p) => p !== reqPlayer,
-            );
-
-            let newP1 =
-              state.player1Name === reqPlayer ? null : state.player1Name;
-            let newP2 =
-              state.player2Name === reqPlayer ? null : state.player2Name;
-
-            let success = false;
-
-            if (targetSlot === 1 && !newP1) {
-              newP1 = reqPlayer;
-              success = true;
-            } else if (targetSlot === 2 && !newP2) {
-              newP2 = reqPlayer;
-              success = true;
-            }
-
-            if (!success && !targetSlot) {
-              if (!newP1) {
-                newP1 = reqPlayer;
-                success = true;
-              } else if (!newP2) {
-                newP2 = reqPlayer;
-                success = true;
-              }
-            }
-
-            if (success) {
-              setPlayer1Name(newP1);
-              setPlayer2Name(newP2);
-              setSpectators(newSpecs);
-              setReadyPlayers(newReadyPlayers);
-
-              stateRef.current.player1Name = newP1;
-              stateRef.current.player2Name = newP2;
-              stateRef.current.spectators = newSpecs;
-              stateRef.current.readyPlayers = newReadyPlayers;
-
-              roomChannel.send({
-                type: "broadcast",
-                event: "room-sync",
-                payload: { ...stateRef.current },
-              });
-            }
-          } else if (newRole === "spectator") {
-            const newP1 =
-              state.player1Name === reqPlayer ? null : state.player1Name;
-            const newP2 =
-              state.player2Name === reqPlayer ? null : state.player2Name;
-            const newSpecs = [...state.spectators];
-            if (!newSpecs.includes(reqPlayer)) {
-              newSpecs.push(reqPlayer);
-            }
-            const newReadyPlayers = state.readyPlayers.filter(
-              (p) => p !== reqPlayer,
-            );
-
-            setPlayer1Name(newP1);
-            setPlayer2Name(newP2);
-            setSpectators(newSpecs);
-            setReadyPlayers(newReadyPlayers);
-
-            stateRef.current.player1Name = newP1;
-            stateRef.current.player2Name = newP2;
-            stateRef.current.spectators = newSpecs;
-            stateRef.current.readyPlayers = newReadyPlayers;
-
-            roomChannel.send({
-              type: "broadcast",
-              event: "room-sync",
-              payload: { ...stateRef.current },
-            });
-          }
-        }
-      })
-      .on("broadcast", { event: "leave-room" }, (payload) => {
-        const state = stateRef.current;
-        const leavingPlayer = payload.payload.playerName;
-
-        let newP1 = state.player1Name;
-        let newP2 = state.player2Name;
-        if (newP1 === leavingPlayer) newP1 = null;
-        if (newP2 === leavingPlayer) newP2 = null;
-
-        const newSpecs = state.spectators.filter((s) => s !== leavingPlayer);
-        const newReadyPlayers = state.readyPlayers.filter(
-          (p) => p !== leavingPlayer,
-        );
-
-        let newHostName = state.hostName;
-        if (state.hostName === leavingPlayer) {
-          newHostName = newP1 || newP2 || newSpecs[0] || null;
-        }
-
-        setPlayer1Name(newP1);
-        setPlayer2Name(newP2);
-        setSpectators(newSpecs);
-        setReadyPlayers(newReadyPlayers);
-        setHostName(newHostName);
-
-        stateRef.current.player1Name = newP1;
-        stateRef.current.player2Name = newP2;
-        stateRef.current.spectators = newSpecs;
-        stateRef.current.readyPlayers = newReadyPlayers;
-        stateRef.current.hostName = newHostName;
-
-        if (newHostName === playerName) {
-          setTimeout(() => {
-            roomChannel.send({
-              type: "broadcast",
-              event: "room-sync",
-              payload: { ...stateRef.current },
-            });
-          }, 50);
-        }
-      })
-      .on("broadcast", { event: "request-undo" }, (payload) => {
-        setUndoRequestedBy(payload.payload.playerName);
-      })
-      .on("broadcast", { event: "reject-undo" }, () => {
-        const state = stateRef.current;
-        if (playerName === state.undoRequestedBy) {
-          toast.error("Đối thủ đã từ chối yêu cầu đi lại.");
-        }
-        setUndoRequestedBy(null);
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          roomChannel.send({
-            type: "broadcast",
-            event: "request-join",
-            payload: { playerName, requestedRole },
-          });
-        }
-      });
-
-    setChannel(roomChannel);
-
-    return () => {
-      supabase.removeChannel(roomChannel);
-    };
-  }, [roomId, playerName, hasInitialized, requestedRole]);
-
-  useEffect(() => {
-    if (gameStarted || !player1Name || !player2Name || !channel) return;
-
-    const p1Ready = readyPlayers.includes(player1Name);
-    const p2Ready = readyPlayers.includes(player2Name);
-
-    if (p1Ready && p2Ready) {
-      if (playerName === hostName) {
-        const startTime = Date.now();
-        setGameStarted(true);
-        setGameStartTime(startTime);
-        channel.send({
-          type: "broadcast",
-          event: "game-start",
-          payload: { gameStartTime: startTime },
-        });
-      }
-    }
-  }, [
-    readyPlayers,
-    player1Name,
-    player2Name,
-    gameStarted,
-    playerName,
-    hostName,
-    channel,
-  ]);
-
-  // Effect thời gian
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (gameStartTime && !winner) {
-      interval = setInterval(() => {
-        setElapsedTime(Math.floor((Date.now() - gameStartTime) / 1000));
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [gameStartTime, winner]);
-
-  // Pháo hoa chìm tàu
-  useEffect(() => {
-    if (!gameStarted) {
-      sunkShipsCountRef.current = { p1: 0, p2: 0 };
-      prevShotsCountRef.current = 0;
-      return;
-    }
-
-    let p1SunkCount = 0;
-    if (p2Ships.length > 0) {
-      p1SunkCount = p2Ships.filter(
-        (ship) =>
-          ship.positions.length > 0 &&
-          ship.positions.every((p) =>
-            p1Shots.some(
-              (s) => s.r === p[0] && s.c === p[1] && s.result === "hit",
-            ),
-          ),
-      ).length;
-    }
-
-    let p2SunkCount = 0;
-    if (p1Ships.length > 0) {
-      p2SunkCount = p1Ships.filter(
-        (ship) =>
-          ship.positions.length > 0 &&
-          ship.positions.every((p) =>
-            p2Shots.some(
-              (s) => s.r === p[0] && s.c === p[1] && s.result === "hit",
-            ),
-          ),
-      ).length;
-    }
-
-    const totalShots = p1Shots.length + p2Shots.length;
-
-    // Chỉ hiển thị pháo hoa khi đúng 1 lượt bắn vừa thực hiện và số lượng tàu chìm tăng lên
-    if (totalShots - prevShotsCountRef.current === 1) {
-      if (
-        p1SunkCount > sunkShipsCountRef.current.p1 ||
-        p2SunkCount > sunkShipsCountRef.current.p2
-      ) {
-        confetti({
-          particleCount: 150,
-          spread: 80,
-          origin: { y: 0.5 },
-          zIndex: 9999,
-          colors: ["#FF4500", "#FFA500", "#FFD700", "#FF0000"],
-        });
-      }
-    }
-
-    sunkShipsCountRef.current = { p1: p1SunkCount, p2: p2SunkCount };
-    prevShotsCountRef.current = totalShots;
-  }, [p1Shots, p2Shots, p1Ships, p2Ships, gameStarted]);
-
-  // Pháo hoa chiến thắng
-  useEffect(() => {
-    if (winner) {
-      const duration = 3000;
-      const end = Date.now() + duration;
-
-      const frame = () => {
-        confetti({
-          particleCount: 5,
-          angle: 60,
-          spread: 55,
-          origin: { x: 0 },
-          zIndex: 9999,
-        });
-        confetti({
-          particleCount: 5,
-          angle: 120,
-          spread: 55,
-          origin: { x: 1 },
-          zIndex: 9999,
-        });
-        if (Date.now() < end) requestAnimationFrame(frame);
-      };
-      frame();
-    }
-  }, [winner]);
-
-  const handleJoinRoom = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputName.trim()) return;
-
-    const newName = inputName.trim();
-    setPlayerName(newName);
-    localStorage.setItem("playerName", newName);
-
-    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, requestedRole);
-    setShowNameModal(false);
-
-    if (!hasInitialized) {
-      setHasInitialized(true);
-      if (!roomId) {
-        const newRoomId = Math.random().toString(36).substring(2, 10);
-        setRoomId(newRoomId);
-        setHostName(newName);
-        setPlayer1Name(newName);
-        localStorage.setItem(`joinedRoom_${newRoomId}`, "player");
-        router.replace(`${pathname}?room=${newRoomId}`);
-      }
-    } else {
-      if (channel) {
-        channel.send({
-          type: "broadcast",
-          event: "update-name",
-          payload: { oldName: playerName, newName },
-        });
-      }
-      if (hostName === playerName) setHostName(newName);
-      if (player1Name === playerName) setPlayer1Name(newName);
-      if (player2Name === playerName) setPlayer2Name(newName);
-      if (spectators.includes(playerName)) {
-        setSpectators(spectators.map((s) => (s === playerName ? newName : s)));
-      }
-    }
-  };
-
-  const handleShipClick = (id: number) => {
-    if (gameStarted) return;
-    setMyShips((prev) => {
-      const ship = prev.find((s) => s.id === id);
-      if (!ship || !ship.size) return prev;
-
-      const newOrientation = ship.orientation === "H" ? "V" : "H";
-
-      if (ship.positions.length === 0) {
-        return prev.map((s) =>
-          s.id === id ? { ...s, orientation: newOrientation } : s,
-        );
-      }
-
-      const startR = ship.positions[0][0];
-      const startC = ship.positions[0][1];
-
-      if (newOrientation === "H" && startC + ship.size > BOARD_SIZE)
-        return prev;
-      if (newOrientation === "V" && startR + ship.size > BOARD_SIZE)
-        return prev;
-
-      const newPositions: [number, number][] = [];
-      for (let i = 0; i < ship.size; i++) {
-        newPositions.push(
-          newOrientation === "H" ? [startR, startC + i] : [startR + i, startC],
-        );
-      }
-
-      const overlap = prev.some((s) => {
-        if (s.id === id) return false;
-        return s.positions.some((pos) =>
-          newPositions.some(
-            (newPos) => newPos[0] === pos[0] && newPos[1] === pos[1],
-          ),
-        );
-      });
-
-      if (overlap) return prev;
-
-      return prev.map((s) =>
-        s.id === id
-          ? { ...s, orientation: newOrientation, positions: newPositions }
-          : s,
-      );
-    });
-  };
-
-  const handleDrop = (
-    e: React.DragEvent<HTMLDivElement>,
-    r: number,
-    c: number,
-  ) => {
-    e.preventDefault();
-    if (!draggedShipRef.current) return;
-    const { id, segment } = draggedShipRef.current;
-    draggedShipRef.current = null;
-
-    const ship = myShips.find((s) => s.id === id);
-    if (!ship || !ship.size || !ship.orientation) return;
-
-    const startR = ship.orientation === "H" ? r : r - segment;
-    const startC = ship.orientation === "H" ? c - segment : c;
-
-    if (ship.orientation === "H" && startC + ship.size > BOARD_SIZE) return;
-    if (ship.orientation === "V" && startR + ship.size > BOARD_SIZE) return;
-    if (startR < 0 || startC < 0) return;
-
-    const newPositions: [number, number][] = [];
-    for (let i = 0; i < ship.size; i++) {
-      newPositions.push(
-        ship.orientation === "H" ? [startR, startC + i] : [startR + i, startC],
-      );
-    }
-
-    const overlap = myShips.some((s) => {
-      if (s.id === id) return false;
-      return s.positions.some((pos) =>
-        newPositions.some(
-          (newPos) => newPos[0] === pos[0] && newPos[1] === pos[1],
-        ),
-      );
-    });
-
-    if (overlap) return;
-
-    setMyShips((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, positions: newPositions } : s)),
-    );
-  };
-
-  const handleRandomPlacement = () => {
-    const newShips = [...myShips].map((s) => ({ ...s }));
-    const tempBoard = Array.from({ length: BOARD_SIZE }, () =>
-      Array(BOARD_SIZE).fill(false),
-    );
-
-    for (let i = 0; i < newShips.length; i++) {
-      const ship = newShips[i];
-      const size = ship.size!;
-      let placed = false;
-      while (!placed) {
-        const isHorizontal = Math.random() < 0.5;
-        const r = Math.floor(
-          Math.random() * (isHorizontal ? BOARD_SIZE : BOARD_SIZE - size + 1),
-        );
-        const c = Math.floor(
-          Math.random() * (isHorizontal ? BOARD_SIZE - size + 1 : BOARD_SIZE),
-        );
-
-        let overlap = false;
-        for (let j = 0; j < size; j++) {
-          if (tempBoard[isHorizontal ? r : r + j][isHorizontal ? c + j : c]) {
-            overlap = true;
-            break;
-          }
-        }
-
-        if (!overlap) {
-          const positions: [number, number][] = [];
-          for (let j = 0; j < size; j++) {
-            const rr = isHorizontal ? r : r + j;
-            const cc = isHorizontal ? c + j : c;
-            positions.push([rr, cc]);
-            tempBoard[rr][cc] = true;
-          }
-          ship.positions = positions;
-          ship.orientation = isHorizontal ? "H" : "V";
-          placed = true;
-        }
-      }
-    }
-
-    setMyShips(newShips);
-  };
-
-  const handleResetPlacement = () => {
-    setMyShips((prev) => prev.map((s) => ({ ...s, positions: [] })));
-  };
-
-  const handleStartClick = () => {
-    if (!playerName || readyPlayers.includes(playerName)) return;
-    if (!isSpectator && placedCount < 5) return;
-
-    setReadyPlayers((prev) => [...prev, playerName]);
-    if (isPlayer1) setP1Ships(myShips);
-    if (isPlayer2) setP2Ships(myShips);
-
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "player-ready",
-        payload: { playerName, ships: myShips },
-      });
-    }
-  };
-
-  const handleShootTrigger = (r: number, c: number) => {
-    if (!gameStarted || winner || isSpectator || activeAnimation) return;
-
-    const isMyTurn =
-      (isPlayer1 && isPlayer1Turn) || (isPlayer2 && !isPlayer1Turn);
-    if (!isMyTurn) return;
-
-    const myShots = isPlayer1 ? p1Shots : p2Shots;
-    if (myShots.some((shot) => shot.r === r && shot.c === c)) return;
-
-    const opponentShips = isPlayer1 ? p2Ships : p1Ships;
-    let isHit = false;
-    for (const ship of opponentShips) {
-      if (ship.positions.some((pos) => pos[0] === r && pos[1] === c)) {
-        isHit = true;
-        break;
-      }
-    }
-
-    setActiveAnimation({
-      r,
-      c,
-      result: isHit ? "hit" : "miss",
-      stage: "falling",
-    });
-
-    setTimeout(() => {
-      setActiveAnimation((prev) =>
-        prev ? { ...prev, stage: "exploding" } : null,
-      );
-    }, 400);
-
-    setTimeout(() => {
-      setActiveAnimation(null);
-      handleShoot(r, c);
-    }, 900);
-  };
-
-  const handleShoot = (r: number, c: number) => {
-    if (!gameStarted || winner || isSpectator) return;
-
-    const isMyTurn =
-      (isPlayer1 && isPlayer1Turn) || (isPlayer2 && !isPlayer1Turn);
-    if (!isMyTurn) return;
-
-    const myShots = isPlayer1 ? p1Shots : p2Shots;
-    if (myShots.some((shot) => shot.r === r && shot.c === c)) return;
-
-    const currentState = {
-      p1Shots: stateRef.current.p1Shots,
-      p2Shots: stateRef.current.p2Shots,
-      isPlayer1Turn: stateRef.current.isPlayer1Turn,
-      winner: stateRef.current.winner,
-    };
-    const newHistory = [...stateRef.current.history, currentState];
-    setHistory(newHistory);
-
-    const opponentShips = isPlayer1 ? p2Ships : p1Ships;
-    let isHit = false;
-    for (const ship of opponentShips) {
-      if (ship.positions.some((pos) => pos[0] === r && pos[1] === c)) {
-        isHit = true;
-        break;
-      }
-    }
-
-    const newShot: Shot = { r, c, result: isHit ? "hit" : "miss" };
-    const newMyShots = [...myShots, newShot];
-
-    let newP1Shots = p1Shots;
-    let newP2Shots = p2Shots;
-    if (isPlayer1) newP1Shots = newMyShots;
-    else newP2Shots = newMyShots;
-
-    // Tổng cộng 17 ô thuyền sẽ tương ứng với 17 cú bắn trúng
-    const totalHits = newMyShots.filter((s) => s.result === "hit").length;
-    let newWinner = winner;
-    if (totalHits === 17) {
-      newWinner = isPlayer1Turn ? player1Name : player2Name;
-    }
-
-    const nextTurn = isHit ? isPlayer1Turn : !isPlayer1Turn;
-
-    setP1Shots(newP1Shots);
-    setP2Shots(newP2Shots);
-    setIsPlayer1Turn(nextTurn);
-    if (newWinner) setWinner(newWinner);
-
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "sync-move",
-        payload: {
-          p1Shots: newP1Shots,
-          p2Shots: newP2Shots,
-          isPlayer1Turn: nextTurn,
-          winner: newWinner,
-          history: newHistory,
-        },
-      });
-    }
-  };
-
-  const resetGame = () => {
-    setP1Ships([]);
-    setP2Ships([]);
-    setP1Shots([]);
-    setP2Shots([]);
-    setIsPlayer1Turn(true);
-    setWinner(null);
-    setGameStarted(false);
-    setReadyPlayers([]);
-    setGameStartTime(null);
-    setElapsedTime(0);
-    setMyShips(getInitialShips());
-    setHistory([]);
-    setUndoRequestedBy(null);
-    setPlacingPlayers([]);
-
-    if (channel) {
-      channel.send({ type: "broadcast", event: "reset-game" });
-    }
-  };
-
-  const handleKickPlayer = (targetName: string) => {
-    if (playerName !== hostName || !channel) return;
-    if (
-      (targetName === player1Name || targetName === player2Name) &&
-      gameStarted
-    )
-      return;
-
-    channel.send({
-      type: "broadcast",
-      event: "kick-player",
-      payload: { playerName: targetName },
-    });
-
-    if (targetName === player1Name) {
-      setPlayer1Name(null);
-      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
-      if (gameStarted) {
-        resetGame();
-      }
-      setTimeout(() => {
-        channel.send({
-          type: "broadcast",
-          event: "room-sync",
-          payload: {
-            ...stateRef.current,
-            player1Name: null,
-            readyPlayers: stateRef.current.readyPlayers.filter(
-              (p) => p !== targetName,
-            ),
-          },
-        });
-      }, 50);
-    } else if (targetName === player2Name) {
-      setPlayer2Name(null);
-      setReadyPlayers((prev) => prev.filter((p) => p !== targetName));
-      if (gameStarted) {
-        resetGame();
-      }
-      setTimeout(() => {
-        channel.send({
-          type: "broadcast",
-          event: "room-sync",
-          payload: {
-            ...stateRef.current,
-            player2Name: null,
-            readyPlayers: stateRef.current.readyPlayers.filter(
-              (p) => p !== targetName,
-            ),
-          },
-        });
-      }, 50);
-    } else if (spectators.includes(targetName)) {
-      const newSpecs = spectators.filter((s) => s !== targetName);
-      setSpectators(newSpecs);
-      channel.send({
-        type: "broadcast",
-        event: "room-sync",
-        payload: { ...stateRef.current, spectators: newSpecs },
-      });
-    }
-  };
-
-  const handleSlotClick = (targetSlot: 1 | 2) => {
-    if (!channel || gameStarted) return;
-
-    if (targetSlot === 1 && player1Name) return;
-    if (targetSlot === 2 && player2Name) return;
-
-    if (playerName === hostName) {
-      const state = stateRef.current;
-      const newSpecs = state.spectators.filter((s) => s !== playerName);
-      const newReadyPlayers = state.readyPlayers.filter(
-        (p) => p !== playerName,
-      );
-
-      let newP1 = state.player1Name === playerName ? null : state.player1Name;
-      let newP2 = state.player2Name === playerName ? null : state.player2Name;
-
-      let success = false;
-
-      if (targetSlot === 1 && !newP1) {
-        newP1 = playerName;
-        success = true;
-      } else if (targetSlot === 2 && !newP2) {
-        newP2 = playerName;
-        success = true;
-      }
-
-      if (success) {
-        setPlayer1Name(newP1);
-        setPlayer2Name(newP2);
-        setSpectators(newSpecs);
-        setReadyPlayers(newReadyPlayers);
-
-        stateRef.current.player1Name = newP1;
-        stateRef.current.player2Name = newP2;
-        stateRef.current.spectators = newSpecs;
-        stateRef.current.readyPlayers = newReadyPlayers;
-
-        channel.send({
-          type: "broadcast",
-          event: "room-sync",
-          payload: { ...stateRef.current },
-        });
-      }
-    } else {
-      channel.send({
-        type: "broadcast",
-        event: "request-role-change",
-        payload: { playerName, newRole: "player", targetSlot },
-      });
-    }
-
-    setRequestedRole("player");
-    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "player");
-  };
-
-  const handleBecomeSpectator = () => {
-    if (!channel || (gameStarted && !winner)) return;
-
-    if (playerName === hostName) {
-      const state = stateRef.current;
-      const newP1 = state.player1Name === playerName ? null : state.player1Name;
-      const newP2 = state.player2Name === playerName ? null : state.player2Name;
-      const newSpecs = [...state.spectators];
-      if (!newSpecs.includes(playerName)) {
-        newSpecs.push(playerName);
-      }
-      const newReadyPlayers = state.readyPlayers.filter(
-        (p) => p !== playerName,
-      );
-
-      setPlayer1Name(newP1);
-      setPlayer2Name(newP2);
-      setSpectators(newSpecs);
-      setReadyPlayers(newReadyPlayers);
-
-      stateRef.current.player1Name = newP1;
-      stateRef.current.player2Name = newP2;
-      stateRef.current.spectators = newSpecs;
-      stateRef.current.readyPlayers = newReadyPlayers;
-
-      channel.send({
-        type: "broadcast",
-        event: "room-sync",
-        payload: { ...stateRef.current },
-      });
-    } else {
-      channel.send({
-        type: "broadcast",
-        event: "request-role-change",
-        payload: { playerName, newRole: "spectator" },
-      });
-    }
-
-    setRequestedRole("spectator");
-    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, "spectator");
-  };
-
-  const handleRequestUndo = () => {
-    if (channel && !isSpectator) {
-      setUndoRequestedBy(playerName);
-      channel.send({
-        type: "broadcast",
-        event: "request-undo",
-        payload: { playerName },
-      });
-    }
-  };
-
-  const handleAcceptUndo = () => {
-    const state = stateRef.current;
-    if (state.history.length > 0 && channel) {
-      const prevState = state.history[state.history.length - 1];
-      const newHistory = state.history.slice(0, -1);
-
-      setP1Shots(prevState.p1Shots);
-      setP2Shots(prevState.p2Shots);
-      setIsPlayer1Turn(prevState.isPlayer1Turn);
-      setWinner(prevState.winner);
-      setHistory(newHistory);
-      setUndoRequestedBy(null);
-
-      channel.send({
-        type: "broadcast",
-        event: "sync-move",
-        payload: {
-          p1Shots: prevState.p1Shots,
-          p2Shots: prevState.p2Shots,
-          isPlayer1Turn: prevState.isPlayer1Turn,
-          winner: prevState.winner,
-          history: newHistory,
-        },
-      });
-    }
-  };
-
-  const handleRejectUndo = () => {
-    setUndoRequestedBy(null);
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "reject-undo",
-        payload: {},
-      });
-    }
-  };
-
-  const handleReadyToPlace = () => {
-    if (!playerName || placingPlayers.includes(playerName)) return;
-    const newPlacingPlayers = [...placingPlayers, playerName];
-    setPlacingPlayers(newPlacingPlayers);
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "player-placing",
-        payload: { playerName },
-      });
-    }
-  };
-
-  const handleResign = () => {
-    if (winner || !gameStarted || isSpectator) return;
-    const myColor = isPlayer1 ? "P1" : isPlayer2 ? "P2" : null;
-    if (!myColor) return;
-
-    const newWinner = myColor === "P1" ? player2Name : player1Name;
-    setWinner(newWinner);
-
-    if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "sync-move",
-        payload: {
-          ...stateRef.current,
-          winner: newWinner,
-        },
-      });
-    }
-  };
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60)
-      .toString()
-      .padStart(2, "0");
-    const s = (seconds % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
-  };
-
-  const opponentName = isPlayer1 ? player2Name : player1Name;
-  const opponentIsPlacing =
-    opponentName && placingPlayers.includes(opponentName);
-  const opponentIsReady = opponentName && readyPlayers.includes(opponentName);
-
-  if (isCheckingStorage) {
-    return (
-      <div className="flex min-h-screen items-center justify-center font-medium text-zinc-500">
-        Đang tải...
-      </div>
-    );
-  }
-
-  return (
-    <main className="flex min-h-screen flex-col items-center bg-zinc-50 px-4 py-12">
-      {undoRequestedBy && undoRequestedBy !== playerName && !isSpectator && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4 border border-zinc-200">
-            <p className="mb-6 text-lg font-medium text-zinc-800">
-              <span className="font-bold text-purple-600">
-                {undoRequestedBy}
-              </span>{" "}
-              muốn xin đi lại 1 nước.
-            </p>
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={handleAcceptUndo}
-                className="px-6 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm cursor-pointer"
-              >
-                Đồng ý
-              </button>
-              <button
-                onClick={handleRejectUndo}
-                className="px-6 py-2.5 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors shadow-sm cursor-pointer"
-              >
-                Từ chối
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {undoRequestedBy === playerName && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg font-medium animate-pulse">
-          Đang chờ đối thủ phản hồi yêu cầu đi lại...
-        </div>
-      )}
-
-      {hasInitialized && (
-        <div className="fixed left-4 top-4 z-50">
-          <button
-            onClick={() => setShowNameModal(true)}
-            className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-zinc-900 text-xl font-bold text-white shadow-lg transition-transform hover:scale-105"
-            title="Chỉnh sửa tên"
-          >
-            {playerName ? playerName.charAt(0).toUpperCase() : "👤"}
-          </button>
-        </div>
-      )}
-
-      <Modal
-        isOpen={showNameModal}
-        title={
-          hasInitialized
-            ? "Chỉnh sửa tên"
-            : roomParam
-              ? "Tham gia phòng chơi"
-              : "Tạo phòng chơi mới"
-        }
-      >
-        <form onSubmit={handleJoinRoom} className="flex flex-col space-y-4">
-          <input
-            type="text"
-            value={inputName}
-            onChange={(e) => setInputName(e.target.value)}
-            placeholder="Nhập tên..."
-            className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-            required
-            autoFocus
-          />
-          {!hasInitialized && roomParam && (
-            <div className="flex gap-4">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  value="player"
-                  checked={requestedRole === "player"}
-                  onChange={(e) =>
-                    setRequestedRole(e.target.value as "player" | "spectator")
-                  }
-                />
-                <span>Người chơi</span>
-              </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  value="spectator"
-                  checked={requestedRole === "spectator"}
-                  onChange={(e) =>
-                    setRequestedRole(e.target.value as "player" | "spectator")
-                  }
-                />
-                <span>Người xem</span>
-              </label>
-            </div>
-          )}
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white hover:bg-zinc-800"
-          >
-            {hasInitialized ? "Cập nhật" : "Vào phòng"}
-          </button>
-        </form>
-      </Modal>
-
-      <div className="grid w-full max-w-[1600px] flex-1 grid-cols-1 place-items-center gap-8 xl:grid-cols-[1fr_auto_1fr]">
-        {/* Cột trái: Thông tin hiển thị & Các nút chức năng */}
-        <div className="mb-8 flex w-full max-w-md flex-col items-center text-center xl:mb-0 xl:items-start xl:justify-self-start xl:pl-8 xl:text-left">
-          <h1 className="mb-2 text-3xl font-light tracking-tight text-zinc-900">
-            Bắn Thuyền (Battleship)
-          </h1>
-
-          {!showNameModal && (
-            <>
-              {player1Name || player2Name ? (
-                <div className="flex flex-wrap items-center gap-2 text-sm text-zinc-500 xl:justify-start justify-center">
-                  <span>Trận đấu:</span>
-                  <span className="font-semibold text-blue-600">
-                    {player1Name}
-                  </span>{" "}
-                  vs{" "}
-                  <span className="font-semibold text-red-600">
-                    {player2Name}
-                  </span>
-                  {playerName === hostName && !gameStarted && (
-                    <button
-                      onClick={() => {
-                        if (player1Name && player1Name !== hostName)
-                          handleKickPlayer(player1Name);
-                        if (player2Name && player2Name !== hostName)
-                          handleKickPlayer(player2Name);
-                      }}
-                      className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-200"
-                    >
-                      Kick All (Trừ Host)
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div className="mt-4 flex w-full flex-col items-center xl:items-start mb-6">
-                  <p className="mb-3 text-sm text-zinc-500">
-                    Đang chờ người chơi tham gia...
-                  </p>
-                  <div className="flex w-full items-center space-x-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-sm">
-                    <span className="flex-1 select-all truncate text-left text-xs text-zinc-500">
-                      {typeof window !== "undefined"
-                        ? window.location.href
-                        : ""}
-                    </span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(window.location.href);
-                        setLinkCopied(true);
-                        setTimeout(() => setLinkCopied(false), 2000);
-                      }}
-                      className="cursor-pointer whitespace-nowrap rounded-md bg-black px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-800"
-                    >
-                      {linkCopied ? "Đã copy!" : "Copy Link"}
-                    </button>
-                  </div>
-                  {isSpectator && !gameStarted && (
-                    <div className="mt-4 w-full rounded-lg bg-blue-50 border border-blue-100 px-4 py-3 text-sm text-blue-700 text-center">
-                      Vui lòng chọn ghế Người chơi ở khung bên phải để tham gia.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="mt-6 flex w-full flex-col items-center space-y-3 xl:items-start">
-                {gameStarted ? (
-                  <>
-                    <div className="inline-block rounded-full border border-zinc-100 bg-white px-6 py-3 shadow-sm">
-                      <p className="text-sm font-medium text-zinc-800">
-                        {winner
-                          ? `🎉 Chiến thắng: ${winner}!`
-                          : `Lượt bắn: ${isPlayer1Turn ? player1Name : player2Name}`}
-                      </p>
-                    </div>
-
-                    <div className="text-3xl font-mono font-medium tracking-wider text-zinc-800">
-                      {formatTime(elapsedTime)}
-                    </div>
-                  </>
-                ) : (
-                  !isSpectator && (
-                    <div className="flex w-full flex-col items-center space-y-3 rounded-lg border border-zinc-200 bg-white p-6 text-center shadow-sm xl:items-start xl:text-left">
-                      {readyPlayers.includes(playerName || "") ? (
-                        <div className="w-full text-center">
-                          <h3 className="text-lg font-semibold text-green-600">
-                            Đã sẵn sàng!
-                          </h3>
-                          <p className="text-zinc-500">
-                            {opponentIsReady
-                              ? "Đối thủ cũng đã sẵn sàng. Bắt đầu!"
-                              : "Chờ đối thủ sẵn sàng..."}
-                          </p>
-                        </div>
-                      ) : !placingPlayers.includes(playerName || "") ? (
-                        <div className="flex flex-col items-center w-full space-y-4">
-                          <h3 className="text-base font-semibold text-zinc-800">
-                            Trận đấu sắp bắt đầu!
-                          </h3>
-                          <button
-                            onClick={handleReadyToPlace}
-                            className="w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
-                          >
-                            Sẵn sàng chiến đấu
-                          </button>
-                          {opponentName && (
-                            <p className="text-sm text-zinc-500 mt-2">
-                              Đối thủ:{" "}
-                              {opponentIsPlacing || opponentIsReady
-                                ? "Đã sẵn sàng chiến đấu"
-                                : "Đang chờ..."}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="w-full flex flex-col items-center xl:items-start space-y-4">
-                          <div
-                            className="flex flex-col gap-4 w-full p-4 border-2 border-dashed border-zinc-300 rounded-lg bg-zinc-50/50"
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              if (!draggedShipRef.current) return;
-                              const { id } = draggedShipRef.current;
-                              draggedShipRef.current = null;
-                              setMyShips((prev) =>
-                                prev.map((s) =>
-                                  s.id === id ? { ...s, positions: [] } : s,
-                                ),
-                              );
-                            }}
-                          >
-                            <span className="text-sm font-medium text-zinc-700">
-                              Kéo thả thuyền vào bảng. Nhấn vào thuyền để xoay
-                              dọc/ngang.
-                            </span>
-
-                            <div className="flex flex-wrap gap-4 min-h-[60px] items-center">
-                              {myShips
-                                .filter((s) => s.positions.length === 0)
-                                .map((ship) => (
-                                  <div
-                                    key={ship.id}
-                                    draggable
-                                    onDragStart={(e) => {
-                                      if (e.dataTransfer) {
-                                        e.dataTransfer.effectAllowed = "move";
-                                      }
-                                    }}
-                                    onClick={() => handleShipClick(ship.id)}
-                                    className={`flex ${ship.orientation === "H" ? "flex-row" : "flex-col"} cursor-grab active:cursor-grabbing hover:brightness-110 shadow-sm ${ship.color} rounded-sm p-[1px] transition-transform hover:-translate-y-1`}
-                                  >
-                                    {Array.from({ length: ship.size || 0 }).map(
-                                      (_, idx) => (
-                                        <div
-                                          key={`unplaced-seg-${ship.id}-${idx}`}
-                                          className="w-[28px] h-[28px] sm:w-[36px] sm:h-[36px] border border-white/20"
-                                          onMouseDown={() => {
-                                            draggedShipRef.current = {
-                                              id: ship.id,
-                                              segment: idx,
-                                            };
-                                          }}
-                                        />
-                                      ),
-                                    )}
-                                  </div>
-                                ))}
-                              {placedCount === 5 && (
-                                <p className="text-sm text-green-600 font-medium w-full text-center">
-                                  Tất cả thuyền đã được đặt!
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex w-full gap-2 mt-2">
-                            <button
-                              onClick={handleResetPlacement}
-                              disabled={placedCount === 0}
-                              className="flex-1 px-3 py-2 border border-zinc-300 rounded-md text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 transition-colors"
-                            >
-                              Xóa bàn
-                            </button>
-                            <button
-                              onClick={handleRandomPlacement}
-                              className="flex-1 px-3 py-2 border border-zinc-300 rounded-md text-sm font-medium hover:bg-zinc-50 transition-colors"
-                            >
-                              Ngẫu nhiên
-                            </button>
-                          </div>
-
-                          {placedCount === 5 && (
-                            <button
-                              onClick={handleStartClick}
-                              disabled={readyPlayers.includes(playerName || "")}
-                              className="w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
-                            >
-                              {readyPlayers.includes(playerName || "")
-                                ? "Đã sẵn sàng"
-                                : "Xác nhận & Sẵn sàng"}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                )}
-              </div>
-            </>
-          )}
-
-          <div className="mt-10 flex w-full flex-wrap justify-center gap-4 xl:justify-start">
-            {gameStarted && !winner && !isSpectator && (
-              <>
-                {history.length > 0 && (
-                  <button
-                    onClick={handleRequestUndo}
-                    disabled={!!undoRequestedBy}
-                    className="cursor-pointer rounded-full border border-purple-300 bg-purple-50 px-6 py-2 text-sm font-medium text-purple-700 shadow-sm transition-colors hover:bg-purple-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Xin đi lại
-                  </button>
-                )}
-                <button
-                  onClick={handleResign}
-                  className="cursor-pointer rounded-full border border-red-300 bg-red-50 px-6 py-2 text-sm font-medium text-red-700 shadow-sm transition-colors hover:bg-red-100"
-                >
-                  Bỏ cuộc
-                </button>
-              </>
-            )}
-            {playerName === hostName && (
-              <button
-                onClick={resetGame}
-                disabled={!player2Name}
-                className="cursor-pointer rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Chơi lại
-              </button>
-            )}
-            <Link
-              href="/"
-              className="cursor-pointer rounded-full bg-zinc-900 px-6 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-            >
-              Đổi trò chơi
-            </Link>
-          </div>
-        </div>
-
-        {/* Cột giữa: Bảng game */}
-        <div className="flex flex-col items-center justify-center w-full pb-8">
-          {!gameStarted && isSpectator && player2Name && (
-            <div className="text-zinc-500 text-center w-full mb-8">
-              Đang chờ người chơi xếp thuyền...
-            </div>
-          )}
-
-          <div
-            className={`flex flex-col md:flex-row gap-8 lg:gap-16 justify-center w-full transition-opacity ${showNameModal ? "opacity-50 pointer-events-none" : "opacity-100"}`}
-          >
-            {!gameStarted && !isSpectator ? (
-              <>
-                {/* Placement Board */}
-                <Board
-                  title="Bảng của bạn"
-                  ships={myShips}
-                  shots={[]}
-                  onCellClick={() => {}}
-                  hideShips={false}
-                  interactive={true}
-                  isMyBoardForPlacement={true}
-                  gameStarted={gameStarted}
-                  onShipClick={handleShipClick}
-                  onDrop={handleDrop}
-                  draggedShipRef={draggedShipRef}
-                />
-                {/* Empty opponent board */}
-                <Board
-                  title="Bảng đối thủ"
-                  ships={[]}
-                  shots={[]}
-                  onCellClick={() => {}}
-                  hideShips={true}
-                  interactive={false}
-                  gameStarted={gameStarted}
-                />
-              </>
-            ) : (
-              <>
-                {isPlayer1 && (
-                  <Board
-                    title="Bảng của bạn"
-                    ships={p1Ships}
-                    shots={p2Shots}
-                    onCellClick={() => {}}
-                    hideShips={false}
-                    interactive={false}
-                    gameStarted={gameStarted}
-                  />
-                )}
-                {isPlayer1 && (
-                  <Board
-                    title="Bảng đối thủ"
-                    ships={p2Ships}
-                    shots={p1Shots}
-                    onCellClick={(r, c) => handleShootTrigger(r, c)}
-                    hideShips={!winner}
-                    interactive={true}
-                    gameStarted={gameStarted}
-                    activeAnimation={activeAnimation}
-                  />
-                )}
-
-                {isPlayer2 && (
-                  <Board
-                    title="Bảng của bạn"
-                    ships={p2Ships}
-                    shots={p1Shots}
-                    onCellClick={() => {}}
-                    hideShips={false}
-                    interactive={false}
-                    gameStarted={gameStarted}
-                  />
-                )}
-                {isPlayer2 && (
-                  <Board
-                    title="Bảng đối thủ"
-                    ships={p1Ships}
-                    shots={p2Shots}
-                    onCellClick={(r, c) => handleShootTrigger(r, c)}
-                    hideShips={!winner}
-                    interactive={true}
-                    gameStarted={gameStarted}
-                    activeAnimation={activeAnimation}
-                  />
-                )}
-
-                {isSpectator && (
-                  <Board
-                    title={`Bảng của ${player1Name}`}
-                    ships={p1Ships}
-                    shots={p2Shots}
-                    onCellClick={() => {}}
-                    hideShips={false}
-                    interactive={false}
-                    gameStarted={gameStarted}
-                  />
-                )}
-                {isSpectator && (
-                  <Board
-                    title={`Bảng của ${player2Name}`}
-                    ships={p2Ships}
-                    shots={p1Shots}
-                    onCellClick={() => {}}
-                    hideShips={false}
-                    interactive={false}
-                    gameStarted={gameStarted}
-                  />
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Cột phải: Thông tin người xem */}
-        <div className="w-full mt-8 xl:mt-0 xl:w-auto xl:justify-self-end xl:pl-8 flex flex-col">
-          {/* Khung người chơi */}
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col mb-8">
-            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
-                <span className="text-lg">🎮</span> Người chơi
-              </h3>
-              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
-                {[player1Name, player2Name].filter(Boolean).length}/2
-              </span>
-            </div>
-
-            <div className="p-4 sm:p-6 flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <h4 className="text-sm font-bold text-blue-600">
-                  Người chơi 1
-                </h4>
-                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
-                  {player1Name ? (
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
-                        {player1Name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="text-sm font-medium text-zinc-800 truncate">
-                        {player1Name} {playerName === player1Name && "(Bạn)"}{" "}
-                        {hostName === player1Name && "👑"}
-                      </span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleSlotClick(1)}
-                      className="text-sm text-zinc-500 hover:text-blue-600 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-blue-400 w-full text-left transition-colors"
-                    >
-                      + Tham gia (Người chơi 1)
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 mt-2">
-                <h4 className="text-sm font-bold text-red-600">Người chơi 2</h4>
-                <div className="flex items-center justify-between bg-zinc-50 border border-zinc-200 p-2 rounded-lg">
-                  {player2Name ? (
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700">
-                        {player2Name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="text-sm font-medium text-zinc-800 truncate">
-                        {player2Name} {playerName === player2Name && "(Bạn)"}{" "}
-                        {hostName === player2Name && "👑"}
-                      </span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleSlotClick(2)}
-                      className="text-sm text-zinc-500 hover:text-red-600 font-medium py-1 px-2 border border-dashed border-zinc-300 rounded hover:border-red-400 w-full text-left transition-colors"
-                    >
-                      + Tham gia (Người chơi 2)
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {!isSpectator && (!gameStarted || winner) && (
-                <button
-                  onClick={handleBecomeSpectator}
-                  className="mt-2 text-sm text-zinc-500 hover:text-zinc-700 underline text-center w-full"
-                >
-                  Rời ghế, trở thành khán giả
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm min-w-[250px] w-full max-w-md mx-auto xl:mx-0 overflow-hidden flex flex-col max-h-[400px]">
-            <div className="bg-zinc-50 px-6 py-4 border-b border-zinc-200 flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-base font-semibold text-zinc-900 flex items-center gap-2">
-                <span className="text-lg">👀</span> Người xem
-              </h3>
-              <span className="bg-zinc-200 text-zinc-700 py-1 px-2.5 rounded-full text-xs font-bold">
-                {spectators.length}/10
-              </span>
-            </div>
-            <div className="p-4 sm:p-6 overflow-y-auto flex-1 custom-scrollbar">
-              {spectators.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 text-center">
-                  <span className="text-3xl mb-2 opacity-20">🪑</span>
-                  <p className="text-sm text-zinc-400 font-medium">
-                    Chưa có người xem
-                  </p>
-                </div>
-              ) : (
-                <ul className="space-y-2">
-                  {spectators.map((spec, idx) => (
-                    <li
-                      key={idx}
-                      className="group flex items-center justify-between space-x-3 rounded-xl border border-transparent p-2 transition-all hover:bg-zinc-50 hover:border-zinc-100"
-                    >
-                      <div className="flex items-center space-x-3 overflow-hidden">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-sm font-bold text-indigo-700 shadow-inner">
-                          {spec.charAt(0).toUpperCase()}
-                        </div>
-                        <span
-                          className="text-sm font-medium text-zinc-800 truncate"
-                          title={spec}
-                        >
-                          {spec}
-                        </span>
-                      </div>
-                      {playerName === hostName && (
-                        <button
-                          onClick={() => handleKickPlayer(spec)}
-                          className="shrink-0 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-semibold text-red-600 opacity-100 xl:opacity-0 transition-all hover:bg-red-100 xl:group-hover:opacity-100 focus:opacity-100"
-                          title="Kích người xem"
-                        >
-                          Kick
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
-  );
-}
+import { ActiveAnimation } from "@/features/battleship/types";
 
 export default function BattleshipPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center font-medium text-zinc-500">
-          Đang tải...
+        <div className="flex min-h-screen items-center justify-center bg-zinc-50">
+          Đang tải bàn cờ Bắn Thuyền...
         </div>
       }
     >
-      <BattleshipGame />
+      <BattleshipGameWrapper />
     </Suspense>
+  );
+}
+
+function BattleshipGameWrapper() {
+  const {
+    roomId,
+    playerName,
+    isCreator,
+    showNameModal,
+    hasInitialized,
+    handleJoinRoom,
+    requestedRole,
+    setRequestedRole,
+    setShowNameModal,
+  } = useLobbyInit("Battleship");
+
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  const toggleTheme = () => setIsDarkMode((prev) => !prev);
+
+  if (!hasInitialized && roomId) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50">
+        <JoinRoomModal
+          isOpen={showNameModal}
+          gameName="Bắn Thuyền"
+          initialName={playerName || ""}
+          hasRoomId={!!roomId}
+          requestedRole={requestedRole}
+          onRoleChange={setRequestedRole}
+          onSubmit={handleJoinRoom}
+        />
+      </div>
+    );
+  }
+
+  if (!roomId || !playerName) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50">
+        Đang khởi tạo phòng chơi...
+      </div>
+    );
+  }
+
+  return (
+    <BattleshipProvider
+      roomId={roomId}
+      playerName={playerName}
+      requestedRole={requestedRole}
+      isCreator={isCreator}
+      hasInitialized={hasInitialized}
+    >
+      <BattleshipGameContent 
+        isDarkMode={isDarkMode} 
+        toggleTheme={toggleTheme}
+        setShowNameModal={setShowNameModal}
+        hasInitialized={hasInitialized}
+        showNameModal={showNameModal}
+        playerName={playerName}
+        roomId={roomId}
+        requestedRole={requestedRole}
+        setRequestedRole={setRequestedRole}
+        handleJoinRoom={handleJoinRoom}
+      />
+    </BattleshipProvider>
+  );
+}
+
+function BattleshipGameContent({ 
+  isDarkMode, 
+  toggleTheme,
+  setShowNameModal,
+  hasInitialized,
+  showNameModal,
+  playerName,
+  roomId,
+  requestedRole,
+  setRequestedRole,
+  handleJoinRoom
+}: { 
+  isDarkMode: boolean;
+  toggleTheme: () => void;
+  setShowNameModal: (show: boolean) => void;
+  hasInitialized: boolean;
+  showNameModal: boolean;
+  playerName: string;
+  roomId: string;
+  requestedRole: "player" | "spectator";
+  setRequestedRole: (role: "player" | "spectator") => void;
+  handleJoinRoom: (name: string) => void;
+}) {
+  const {
+    player1Name,
+    player2Name,
+    p1Ships,
+    p2Ships,
+    p1Shots,
+    p2Shots,
+    myShips,
+    winner,
+    gamePhase,
+    isPlayer1Turn,
+    isSpectator,
+    activeAnimation,
+    handleShipClick,
+    handleDrop,
+    draggedShipRef,
+    handleShoot,
+  } = useBattleship();
+
+  useEffect(() => {
+    if (winner && winner !== "Draw" && winner !== "End") {
+      const duration = 3 * 1000;
+      const animationEnd = Date.now() + duration;
+      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 100 };
+
+      const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+      const interval: any = setInterval(function () {
+        const timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+          return clearInterval(interval);
+        }
+
+        const particleCount = 50 * (timeLeft / duration);
+        confetti({
+          ...defaults,
+          particleCount,
+          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+        });
+        confetti({
+          ...defaults,
+          particleCount,
+          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+        });
+      }, 250);
+
+      return () => clearInterval(interval);
+    }
+  }, [winner]);
+
+  const isPlayer1 = playerName === player1Name;
+  const isPlayer2 = playerName === player2Name;
+
+  const renderBoards = () => {
+    if (gamePhase === "waiting") {
+      return (
+        <div className="flex flex-col items-center justify-center h-full opacity-50 pointer-events-none grayscale">
+          <Board
+            title="Bảng của bạn"
+            ships={[]}
+            shots={[]}
+            onCellClick={() => {}}
+            hideShips={true}
+            interactive={false}
+            gameStarted={false}
+          />
+        </div>
+      );
+    }
+
+    if (gamePhase === "placing") {
+      if (isSpectator) {
+        return (
+          <div className="text-zinc-500 text-center w-full font-medium">
+            Đang chờ người chơi xếp thuyền...
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex flex-col gap-6 justify-center w-full max-w-[504px] mx-auto">
+          {/* Tip Banner */}
+          <div className={`p-4 rounded-xl border flex gap-3 text-sm font-medium items-center justify-center shadow-sm ${isDarkMode ? "bg-blue-900/20 border-blue-800 text-blue-300" : "bg-blue-50 border-blue-200 text-blue-800"}`}>
+            <span className="text-xl">💡</span>
+            <p><strong>Mẹo:</strong> Nhấp vào thuyền để xoay dọc hoặc ngang. Kéo thả để di chuyển thuyền.</p>
+          </div>
+
+          <Board
+            title="Bảng của bạn"
+            ships={myShips}
+            shots={[]}
+            onCellClick={() => {}}
+            hideShips={false}
+            interactive={true}
+            isMyBoardForPlacement={true}
+            gameStarted={false}
+            onShipClick={handleShipClick}
+            onDrop={handleDrop}
+            draggedShipRef={draggedShipRef}
+          />
+        </div>
+      );
+    }
+
+    if (gamePhase === "playing" || gamePhase === "ended") {
+      if (isPlayer1) {
+        return (
+          <div className="flex flex-col md:flex-row gap-8 lg:gap-16 justify-center w-full">
+            <Board
+              title="Bảng của bạn"
+              ships={p1Ships}
+              shots={p2Shots}
+              onCellClick={() => {}}
+              hideShips={false}
+              interactive={false}
+              gameStarted={true}
+            />
+            <Board
+              title="Bảng đối thủ"
+              ships={p2Ships}
+              shots={p1Shots}
+              onCellClick={handleShoot}
+              hideShips={!winner}
+              interactive={!winner}
+              gameStarted={true}
+              activeAnimation={activeAnimation}
+            />
+          </div>
+        );
+      }
+
+      if (isPlayer2) {
+        return (
+          <div className="flex flex-col md:flex-row gap-8 lg:gap-16 justify-center w-full">
+            <Board
+              title="Bảng của bạn"
+              ships={p2Ships}
+              shots={p1Shots}
+              onCellClick={() => {}}
+              hideShips={false}
+              interactive={false}
+              gameStarted={true}
+            />
+            <Board
+              title="Bảng đối thủ"
+              ships={p1Ships}
+              shots={p2Shots}
+              onCellClick={handleShoot}
+              hideShips={!winner}
+              interactive={!winner}
+              gameStarted={true}
+              activeAnimation={activeAnimation}
+            />
+          </div>
+        );
+      }
+
+      // Spectator
+      return (
+        <div className="flex flex-col md:flex-row gap-8 lg:gap-16 justify-center w-full">
+          <Board
+            title={`Bảng của ${player1Name || "Đội Xanh"}`}
+            ships={p1Ships}
+            shots={p2Shots}
+            onCellClick={() => {}}
+            hideShips={!winner}
+            interactive={false}
+            gameStarted={true}
+            activeAnimation={activeAnimation && activeAnimation.result === "hit" ? undefined : activeAnimation} // Avoid weird visual bugs for specs
+          />
+          <Board
+            title={`Bảng của ${player2Name || "Đội Đỏ"}`}
+            ships={p2Ships}
+            shots={p1Shots}
+            onCellClick={() => {}}
+            hideShips={!winner}
+            interactive={false}
+            gameStarted={true}
+          />
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <main
+      className={`flex h-[100dvh] flex-col items-center justify-center p-4 lg:p-6 transition-colors duration-300 overflow-hidden ${isDarkMode ? "bg-slate-900" : "bg-zinc-50"}`}
+    >
+      {/* Floating Buttons: Settings & Theme */}
+      {hasInitialized && (
+        <div className="fixed right-4 top-4 z-50 flex gap-3">
+          <div className="relative group flex justify-center">
+            <button
+              onClick={() => setShowNameModal(true)}
+              className={`flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full shadow-lg transition-all hover:scale-105 ${isDarkMode ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200"}`}
+            >
+              <div className="w-5 h-5 flex items-center justify-center font-bold">
+                {playerName ? playerName.charAt(0).toUpperCase() : "U"}
+              </div>
+            </button>
+            <div className="absolute top-full mt-2 right-0 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+              Đổi tên người chơi
+            </div>
+          </div>
+          <div className="relative group flex justify-center">
+            <button
+              onClick={toggleTheme}
+              className={`flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full shadow-lg transition-all hover:scale-105 ${
+                isDarkMode
+                  ? "bg-slate-800 text-yellow-400 hover:bg-slate-700"
+                  : "bg-white text-slate-800 hover:bg-zinc-100 border border-zinc-200"
+              }`}
+            >
+              {isDarkMode ? "☀️" : "🌙"}
+            </button>
+            <div className="absolute top-full mt-2 right-0 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
+              {isDarkMode ? "Giao diện sáng" : "Giao diện tối"}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <JoinRoomModal
+        isOpen={showNameModal}
+        gameName="Bắn Thuyền"
+        initialName={playerName || ""}
+        hasRoomId={!!roomId}
+        requestedRole={requestedRole}
+        onRoleChange={setRequestedRole}
+        onSubmit={handleJoinRoom}
+      />
+
+      <div className="grid w-full h-full max-h-full max-w-[1600px] flex-1 grid-cols-1 lg:grid-cols-[380px_1fr] gap-4 lg:gap-8 overflow-hidden pt-14 lg:pt-0">
+        <div className="w-full h-full overflow-hidden">
+          <BattleshipSidebar isDarkMode={isDarkMode} />
+        </div>
+        
+        <div className="flex w-full h-full overflow-y-auto overflow-x-hidden p-4">
+          <div className="flex flex-col items-center justify-center relative w-full min-h-full mx-auto">
+            
+            {/* Center Area Banner */}
+            <div className={`text-xl font-bold mb-6 tracking-wide uppercase ${isDarkMode ? "text-slate-300" : "text-zinc-600"}`}>
+              {gamePhase === "placing" && !isSpectator && "Sắp xếp Thủy Đội"}
+              {gamePhase === "playing" && "Tham chiến"}
+              {gamePhase === "ended" && "Trận chiến kết thúc"}
+            </div>
+
+            {/* Board Area */}
+            {renderBoards()}
+
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
