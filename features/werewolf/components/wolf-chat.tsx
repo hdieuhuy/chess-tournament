@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { GiWolfHead } from "react-icons/gi";
 import { FaHeart, FaSun } from "react-icons/fa";
-import { ChatMessage } from "./types";
+import { ChatMessage } from "../types";
 
 type PrivateChatProps = {
   wolfChat: ChatMessage[];

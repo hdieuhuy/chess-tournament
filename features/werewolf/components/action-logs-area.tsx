@@ -1,6 +1,6 @@
 import { FaMoon, FaSun } from "react-icons/fa";
-import { ActionLog, RoleConfig } from "./types";
-import { defaultRoles } from "./utils";
+import { ActionLog, RoleConfig } from "../types";
+import { defaultRoles } from "../utils";
 
 type ActionLogsAreaProps = {
   actionLogs: ActionLog[];

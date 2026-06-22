@@ -14,7 +14,7 @@ import {
   GiMagicSwirl,
   GiMusicalNotes,
 } from "react-icons/gi";
-import { RoleConfig } from "./types";
+import { RoleConfig } from "../types";
 
 export const RoleIcon = ({
   id,

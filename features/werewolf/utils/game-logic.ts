@@ -1,4 +1,4 @@
-import { RoleConfig, GameState } from "./types";
+import { RoleConfig, GameState } from "../types";
 
 export const getNextNightPhase = (
   currentPhase: string | null,

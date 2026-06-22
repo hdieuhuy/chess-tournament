@@ -3,12 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { 
-  Gamepad2, 
-  Zap, 
-  Users, 
-  Globe2, 
-  Trophy, 
+import {
+  Gamepad2,
+  Zap,
+  Users,
+  Globe2,
+  Trophy,
   Sparkles,
   Swords,
   ChevronRight
@@ -162,7 +162,7 @@ export default function LandingPage() {
 
   return (
     <div className="relative min-h-screen bg-slate-50 text-slate-900 selection:bg-indigo-500/30 font-sans overflow-hidden">
-      
+
       {/* GLOBAL BACKGROUND EFFECTS */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-400/20 blur-[120px] mix-blend-multiply" />
@@ -175,7 +175,7 @@ export default function LandingPage() {
       {/* HERO SECTION */}
       <section className="relative z-10 pt-12 pb-16 md:pt-16 md:pb-20 px-4 min-h-[90vh] flex items-center justify-center">
         <div className="max-w-5xl mx-auto text-center flex flex-col items-center w-full">
-          
+
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -187,7 +187,7 @@ export default function LandingPage() {
             <span className="relative z-10 text-2xl sm:text-3xl font-black tracking-tight text-slate-800">Boardgame Portal</span>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
@@ -197,42 +197,42 @@ export default function LandingPage() {
             <span className="text-sm font-medium text-slate-600">Nền tảng Board Game Thế hệ mới</span>
           </motion.div>
 
-          <motion.h1 
+          <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-slate-900 mb-4 leading-[1.1]"
           >
-            Giải trí Cùng Bạn Bè <br className="hidden md:block"/>
+            Giải trí Cùng Bạn Bè <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-rose-600">
               Mọi Lúc, Mọi Nơi
             </span>
           </motion.h1>
 
-          <motion.p 
+          <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
             className="text-base md:text-lg lg:text-xl text-slate-600 max-w-2xl mb-8 leading-relaxed px-4"
           >
-            Trải nghiệm hàng chục trò chơi Board Game và Party Game hấp dẫn nhất. 
+            Trải nghiệm hàng chục trò chơi Board Game và Party Game hấp dẫn nhất.
             Không cần cài đặt, không cần đăng ký phức tạp. Chỉ cần tạo phòng và chiến!
           </motion.p>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
             className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto"
           >
-            <button 
+            <button
               onClick={scrollToGames}
               className="w-full sm:w-auto group relative flex items-center justify-center gap-2 px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold text-lg hover:bg-slate-800 transition-all hover:shadow-xl hover:shadow-slate-900/20 active:scale-95 cursor-pointer"
             >
               <Gamepad2 className="w-5 h-5 group-hover:-rotate-12 transition-transform" />
               Khám Phá Trò Chơi
             </button>
-            <a 
+            <a
               href="#how-it-works"
               className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-white text-slate-700 rounded-2xl font-bold text-lg border border-slate-200 hover:bg-slate-50 transition-all hover:shadow-md active:scale-95 cursor-pointer"
             >
@@ -247,12 +247,12 @@ export default function LandingPage() {
       <section className="relative z-10 py-20 bg-white/50 backdrop-blur-xl border-y border-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 mb-4">Tại sao chọn Antigravity?</h2>
+            <h2 className="text-3xl font-bold text-slate-900 mb-4">Tại sao chọn Boardgame Portal?</h2>
             <p className="text-slate-600 max-w-2xl mx-auto">Thiết kế tối giản, công nghệ hiện đại, mang lại trải nghiệm chơi game tuyệt vời nhất cho bạn và bạn bè.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
             {FEATURES.map((feat, idx) => (
-              <motion.div 
+              <motion.div
                 key={idx}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -274,7 +274,7 @@ export default function LandingPage() {
       {/* GAME COLLECTION SECTION */}
       <section id="game-collection" className="relative z-10 py-24 px-6">
         <div className="max-w-7xl mx-auto">
-          
+
           <div className="mb-16 flex flex-col items-center text-center">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-xl shadow-indigo-500/20 mb-6">
               <Swords className="w-8 h-8" />
@@ -321,7 +321,7 @@ export default function LandingPage() {
 
         <div className="relative max-w-7xl mx-auto px-6">
           <div className="text-center mb-20">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -339,8 +339,8 @@ export default function LandingPage() {
             <div className="hidden md:block absolute top-12 left-[15%] right-[15%] h-[2px] bg-gradient-to-r from-indigo-500/0 via-indigo-500/30 to-indigo-500/0" />
 
             {STEPS.map((s, i) => (
-              <motion.div 
-                key={i} 
+              <motion.div
+                key={i}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -389,7 +389,7 @@ function GameCard({ game, index }: { game: any, index: number }) {
         className={`relative h-full overflow-hidden rounded-3xl bg-white p-6 shadow-sm border border-slate-200 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${game.borderGlow}`}
       >
         <div className={`absolute inset-0 bg-gradient-to-br opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${game.bgGradient}`} />
-        
+
         <div className="relative z-10 flex flex-col h-full">
           <div className="flex justify-between items-start mb-6">
             <div className={`relative flex h-16 w-16 items-center justify-center rounded-2xl shadow-sm overflow-hidden ${game.iconBg}`}>
@@ -403,7 +403,7 @@ function GameCard({ game, index }: { game: any, index: number }) {
               <ChevronRight className="w-5 h-5 text-slate-400" />
             </div>
           </div>
-          
+
           <div className="mt-auto">
             <h3 className="mb-1 text-xl font-bold text-slate-900 transition-colors group-hover:text-indigo-600">
               {game.title}

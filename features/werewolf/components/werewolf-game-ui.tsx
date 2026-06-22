@@ -1,0 +1,2831 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+"use client";
+
+import {
+  useState,
+  useEffect,
+  useRef,
+  Suspense,
+  useCallback,
+  useReducer,
+} from "react";
+import Link from "next/link";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { Modal } from "@/components/Modal";
+import { FaGhost, FaMoon, FaSun, FaEye, FaUser, FaHeart } from "react-icons/fa";
+import {
+  GiWolfHead,
+  GiShield,
+  GiDirewolf,
+  GiWitchFlight,
+  GiMusket,
+  GiBowieKnife,
+  GiMagicSwirl,
+  GiMusicalNotes,
+} from "react-icons/gi";
+import {
+  RoleConfig,
+  ActionLog,
+  ChatMessage,
+  GameState,
+  GameAction,
+} from "../types";
+import { defaultRoles, RoleIcon, getRoleColor } from "../utils";
+import PlayerGrid from "./player-grid";
+import PrivateChat from "./wolf-chat";
+import RoleConfigPanel from "./role-config-panel";
+import ActionLogsArea from "./action-logs-area";
+import toast from "react-hot-toast";
+import { getNextNightPhase, checkWinCondition } from "../utils/game-logic";
+import { useWerewolf } from "../contexts/werewolf-context";
+import { useWerewolfSync } from "../hooks/use-werewolf-sync";
+import { ROLE_STRATEGIES } from "./night-roles";
+
+const generateId = () => Math.random().toString(36).substring(2, 9);
+const getRandomInt = (min: number, max: number) =>
+  Math.floor(Math.random() * (max - min + 1)) + min;
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const newArr = [...array];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
+};
+
+const initialGameState: GameState = {
+  hostName: null,
+  players: [],
+  spectators: [],
+  gameStarted: false,
+  roleConfig: defaultRoles,
+  playerRoles: {},
+  originalRoles: {},
+  phase: "lobby",
+  dayPhase: null,
+  dayTimeLeft: 0,
+  dayVotes: {},
+  accusedPlayer: null,
+  executionVotes: {},
+  dayCount: 0,
+  alivePlayers: [],
+  lastProtected: null,
+  witchPotions: { heal: 1, poison: 1 },
+  wolfVotes: {},
+  wolfVictim: [],
+  hunterTarget: null,
+  witchAction: { heal: [], poison: null },
+  deadThisNight: [],
+  nightSelection: null,
+  actionConfirmed: false,
+  seerResult: null,
+  actionLogs: [],
+  nightPhase: null,
+  nightTimeLeft: 0,
+  confirmedPlayers: [],
+  wolfChat: [],
+  loversChat: [],
+  generalChat: [],
+  winner: null,
+  extraLives: {},
+  cursedWolfUsed: false,
+  infectedPlayer: null,
+  fogWolfUsed: false,
+  whiteWolfVictim: null,
+  headhunterTarget: null,
+  assassinTarget: null,
+  cupidTargets: null,
+  mediumUsed: false,
+  mediumResurrect: null,
+  hypnotizedPlayers: [],
+  extraWolfKill: false,
+  activeExtraWolfKill: false,
+};
+
+function gameReducer(state: GameState, action: GameAction): GameState {
+  switch (action.type) {
+    case "UPDATE":
+      return { ...state, ...action.payload };
+    case "UPDATE_FUNCTION":
+      return { ...state, ...action.payload(state) };
+    default:
+      return state;
+  }
+}
+
+// ============================================================================
+// ==================== STRATEGY PATTERN CHO ROLE UIs =========================
+// ============================================================================
+
+type RoleUIProps = {
+  gameState: GameState;
+  dispatch: React.Dispatch<GameAction>;
+  channel: RealtimeChannel | null;
+  playerName: string;
+  executeAction: (
+    logContent: string | null,
+    stateUpdates: Partial<GameState>,
+    broadcastEvent?: { name: string; payload: any },
+  ) => void;
+};
+
+
+
+
+
+const WerewolfNightUI = (props: any) => {
+  // It receives gameState and other props. We need to extract the role id from gameState.playerRoles[playerName].id
+  const role = props.gameState?.playerRoles[props.playerName]?.id || props.gameState?.nightPhase;
+  const Component = ROLE_STRATEGIES[role];
+  if (!Component) return null;
+  return <Component {...props} />;
+};
+
+
+function WerewolfGameUI() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const roomParam = searchParams.get("room");
+
+  const [inputName, setInputName] = useState<string>("");
+
+  const {
+    gameState,
+    dispatch,
+    channel,
+    playerName,
+    roomId,
+    setRoomId,
+    setPlayerName,
+    hasInitialized,
+    setHasInitialized,
+    requestedRole,
+    setRequestedRole,
+    stateRef,
+    setChannel
+  } = useWerewolf();
+  
+  useWerewolfSync();
+
+  const {
+    hostName,
+    players,
+    spectators,
+    gameStarted,
+    roleConfig,
+    playerRoles,
+    phase,
+    dayPhase,
+    dayTimeLeft,
+    dayVotes,
+    accusedPlayer,
+    executionVotes,
+    dayCount,
+    alivePlayers,
+    wolfVotes,
+    wolfVictim,
+    actionLogs,
+    nightPhase,
+    nightTimeLeft,
+    confirmedPlayers,
+    wolfChat,
+    loversChat,
+    winner,
+    fogWolfUsed,
+    headhunterTarget,
+    cupidTargets,
+  } = gameState;
+
+  const isNight = phase === "night" && gameStarted;
+
+  const [showNameModal, setShowNameModal] = useState<boolean>(true);
+  const [linkCopied, setLinkCopied] = useState<boolean>(false);
+  const [showGameSummaryModal, setShowGameSummaryModal] =
+    useState<boolean>(false);
+  const [summaryTab, setSummaryTab] = useState<"night" | "day">("night");
+  const [activeLogTab, setActiveLogTab] = useState<"night" | "day">("night");
+  const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (roomParam) {
+      setRoomId(roomParam);
+    }
+
+    const savedName = localStorage.getItem("playerName");
+    if (savedName) {
+      setPlayerName(savedName);
+      setInputName(savedName);
+
+      if (!roomParam) {
+        setShowNameModal(false);
+        setHasInitialized(true);
+        const newRoomId = generateId();
+        setRoomId(newRoomId);
+        dispatch({
+          type: "UPDATE",
+          payload: { hostName: savedName, players: [savedName] },
+        });
+        localStorage.setItem(`joinedRoom_${newRoomId}`, "player");
+        router.replace(`${pathname}?room=${newRoomId}`);
+      } else {
+        const joinedRole = localStorage.getItem(`joinedRoom_${roomParam}`);
+        if (joinedRole) {
+          setRequestedRole(joinedRole as "player" | "spectator");
+          setShowNameModal(false);
+          setHasInitialized(true);
+        }
+      }
+    }
+    setIsCheckingStorage(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
+  
+
+
+
+  const handleJoinRoom = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputName.trim()) return;
+
+    const newName = inputName.trim();
+    setPlayerName(newName);
+    localStorage.setItem("playerName", newName);
+    if (roomId) localStorage.setItem(`joinedRoom_${roomId}`, requestedRole);
+    setShowNameModal(false);
+
+    if (!hasInitialized) {
+      setHasInitialized(true);
+      if (!roomId) {
+        const newRoomId = generateId();
+        setRoomId(newRoomId);
+        dispatch({
+          type: "UPDATE",
+          payload: { hostName: newName, players: [newName] },
+        });
+        localStorage.setItem(`joinedRoom_${newRoomId}`, "player");
+        router.replace(`${pathname}?room=${newRoomId}`);
+      }
+    } else {
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "update-name",
+          payload: { oldName: playerName, newName },
+        });
+      }
+      dispatch({
+        type: "UPDATE_FUNCTION",
+        payload: (prev) => ({
+          hostName: prev.hostName === playerName ? newName : prev.hostName,
+          players: prev.players.map((p) => (p === playerName ? newName : p)),
+          spectators: prev.spectators.map((s) =>
+            s === playerName ? newName : s,
+          ),
+        }),
+      });
+    }
+  };
+
+  const handleKickPlayer = (targetName: string) => {
+    if (playerName !== hostName || !channel || gameStarted) return;
+
+    channel.send({
+      type: "broadcast",
+      event: "kick-player",
+      payload: { playerName: targetName },
+    });
+
+    const state = stateRef.current;
+    const newPlayers = state.players.filter((p) => p !== targetName);
+    const newSpecs = state.spectators.filter((s) => s !== targetName);
+
+    dispatch({
+      type: "UPDATE",
+      payload: { players: newPlayers, spectators: newSpecs },
+    });
+    stateRef.current.players = newPlayers;
+    stateRef.current.spectators = newSpecs;
+
+    setTimeout(() => {
+      channel.send({
+        type: "broadcast",
+        event: "room-sync",
+        payload: {
+          ...stateRef.current,
+          players: newPlayers,
+          spectators: newSpecs,
+        },
+      });
+    }, 50);
+  };
+
+  const executeDayExecution = useCallback(
+    (executedPlayer: string) => {
+      const state = stateRef.current;
+      const newExtraLives = { ...state.extraLives };
+      const actualDeaths = new Set<string>();
+
+      if (newExtraLives[executedPlayer] > 0) {
+        newExtraLives[executedPlayer] -= 1;
+      } else {
+        actualDeaths.add(executedPlayer);
+      }
+
+      const deathQueue = Array.from(actualDeaths);
+      while (deathQueue.length > 0) {
+        const currentDead = deathQueue.shift()!;
+
+        if (
+          state.playerRoles[currentDead]?.id === "hunter" &&
+          state.hunterTarget
+        ) {
+          const hTarget = state.hunterTarget;
+          if (newExtraLives[hTarget] > 0) {
+            newExtraLives[hTarget] -= 1;
+          } else if (!actualDeaths.has(hTarget)) {
+            actualDeaths.add(hTarget);
+            deathQueue.push(hTarget);
+          }
+        }
+
+        if (state.cupidTargets) {
+          const [l1, l2] = state.cupidTargets;
+          if (currentDead === l1 && !actualDeaths.has(l2)) {
+            if (newExtraLives[l2] > 0) newExtraLives[l2] -= 1;
+            else {
+              actualDeaths.add(l2);
+              deathQueue.push(l2);
+            }
+          } else if (currentDead === l2 && !actualDeaths.has(l1)) {
+            if (newExtraLives[l1] > 0) newExtraLives[l1] -= 1;
+            else {
+              actualDeaths.add(l1);
+              deathQueue.push(l1);
+            }
+          }
+        }
+      }
+
+      const newAlive = state.alivePlayers.filter((p) => !actualDeaths.has(p));
+
+      let newExtraWolfKill = state.extraWolfKill;
+      actualDeaths.forEach((dead) => {
+        if (state.playerRoles[dead]?.id === "wolf_cub") {
+          newExtraWolfKill = true;
+        }
+      });
+
+      let newWinner: GameState["winner"] = checkWinCondition(
+        newAlive,
+        state.playerRoles,
+        state.cupidTargets,
+        state.hypnotizedPlayers,
+      );
+
+      // Kẻ Ngốc chiến thắng nếu bị treo cổ
+      if (
+        actualDeaths.has(executedPlayer) &&
+        state.playerRoles[executedPlayer]?.id === "fool"
+      ) {
+        newWinner = "fool";
+      }
+
+      // Thợ Săn Người chiến thắng nếu mục tiêu bị treo cổ và Thợ Săn Người còn sống
+      const headhunterName = Object.keys(state.playerRoles).find(
+        (p) => state.playerRoles[p]?.id === "headhunter",
+      );
+      if (
+        actualDeaths.has(executedPlayer) &&
+        state.headhunterTarget === executedPlayer &&
+        headhunterName &&
+        state.alivePlayers.includes(headhunterName)
+      ) {
+        newWinner = "headhunter";
+      }
+
+      const finalDeadArray = Array.from(actualDeaths);
+
+      let content = "";
+      if (actualDeaths.has(executedPlayer)) {
+        content = `Làng đã quyết định treo cổ ${executedPlayer}. ${finalDeadArray.length > 1 ? `Ngoài ra ${finalDeadArray.filter((p) => p !== executedPlayer).join(", ")} cũng đã chết theo.` : ""}`;
+      } else {
+        content = `Làng đã biểu quyết treo cổ ${executedPlayer}, nhưng với quyền năng của Trưởng Làng, người này vẫn còn sống!`;
+      }
+
+      const execVoteDetails = Object.entries(state.executionVotes)
+        .map(
+          ([voter, vote]) =>
+            `${voter} ➔ ${vote === "kill" ? "Treo cổ" : "Tha bổng"}`,
+        )
+        .join(", ");
+      const execVoteLog: ActionLog = {
+        id: generateId(),
+        dayCount: state.dayCount,
+        roleId: "system",
+        playerName: "system",
+        content: execVoteDetails
+          ? `Chi tiết phiếu sinh tử: ${execVoteDetails}`
+          : "Không có ai tham gia phiếu sinh tử.",
+      };
+
+      const sysLog: ActionLog = {
+        id: generateId(),
+        dayCount: state.dayCount,
+        roleId: "system",
+        playerName: "system",
+        content,
+      };
+
+      const newLogs = [...state.actionLogs, execVoteLog, sysLog];
+
+      if (newWinner) {
+        const endLog: ActionLog = {
+          id: generateId(),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content:
+            newWinner === "lovers"
+              ? "Trò chơi kết thúc! Cặp đôi đã sống sót đến cuối cùng và giành chiến thắng!"
+              : newWinner === "assassin"
+                ? "Trò chơi kết thúc! Sát Thủ đã tiêu diệt hầu hết làng và giành chiến thắng."
+                : newWinner === "headhunter"
+                  ? "Trò chơi kết thúc! Làng đã treo cổ mục tiêu của Thợ Săn Người. Thợ Săn Người giành chiến thắng!"
+                  : newWinner === "fool"
+                    ? "Trò chơi kết thúc! Kẻ Ngốc đã đánh lừa được cả làng và bị treo cổ. Kẻ Ngốc giành chiến thắng!"
+                    : newWinner === "wolves"
+                      ? "Trò chơi kết thúc! Phe Sói đã chiến thắng."
+                      : newWinner === "pied_piper"
+                        ? "Trò chơi kết thúc! Người Thổi Sáo đã thôi miên toàn bộ dân làng và giành chiến thắng!"
+                        : "Trò chơi kết thúc! Phe Dân làng đã chiến thắng.",
+        };
+        newLogs.push(endLog);
+      }
+
+      const updatePayload: Partial<GameState> = {
+        alivePlayers: newAlive,
+        extraLives: newExtraLives,
+        dayPhase: null,
+        dayTimeLeft: newWinner ? 0 : 5,
+        actionLogs: newLogs,
+        extraWolfKill: newExtraWolfKill,
+      };
+      if (newWinner) {
+        updatePayload.phase = "game_over";
+        updatePayload.winner = newWinner;
+      }
+      dispatch({ type: "UPDATE", payload: updatePayload });
+
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "execution-result",
+          payload: {
+            phase: newWinner ? "game_over" : "day",
+            winner: newWinner,
+            alivePlayers: newAlive,
+            extraLives: newExtraLives,
+            dayPhase: null,
+            dayTimeLeft: newWinner ? 0 : 5,
+            actionLogs: newLogs,
+            extraWolfKill: newExtraWolfKill,
+          },
+        });
+      }
+    },
+    [channel],
+  );
+
+  const executeNightResolution = useCallback(() => {
+    const state = stateRef.current;
+    const deaths = new Set<string>();
+
+    const newPlayerRoles = { ...state.playerRoles };
+    const newLogs = [...state.actionLogs];
+
+    if (state.wolfVictim && state.wolfVictim.length > 0) {
+      state.wolfVictim.forEach((victim) => {
+        const protectedByGuard = state.lastProtected === victim;
+        const savedByWitch = (state.witchAction.heal || []).includes(victim);
+        if (!protectedByGuard && !savedByWitch) {
+          if (state.infectedPlayer === victim) {
+            // Will handle in infectedPlayer block
+          } else if (state.playerRoles[victim]?.id === "half_wolf") {
+            newPlayerRoles[victim] = {
+              id: "werewolf",
+              name: "Sói",
+              count: 1,
+            };
+            newLogs.push({
+              id: generateId(),
+              dayCount: state.dayCount,
+              roleId: "werewolf",
+              playerName: victim,
+              content: `Bán Sói ${victim} đã bị cắn và biến thành Sói từ đêm nay!`,
+            });
+          } else {
+            deaths.add(victim);
+          }
+        }
+      });
+    }
+
+    if (state.witchAction.poison) {
+      deaths.add(state.witchAction.poison);
+    }
+
+    if (state.assassinTarget) {
+      if (state.lastProtected !== state.assassinTarget) {
+        deaths.add(state.assassinTarget);
+      }
+    }
+
+    if (state.infectedPlayer) {
+      if (state.infectedPlayer === state.lastProtected) {
+        newLogs.push({
+          id: generateId(),
+          dayCount: state.dayCount,
+          roleId: "werewolf",
+          playerName: state.infectedPlayer,
+          content: `Sói Nguyền lây nhiễm thất bại do ${state.infectedPlayer} đã được Bảo vệ.`,
+        });
+      } else {
+        newPlayerRoles[state.infectedPlayer] = {
+          id: "werewolf",
+          name: "Sói",
+          count: 1,
+        };
+        newLogs.push({
+          id: generateId(),
+          dayCount: state.dayCount,
+          roleId: "werewolf",
+          playerName: state.infectedPlayer,
+          content: `Sói Nguyền lây nhiễm thành công! ${state.infectedPlayer} đã trở thành Sói.`,
+        });
+      }
+    }
+
+    if (state.whiteWolfVictim) {
+      deaths.add(state.whiteWolfVictim);
+    }
+
+    const deadArray = Array.from(deaths);
+    const newExtraLives = { ...state.extraLives };
+    const actualDeaths = new Set<string>();
+
+    // Process initial deaths
+    for (const dead of deadArray) {
+      if (newExtraLives[dead] > 0) {
+        newExtraLives[dead] -= 1;
+      } else {
+        actualDeaths.add(dead);
+      }
+    }
+
+    const deathQueue = Array.from(actualDeaths);
+    while (deathQueue.length > 0) {
+      const currentDead = deathQueue.shift()!;
+
+      if (
+        state.playerRoles[currentDead]?.id === "hunter" &&
+        state.hunterTarget
+      ) {
+        const hTarget = state.hunterTarget;
+        if (newExtraLives[hTarget] > 0) {
+          newExtraLives[hTarget] -= 1;
+        } else if (!actualDeaths.has(hTarget)) {
+          actualDeaths.add(hTarget);
+          deathQueue.push(hTarget);
+        }
+      }
+
+      if (state.cupidTargets) {
+        const [l1, l2] = state.cupidTargets;
+        if (currentDead === l1 && !actualDeaths.has(l2)) {
+          if (newExtraLives[l2] > 0) newExtraLives[l2] -= 1;
+          else {
+            actualDeaths.add(l2);
+            deathQueue.push(l2);
+          }
+        } else if (currentDead === l2 && !actualDeaths.has(l1)) {
+          if (newExtraLives[l1] > 0) newExtraLives[l1] -= 1;
+          else {
+            actualDeaths.add(l1);
+            deathQueue.push(l1);
+          }
+        }
+      }
+    }
+
+    let newExtraWolfKill = state.extraWolfKill;
+    actualDeaths.forEach((dead) => {
+      if (state.playerRoles[dead]?.id === "wolf_cub") {
+        newExtraWolfKill = true;
+      }
+    });
+
+    let currentMediumUsed = state.mediumUsed;
+    if (state.mediumResurrect) {
+      currentMediumUsed = true;
+      actualDeaths.delete(state.mediumResurrect); // Tránh người được cứu chết nếu họ bị Sói cắn đêm nay
+    }
+
+    const newAlive = state.alivePlayers.filter((p) => !actualDeaths.has(p));
+    if (
+      state.mediumResurrect &&
+      !newAlive.includes(state.mediumResurrect) &&
+      state.players.includes(state.mediumResurrect)
+    ) {
+      newAlive.push(state.mediumResurrect); // Đưa người chết từ ngày trước trở lại danh sách sống
+    }
+
+    const newWinner = checkWinCondition(
+      newAlive,
+      newPlayerRoles,
+      state.cupidTargets,
+      state.hypnotizedPlayers,
+    );
+    const newPhase = newWinner ? "game_over" : "day";
+
+    const newPotions = { ...state.witchPotions };
+    if ((state.witchAction.heal || []).length > 0)
+      newPotions.heal -= (state.witchAction.heal || []).length;
+    if (state.witchAction.poison) newPotions.poison -= 1;
+
+    const finalDeadArray = Array.from(actualDeaths);
+    const sysLog: ActionLog = {
+      id: generateId(),
+      dayCount: state.dayCount,
+      roleId: "system",
+      playerName: "system",
+      content:
+        finalDeadArray.length > 0
+          ? `Báo cáo buổi sáng: Đêm qua những người sau đã chết: ${finalDeadArray.join(", ")}`
+          : "Báo cáo buổi sáng: Đêm qua là một đêm bình yên, không có ai chết!",
+    };
+    newLogs.push(sysLog);
+
+    if (state.mediumResurrect) {
+      newLogs.push({
+        id: generateId(),
+        dayCount: state.dayCount,
+        roleId: "system",
+        playerName: "system",
+        content: `✨ Người chơi ${state.mediumResurrect} đã được hồi sinh từ cõi âm!`,
+      });
+    }
+
+    if (newWinner) {
+      const endLog: ActionLog = {
+        id: generateId(),
+        dayCount: state.dayCount,
+        roleId: "system",
+        playerName: "system",
+        content:
+          newWinner === "lovers"
+            ? "Trò chơi kết thúc! Cặp đôi đã sống sót đến cuối cùng và giành chiến thắng!"
+            : newWinner === "assassin"
+              ? "Trò chơi kết thúc! Sát Thủ đã tiêu diệt hầu hết làng và giành chiến thắng."
+              : newWinner === "wolves"
+                ? "Trò chơi kết thúc! Phe Sói đã chiến thắng."
+                : newWinner === "white_wolf"
+                  ? "Trò chơi kết thúc! Sói Trắng đã trở thành kẻ sống sót cuối cùng và giành chiến thắng!"
+                  : newWinner === "pied_piper"
+                    ? "Trò chơi kết thúc! Người Thổi Sáo đã thôi miên toàn bộ dân làng và giành chiến thắng!"
+                    : "Trò chơi kết thúc! Phe Dân làng đã chiến thắng.",
+      };
+      newLogs.push(endLog);
+    }
+
+    dispatch({
+      type: "UPDATE",
+      payload: {
+        playerRoles: newPlayerRoles,
+        alivePlayers: newAlive,
+        extraLives: newExtraLives,
+        witchPotions: newPotions,
+        deadThisNight: Array.from(actualDeaths),
+        actionLogs: newLogs,
+        phase: newPhase,
+        winner: newWinner,
+        dayPhase: newPhase === "day" ? "discussion" : null,
+        dayTimeLeft: newPhase === "day" ? 480 : 0,
+        nightPhase: null,
+        nightTimeLeft: 0,
+        confirmedPlayers: [],
+        nightSelection: null,
+        actionConfirmed: false,
+        seerResult: null,
+        wolfVotes: {},
+        wolfVictim: [],
+        witchAction: { heal: [], poison: null },
+        whiteWolfVictim: null,
+        dayVotes: {},
+        accusedPlayer: null,
+        executionVotes: {},
+        infectedPlayer: null,
+        assassinTarget: null,
+        mediumUsed: currentMediumUsed,
+        mediumResurrect: null,
+        extraWolfKill: newExtraWolfKill,
+        activeExtraWolfKill: false,
+      },
+    });
+
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "phase-change",
+        payload: {
+          phase: newPhase,
+          winner: newWinner,
+          dayCount: state.dayCount,
+          alivePlayers: newAlive,
+          playerRoles: newPlayerRoles,
+          infectedPlayer: null,
+          extraLives: newExtraLives,
+          witchPotions: newPotions,
+          deadThisNight: Array.from(actualDeaths),
+          nightPhase: null,
+          nightTimeLeft: 0,
+          confirmedPlayers: [],
+          actionLogs: newLogs,
+          dayPhase: newPhase === "day" ? "discussion" : null,
+          dayTimeLeft: newPhase === "day" ? 480 : 0,
+          dayVotes: {},
+          accusedPlayer: null,
+          executionVotes: {},
+          whiteWolfVictim: null,
+          assassinTarget: null,
+          mediumUsed: currentMediumUsed,
+          mediumResurrect: null,
+          extraWolfKill: newExtraWolfKill,
+          activeExtraWolfKill: false,
+        },
+      });
+    }
+  }, [channel]);
+
+  const advanceNightPhase = useCallback(() => {
+    const state = stateRef.current;
+    const nextNightPhase = getNextNightPhase(
+      state.nightPhase,
+      state.playerRoles,
+      state.dayCount,
+    );
+
+    if (nextNightPhase) {
+      const timeLimit =
+        nextNightPhase === "hunter" && state.dayCount > 1 ? 15 : 120;
+
+      const newConfirmedPlayers = state.confirmedPlayers.filter(
+        (p) =>
+          state.playerRoles[p]?.id === "seer" ||
+          state.playerRoles[p]?.id === "hunter" ||
+          state.playerRoles[p]?.id === "medium",
+      );
+
+      dispatch({
+        type: "UPDATE_FUNCTION",
+        payload: (prev) => {
+          const role = prev.playerRoles[playerName]?.id;
+          const keepConfirmed =
+            role === "seer" ||
+            role === "hunter" ||
+            role === "medium" ||
+            role === "pied_piper";
+          return {
+            nightPhase: nextNightPhase,
+            nightTimeLeft: timeLimit,
+            confirmedPlayers: newConfirmedPlayers,
+            nightSelection: keepConfirmed ? prev.nightSelection : null,
+            actionConfirmed: keepConfirmed ? prev.actionConfirmed : false,
+            seerResult: keepConfirmed ? prev.seerResult : null,
+          };
+        },
+      });
+
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "night-phase-change",
+          payload: {
+            nightPhase: nextNightPhase,
+            nightTimeLeft: timeLimit,
+            confirmedPlayers: newConfirmedPlayers,
+          },
+        });
+      }
+    } else {
+      executeNightResolution();
+    }
+  }, [channel, executeNightResolution, playerName]);
+
+  const handleNextPhase = useCallback(() => {
+    if (channel && hostName === playerName) {
+      if (phase === "role_reveal" || phase === "day") {
+        const nextDay = phase === "role_reveal" ? 1 : dayCount + 1;
+        const firstNightPhase = getNextNightPhase(null, playerRoles, nextDay);
+
+        if (firstNightPhase) {
+          const timeLimit =
+            firstNightPhase === "hunter" && nextDay > 1 ? 15 : 120;
+          dispatch({
+            type: "UPDATE",
+            payload: {
+              phase: "night",
+              dayCount: nextDay,
+              nightPhase: firstNightPhase,
+              nightTimeLeft: timeLimit,
+              confirmedPlayers: [],
+              nightSelection: null,
+              actionConfirmed: false,
+              seerResult: null,
+              wolfVotes: {},
+              wolfVictim: [],
+              witchAction: { heal: [], poison: null },
+              whiteWolfVictim: null,
+              dayPhase: null,
+              dayTimeLeft: 0,
+              extraWolfKill: false,
+              activeExtraWolfKill: stateRef.current.extraWolfKill,
+            },
+          });
+
+          channel.send({
+            type: "broadcast",
+            event: "phase-change",
+            payload: {
+              phase: "night",
+              dayCount: nextDay,
+              nightPhase: firstNightPhase,
+              nightTimeLeft: timeLimit,
+              confirmedPlayers: [],
+              dayPhase: null,
+              dayTimeLeft: 0,
+              extraWolfKill: false,
+              activeExtraWolfKill: stateRef.current.extraWolfKill,
+            },
+          });
+        } else {
+          executeNightResolution();
+        }
+      }
+    }
+  }, [
+    channel,
+    hostName,
+    playerName,
+    phase,
+    dayCount,
+    playerRoles,
+    executeNightResolution,
+  ]);
+
+  const advanceDayPhase = useCallback(() => {
+    const state = stateRef.current;
+    if (state.dayPhase === "discussion") {
+      dispatch({
+        type: "UPDATE",
+        payload: { dayPhase: "voting", dayTimeLeft: 45 },
+      });
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "day-phase-change",
+          payload: {
+            dayPhase: "voting",
+            dayTimeLeft: 45,
+            dayVotes: {},
+            accusedPlayer: null,
+            executionVotes: {},
+          },
+        });
+      }
+    } else if (state.dayPhase === "voting") {
+      const voteCounts: Record<string, number> = {};
+      Object.entries(state.dayVotes).forEach(([voter, target]) => {
+        if (target !== "skip") {
+          const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
+          voteCounts[target] = (voteCounts[target] || 0) + weight;
+        }
+      });
+
+      const voteDetails = Object.entries(state.dayVotes)
+        .map(
+          ([voter, target]) =>
+            `${voter} ➔ ${target === "skip" ? "Bỏ qua" : target}`,
+        )
+        .join(", ");
+      const voteLog: ActionLog = {
+        id: generateId(),
+        dayCount: state.dayCount,
+        roleId: "system",
+        playerName: "system",
+        content: voteDetails
+          ? `Chi tiết biểu quyết: ${voteDetails}`
+          : "Không có ai tham gia biểu quyết.",
+      };
+
+      let maxVotes = 0;
+      let accused: string | null = null;
+      let tie = false;
+
+      Object.entries(voteCounts).forEach(([target, count]) => {
+        if (count > maxVotes) {
+          maxVotes = count;
+          accused = target;
+          tie = false;
+        } else if (count === maxVotes) {
+          tie = true;
+        }
+      });
+
+      if (accused && !tie) {
+        const sysLog: ActionLog = {
+          id: generateId(),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content: `${accused} có nhiều phiếu nhất (${maxVotes} phiếu) và đang bị đưa lên giàn treo cổ để biện hộ.`,
+        };
+        const newLogs = [...state.actionLogs, voteLog, sysLog];
+
+        dispatch({
+          type: "UPDATE",
+          payload: {
+            dayPhase: "defense",
+            dayTimeLeft: 90,
+            accusedPlayer: accused,
+            actionLogs: newLogs,
+          },
+        });
+
+        if (channel) {
+          channel.send({
+            type: "broadcast",
+            event: "day-phase-change",
+            payload: {
+              dayPhase: "defense",
+              dayTimeLeft: 90,
+              accusedPlayer: accused,
+              actionLogs: newLogs,
+            },
+          });
+        }
+      } else {
+        const sysLog: ActionLog = {
+          id: generateId(),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content:
+            tie && maxVotes > 0
+              ? `Bầu cử hòa (${maxVotes} phiếu). Làng quyết định không treo cổ ai hôm nay.`
+              : `Làng quyết định không treo cổ ai hôm nay.`,
+        };
+        const newLogs = [...state.actionLogs, voteLog, sysLog];
+
+        dispatch({
+          type: "UPDATE",
+          payload: {
+            dayPhase: null,
+            dayTimeLeft: 5,
+            actionLogs: newLogs,
+          },
+        });
+
+        if (channel) {
+          channel.send({
+            type: "broadcast",
+            event: "day-phase-change",
+            payload: {
+              dayPhase: null,
+              dayTimeLeft: 5,
+              accusedPlayer: null,
+              actionLogs: newLogs,
+            },
+          });
+        }
+      }
+    } else if (state.dayPhase === "defense") {
+      dispatch({
+        type: "UPDATE",
+        payload: { dayPhase: "execution", dayTimeLeft: 45 },
+      });
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "day-phase-change",
+          payload: { dayPhase: "execution", dayTimeLeft: 45 },
+        });
+      }
+    } else if (state.dayPhase === "execution") {
+      let killVotes = 0;
+      let saveVotes = 0;
+      Object.entries(state.executionVotes).forEach(([voter, vote]) => {
+        const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
+        if (vote === "kill") killVotes += weight;
+        else if (vote === "save") saveVotes += weight;
+      });
+
+      if (killVotes > saveVotes && state.accusedPlayer) {
+        executeDayExecution(state.accusedPlayer);
+      } else {
+        const execVoteDetails = Object.entries(state.executionVotes)
+          .map(
+            ([voter, vote]) =>
+              `${voter} ➔ ${vote === "kill" ? "Treo cổ" : "Tha bổng"}`,
+          )
+          .join(", ");
+        const execVoteLog: ActionLog = {
+          id: generateId(),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content: execVoteDetails
+            ? `Chi tiết phiếu sinh tử: ${execVoteDetails}`
+            : "Không có ai tham gia phiếu sinh tử.",
+        };
+
+        const sysLog: ActionLog = {
+          id: generateId(),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content: `${state.accusedPlayer} đã được tha bổng với ${saveVotes} phiếu cứu / ${killVotes} phiếu treo cổ.`,
+        };
+        const newLogs = [...state.actionLogs, execVoteLog, sysLog];
+
+        dispatch({
+          type: "UPDATE",
+          payload: {
+            dayPhase: null,
+            dayTimeLeft: 5,
+            actionLogs: newLogs,
+          },
+        });
+
+        if (channel) {
+          channel.send({
+            type: "broadcast",
+            event: "day-phase-change",
+            payload: { dayPhase: null, dayTimeLeft: 5, actionLogs: newLogs },
+          });
+        }
+      }
+    }
+  }, [channel, executeDayExecution]);
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (phase === "night" && gameStarted) {
+      if (nightTimeLeft > 0) {
+        timerRef.current = setTimeout(() => {
+          dispatch({
+            type: "UPDATE_FUNCTION",
+            payload: (prev) => ({ nightTimeLeft: prev.nightTimeLeft - 1 }),
+          });
+          if (
+            hostName === playerName &&
+            channel &&
+            (nightTimeLeft - 1) % 5 === 0
+          ) {
+            channel.send({
+              type: "broadcast",
+              event: "sync-time",
+              payload: { nightTimeLeft: nightTimeLeft - 1 },
+            });
+          }
+        }, 1000);
+      } else if (nightTimeLeft === 0 && hostName === playerName) {
+        advanceNightPhase();
+      }
+    }
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [
+    phase,
+    nightTimeLeft,
+    hostName,
+    playerName,
+    gameStarted,
+    channel,
+    advanceNightPhase,
+  ]);
+
+  const dayTimerRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (phase === "day" && gameStarted) {
+      if (dayTimeLeft > 0) {
+        dayTimerRef.current = setTimeout(() => {
+          dispatch({
+            type: "UPDATE_FUNCTION",
+            payload: (prev) => ({ dayTimeLeft: prev.dayTimeLeft - 1 }),
+          });
+          if (
+            hostName === playerName &&
+            channel &&
+            (dayTimeLeft - 1) % 5 === 0
+          ) {
+            channel.send({
+              type: "broadcast",
+              event: "sync-day-time",
+              payload: { dayTimeLeft: dayTimeLeft - 1 },
+            });
+          }
+        }, 1000);
+      } else if (dayTimeLeft === 0 && hostName === playerName) {
+        if (!dayPhase) {
+          handleNextPhase();
+        } else {
+          advanceDayPhase();
+        }
+      }
+    }
+    return () => {
+      if (dayTimerRef.current) clearTimeout(dayTimerRef.current);
+    };
+  }, [
+    phase,
+    dayPhase,
+    dayTimeLeft,
+    hostName,
+    playerName,
+    gameStarted,
+    channel,
+    advanceDayPhase,
+    dayCount,
+    handleNextPhase,
+  ]);
+
+  const deadRoleTimerRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    if (
+      phase === "night" &&
+      hostName === playerName &&
+      gameStarted &&
+      nightPhase
+    ) {
+      const activePlayersOfRole =
+        nightPhase === "werewolf"
+          ? alivePlayers.filter((p) =>
+              [
+                "werewolf",
+                "cursed_wolf",
+                "fog_wolf",
+                "wolf_cub",
+                "white_wolf",
+              ].includes(playerRoles[p]?.id || ""),
+            )
+          : alivePlayers.filter((p) => playerRoles[p]?.id === nightPhase);
+
+      if (
+        activePlayersOfRole.length === 0 ||
+        (nightPhase === "white_wolf" && (dayCount < 2 || dayCount % 2 !== 0))
+      ) {
+        // Nếu role đã chết (hoặc không ai sống), random delay 10-30s để fake hành động
+        const currentLimit = nightPhase === "hunter" && dayCount > 1 ? 15 : 120;
+        const maxDelay = Math.min(30, currentLimit - 1);
+        const minDelay = Math.min(10, maxDelay);
+        const randomDelay = getRandomInt(minDelay, maxDelay);
+
+        deadRoleTimerRef.current = setTimeout(() => {
+          advanceNightPhase();
+        }, randomDelay * 1000);
+      } else if (
+        activePlayersOfRole.every((p) => confirmedPlayers.includes(p))
+      ) {
+        advanceNightPhase();
+      }
+    }
+    return () => {
+      if (deadRoleTimerRef.current) clearTimeout(deadRoleTimerRef.current);
+    };
+  }, [
+    confirmedPlayers,
+    phase,
+    nightPhase,
+    alivePlayers,
+    playerRoles,
+    hostName,
+    playerName,
+    gameStarted,
+    dayCount,
+    advanceNightPhase,
+  ]);
+
+  // Host Logic to track Wolf votes and set Wolf Victim
+  useEffect(() => {
+    if (
+      phase === "night" &&
+      hostName === playerName &&
+      gameStarted &&
+      nightPhase === "werewolf"
+    ) {
+      const aliveWolves = alivePlayers.filter(
+        (
+          p, // Sói trắng không vote cắn
+        ) =>
+          ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(
+            playerRoles[p]?.id || "",
+          ),
+      );
+      if (aliveWolves.length === 0) {
+        if (wolfVictim.length > 0) {
+          dispatch({ type: "UPDATE", payload: { wolfVictim: [] } });
+          if (channel) {
+            channel.send({
+              type: "broadcast",
+              event: "room-sync",
+              payload: { ...stateRef.current, wolfVotes, wolfVictim: [] },
+            });
+          }
+        }
+      } else {
+        const allVoted = aliveWolves.every((w) => wolfVotes[w] !== undefined);
+        if (allVoted && aliveWolves.length > 0) {
+          const firstVote = wolfVotes[aliveWolves[0]] || [];
+          const sameTarget = aliveWolves.every((w) => {
+            const v = wolfVotes[w] || [];
+            return (
+              v.length === firstVote.length &&
+              v.every((x) => firstVote.includes(x))
+            );
+          });
+
+          const currentVictimSorted = [...wolfVictim].sort().join(",");
+          const newVictimSorted = [...firstVote].sort().join(",");
+
+          if (sameTarget && currentVictimSorted !== newVictimSorted) {
+            dispatch({ type: "UPDATE", payload: { wolfVictim: firstVote } });
+            if (channel) {
+              channel.send({
+                type: "broadcast",
+                event: "room-sync",
+                payload: { ...stateRef.current, wolfVotes, wolfVictim: firstVote },
+              });
+            }
+          } else if (!sameTarget && wolfVictim.length > 0) {
+            dispatch({ type: "UPDATE", payload: { wolfVictim: [] } });
+            if (channel) {
+              channel.send({
+                type: "broadcast",
+                event: "room-sync",
+                payload: { ...stateRef.current, wolfVotes, wolfVictim: [] },
+              });
+            }
+          }
+        }
+      }
+    }
+  }, [
+    wolfVotes,
+    alivePlayers,
+    phase,
+    gameStarted,
+    hostName,
+    playerName,
+    playerRoles,
+    wolfVictim,
+    channel,
+  ]);
+
+  const handleStartGame = () => {
+    if (channel && hostName === playerName) {
+      const totalRoles = roleConfig.reduce((acc, r) => acc + r.count, 0);
+      if (totalRoles !== players.length) {
+        toast.error(
+          `Số lượng vai trò (${totalRoles}) đang khác với số người chơi (${players.length} - đã tính cả chủ phòng). Vui lòng cấu hình lại cho bằng nhau!`,
+        );
+        return;
+      }
+
+      const rolePool: RoleConfig[] = [];
+      roleConfig.forEach((role) => {
+        for (let i = 0; i < role.count; i++) {
+          rolePool.push(role);
+        }
+      });
+
+      // Xáo trộn mảng vai trò (Fisher-Yates shuffle)
+      const shuffledRolePool = shuffleArray(rolePool);
+
+      const newPlayerRoles: Record<string, RoleConfig> = {};
+      const newExtraLives: Record<string, number> = {};
+      players.forEach((player, idx) => {
+        const role = shuffledRolePool[idx];
+        newPlayerRoles[player] = role;
+        if (role.id === "mayor") {
+          newExtraLives[player] = 1;
+        }
+      });
+
+      let initialHeadhunterTarget: string | null = null;
+      const headhunterPlayer = players.find(
+        (p) => newPlayerRoles[p]?.id === "headhunter",
+      );
+      if (headhunterPlayer) {
+        const villagers = players.filter((p) => {
+          const rId = newPlayerRoles[p]?.id;
+          const wolves = [
+            "werewolf",
+            "half_wolf",
+            "white_wolf",
+            "cursed_wolf",
+            "fog_wolf",
+          ];
+          const thirdParties = [
+            "fool",
+            "headhunter",
+            "assassin",
+            "thief",
+            "tanner",
+            "pied_piper",
+          ];
+          return (
+            !wolves.includes(rId as string) &&
+            !thirdParties.includes(rId as string)
+          );
+        });
+        if (villagers.length > 0) {
+          initialHeadhunterTarget =
+            villagers[getRandomInt(0, villagers.length - 1)];
+        }
+      }
+
+      const initialLogs: ActionLog[] = [];
+      if (headhunterPlayer && initialHeadhunterTarget) {
+        initialLogs.push({
+          id: generateId(),
+          dayCount: 1,
+          roleId: "headhunter",
+          playerName: headhunterPlayer,
+          content: `Hệ thống đã chọn ${initialHeadhunterTarget} làm mục tiêu săn thưởng của ${headhunterPlayer}. Hãy tìm cách để Làng treo cổ người này!`,
+        });
+      }
+
+      dispatch({
+        type: "UPDATE",
+        payload: {
+          playerRoles: newPlayerRoles,
+          originalRoles: newPlayerRoles,
+          gameStarted: true,
+          phase: "role_reveal",
+          dayPhase: null,
+          dayTimeLeft: 0,
+          dayVotes: {},
+          accusedPlayer: null,
+          executionVotes: {},
+          dayCount: 0,
+          alivePlayers: players,
+          lastProtected: null,
+          nightSelection: null,
+          actionConfirmed: false,
+          seerResult: null,
+          witchPotions: { heal: 1, poison: 1 },
+          wolfVotes: {},
+          wolfVictim: [],
+          hunterTarget: null,
+          witchAction: { heal: [], poison: null },
+          deadThisNight: [],
+          nightPhase: null,
+          nightTimeLeft: 0,
+          confirmedPlayers: [],
+          actionLogs: initialLogs,
+          wolfChat: [],
+          loversChat: [],
+          generalChat: [],
+          winner: null,
+          extraLives: newExtraLives,
+          cursedWolfUsed: false,
+          infectedPlayer: null,
+          fogWolfUsed: false,
+          whiteWolfVictim: null,
+          headhunterTarget: initialHeadhunterTarget,
+          assassinTarget: null,
+          cupidTargets: null,
+          mediumUsed: false,
+          mediumResurrect: null,
+          hypnotizedPlayers: [],
+          extraWolfKill: false,
+          activeExtraWolfKill: false,
+        },
+      });
+
+      channel.send({
+        type: "broadcast",
+        event: "game-start",
+        payload: {
+          playerRoles: newPlayerRoles,
+          originalRoles: newPlayerRoles,
+          phase: "role_reveal",
+          dayCount: 0,
+          alivePlayers: players,
+          lastProtected: null,
+          witchPotions: { heal: 1, poison: 1 },
+          wolfVotes: {},
+          wolfVictim: [],
+          hunterTarget: null,
+          witchAction: { heal: [], poison: null },
+          deadThisNight: [],
+          nightPhase: null,
+          nightTimeLeft: 0,
+          confirmedPlayers: [],
+          actionLogs: initialLogs,
+          wolfChat: [],
+          loversChat: [],
+          generalChat: [],
+          winner: null,
+          extraLives: newExtraLives,
+          dayPhase: null,
+          dayTimeLeft: 0,
+          dayVotes: {},
+          accusedPlayer: null,
+          executionVotes: {},
+          cursedWolfUsed: false,
+          infectedPlayer: null,
+          fogWolfUsed: false,
+          whiteWolfVictim: null,
+          headhunterTarget: initialHeadhunterTarget,
+          assassinTarget: null,
+          cupidTargets: null,
+          mediumUsed: false,
+          mediumResurrect: null,
+          hypnotizedPlayers: [],
+          extraWolfKill: false,
+          activeExtraWolfKill: false,
+        },
+      });
+    }
+  };
+
+  const handleResetGame = () => {
+    if (channel && hostName === playerName) {
+      dispatch({
+        type: "UPDATE",
+        payload: {
+          gameStarted: false,
+          playerRoles: {},
+          originalRoles: {},
+          phase: "lobby",
+          dayPhase: null,
+          dayTimeLeft: 0,
+          dayVotes: {},
+          accusedPlayer: null,
+          executionVotes: {},
+          dayCount: 0,
+          alivePlayers: [],
+          lastProtected: null,
+          nightSelection: null,
+          actionConfirmed: false,
+          seerResult: null,
+          witchPotions: { heal: 1, poison: 1 },
+          wolfVotes: {},
+          wolfVictim: [],
+          hunterTarget: null,
+          witchAction: { heal: [], poison: null },
+          deadThisNight: [],
+          nightPhase: null,
+          nightTimeLeft: 0,
+          confirmedPlayers: [],
+          actionLogs: [],
+          wolfChat: [],
+          loversChat: [],
+          generalChat: [],
+          winner: null,
+          extraLives: {},
+          cursedWolfUsed: false,
+          infectedPlayer: null,
+          fogWolfUsed: false,
+          whiteWolfVictim: null,
+          headhunterTarget: null,
+          assassinTarget: null,
+          cupidTargets: null,
+          mediumUsed: false,
+          mediumResurrect: null,
+          hypnotizedPlayers: [],
+          extraWolfKill: false,
+          activeExtraWolfKill: false,
+        },
+      });
+
+      channel.send({
+        type: "broadcast",
+        event: "reset-game",
+        payload: {},
+      });
+    }
+  };
+
+  const executeAction = useCallback(
+    (
+      logContent: string | null,
+      stateUpdates: Partial<GameState>,
+      broadcastEvent?: { name: string; payload: any },
+    ) => {
+      let newLog: ActionLog | null = null;
+      if (logContent) {
+        newLog = {
+          id: generateId(),
+          dayCount: stateRef.current.dayCount,
+          roleId: stateRef.current.playerRoles[playerName]?.id || "system",
+          playerName,
+          content: logContent,
+        };
+      }
+
+      dispatch({
+        type: "UPDATE_FUNCTION",
+        payload: (prev) => ({
+          actionConfirmed: true,
+          confirmedPlayers: [
+            ...new Set([...prev.confirmedPlayers, playerName]),
+          ],
+          ...stateUpdates,
+          ...(newLog ? { actionLogs: [...prev.actionLogs, newLog] } : {}),
+        }),
+      });
+
+      if (channel) {
+        if (newLog)
+          channel.send({
+            type: "broadcast",
+            event: "add-log",
+            payload: { log: newLog },
+          });
+        if (broadcastEvent)
+          channel.send({
+            type: "broadcast",
+            event: broadcastEvent.name,
+            payload: broadcastEvent.payload,
+          });
+        channel.send({
+          type: "broadcast",
+          event: "player-confirm",
+          payload: { playerName },
+        });
+      }
+    },
+    [channel, playerName],
+  );
+
+  const updateRoleCount = (id: string, delta: number) => {
+    if (hostName !== playerName) return;
+
+    dispatch({
+      type: "UPDATE_FUNCTION",
+      payload: (prev) => {
+        const newConfig = prev.roleConfig.map((role) => {
+          if (role.id === id) {
+            return { ...role, count: Math.max(0, role.count + delta) };
+          }
+          return role;
+        });
+        if (channel) {
+          channel.send({
+            type: "broadcast",
+            event: "update-roles",
+            payload: { roleConfig: newConfig },
+          });
+        }
+        return { roleConfig: newConfig };
+      },
+    });
+  };
+
+  useEffect(() => {
+    if (phase === "night") setActiveLogTab("night");
+    if (phase === "day" || phase === "role_reveal" || phase === "game_over")
+      setActiveLogTab("day");
+  }, [phase]);
+
+  if (isCheckingStorage) {
+    return (
+      <div className="flex min-h-screen items-center justify-center font-medium text-zinc-500">
+        Đang tải...
+      </div>
+    );
+  }
+
+  return (
+    <main
+      className={`flex min-h-screen flex-col items-center px-4 py-12 md:justify-center transition-colors duration-1000 ${
+        phase === "night" && gameStarted ? "bg-slate-900" : "bg-zinc-50"
+      }`}
+    >
+      {hasInitialized && (
+        <div className="fixed left-4 top-4 z-50">
+          <button
+            onClick={() => setShowNameModal(true)}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-900 text-xl font-bold text-white shadow-lg transition-transform hover:scale-105"
+            title="Chỉnh sửa tên"
+          >
+            {playerName ? playerName.charAt(0).toUpperCase() : <FaUser />}
+          </button>
+        </div>
+      )}
+
+      <Modal
+        isOpen={showNameModal}
+        title={
+          hasInitialized
+            ? "Chỉnh sửa tên"
+            : roomParam
+              ? "Tham gia phòng chơi"
+              : "Tạo phòng chơi mới"
+        }
+      >
+        <form onSubmit={handleJoinRoom} className="flex flex-col space-y-4">
+          <input
+            type="text"
+            value={inputName}
+            onChange={(e) => setInputName(e.target.value)}
+            placeholder="Nhập tên..."
+            className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
+            required
+            autoFocus
+          />
+          {!hasInitialized && roomParam && (
+            <div className="flex gap-4">
+              <label className="flex items-center space-x-2 text-sm text-zinc-700">
+                <input
+                  type="radio"
+                  value="player"
+                  checked={requestedRole === "player"}
+                  onChange={(e) =>
+                    setRequestedRole(e.target.value as "player" | "spectator")
+                  }
+                  className="accent-zinc-900"
+                />
+                <span>Người chơi</span>
+              </label>
+              <label className="flex items-center space-x-2 text-sm text-zinc-700">
+                <input
+                  type="radio"
+                  value="spectator"
+                  checked={requestedRole === "spectator"}
+                  onChange={(e) =>
+                    setRequestedRole(e.target.value as "player" | "spectator")
+                  }
+                  className="accent-zinc-900"
+                />
+                <span>Người xem</span>
+              </label>
+            </div>
+          )}
+          <button
+            type="submit"
+            className="w-full cursor-pointer rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white hover:bg-zinc-800"
+          >
+            {hasInitialized ? "Cập nhật" : "Vào phòng"}
+          </button>
+        </form>
+      </Modal>
+
+      <Modal
+        isOpen={showGameSummaryModal}
+        title="Lịch sử"
+        styleClassWrapper={"max-w-full"}
+      >
+        <div className="flex w-full flex-col space-y-6 lg:min-w-[850px] xl:min-w-[950px]">
+          <div className="max-h-[70vh] overflow-y-auto pr-2 space-y-8">
+            <div>
+              <h3 className="font-bold text-xl mb-4 text-zinc-800 border-b pb-2">
+                Vai trò người chơi
+              </h3>
+              {(() => {
+                const getPlayerFaction = (roleId?: string) => {
+                  if (!roleId) return "villager";
+                  const wolves = [
+                    "werewolf",
+                    "white_wolf",
+                    "cursed_wolf",
+                    "fog_wolf",
+                    "wolf_cub",
+                  ];
+                  const thirdParties = [
+                    "fool",
+                    "headhunter",
+                    "assassin",
+                    "thief",
+                    "tanner",
+                    "pied_piper",
+                  ];
+                  if (wolves.includes(roleId)) return "wolf";
+                  if (thirdParties.includes(roleId)) return "third_party";
+                  return "villager";
+                };
+
+                const groupedPlayers = {
+                  villager: [] as string[],
+                  wolf: [] as string[],
+                  third_party: [] as string[],
+                };
+
+                players.forEach((p) => {
+                  const r = playerRoles[p];
+                  groupedPlayers[getPlayerFaction(r?.id)].push(p);
+                });
+
+                const renderPlayerCard = (p: string) => {
+                  const r = playerRoles[p];
+                  const originalR = gameState.originalRoles[p];
+                  return (
+                    <div
+                      key={p}
+                      className="text-sm bg-white p-2 rounded-lg border border-zinc-200 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow"
+                    >
+                      {r ? (
+                        <RoleIcon
+                          id={r.id}
+                          className={`text-2xl mb-1 ${getRoleColor(r.id)}`}
+                        />
+                      ) : (
+                        <FaUser className="text-2xl mb-1 text-zinc-300" />
+                      )}
+                      <span className="font-semibold text-zinc-800 truncate w-full text-xs">
+                        {p}
+                      </span>
+                      {originalR && originalR.id !== r?.id && (
+                        <span
+                          className={`text-[10px] font-bold line-through opacity-50 ${getRoleColor(originalR.id)}`}
+                        >
+                          {originalR.name}
+                        </span>
+                      )}
+                      <span
+                        className={`text-[10px] font-bold ${r ? getRoleColor(r.id) : "text-zinc-500"}`}
+                      >
+                        {r?.name || "Chưa rõ"}
+                      </span>
+                    </div>
+                  );
+                };
+
+                return (
+                  <div className="grid grid-cols-3 gap-3">
+                    {/* Phe Dân Làng */}
+                    <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 flex flex-col">
+                      <h4 className="font-bold text-emerald-700 mb-3 text-left uppercase tracking-wider text-sm flex items-center">
+                        🌾 Phe Dân Làng
+                      </h4>
+                      <div className="grid grid-cols-5 gap-3">
+                        {groupedPlayers.villager.length === 0 ? (
+                          <p className="text-sm text-emerald-500 py-2 col-span-full">
+                            Không có
+                          </p>
+                        ) : (
+                          groupedPlayers.villager.map(renderPlayerCard)
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Phe Sói */}
+                    <div className="bg-red-50/50 p-4 rounded-xl border border-red-100 flex flex-col">
+                      <h4 className="font-bold text-red-700 mb-3 text-left uppercase tracking-wider text-sm flex items-center">
+                        🐺 Phe Sói
+                      </h4>
+                      <div className="grid grid-cols-5 gap-3">
+                        {groupedPlayers.wolf.length === 0 ? (
+                          <p className="text-sm text-red-400 py-2 col-span-full">
+                            Không có
+                          </p>
+                        ) : (
+                          groupedPlayers.wolf.map(renderPlayerCard)
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Phe Thứ Ba */}
+                    <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-100 flex flex-col">
+                      <h4 className="font-bold text-purple-700 mb-3 text-left uppercase tracking-wider text-sm flex items-center">
+                        🎭 Phe Thứ Ba
+                      </h4>
+                      <div className="grid grid-cols-5 gap-3">
+                        {groupedPlayers.third_party.length === 0 ? (
+                          <p className="text-sm text-purple-400 py-2 col-span-full">
+                            Không có
+                          </p>
+                        ) : (
+                          groupedPlayers.third_party.map(renderPlayerCard)
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div>
+              <h3 className="font-bold text-xl mb-4 text-zinc-800 border-b pb-2">
+                Lịch sử hành động
+              </h3>
+              <div className="flex mb-4 border-b border-zinc-200">
+                <button
+                  onClick={() => setSummaryTab("night")}
+                  className={`flex-1 py-2 text-sm font-bold text-center border-b-2 transition-colors ${
+                    summaryTab === "night"
+                      ? "border-indigo-600 text-indigo-600"
+                      : "border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300"
+                  }`}
+                >
+                  <FaMoon className="inline mr-2 mb-1" /> Ban Đêm
+                </button>
+                <button
+                  onClick={() => setSummaryTab("day")}
+                  className={`flex-1 py-2 text-sm font-bold text-center border-b-2 transition-colors ${
+                    summaryTab === "day"
+                      ? "border-amber-500 text-amber-600"
+                      : "border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300"
+                  }`}
+                >
+                  <FaSun className="inline mr-2 mb-1" /> Ban Ngày
+                </button>
+              </div>
+              <div className="space-y-3">
+                {(() => {
+                  const filteredLogs = actionLogs.filter((log) =>
+                    summaryTab === "night"
+                      ? log.roleId !== "system"
+                      : log.roleId === "system",
+                  );
+                  if (filteredLogs.length === 0) {
+                    return (
+                      <p className="text-sm text-zinc-500">Không có lịch sử.</p>
+                    );
+                  }
+
+                  const groupedLogs = filteredLogs.reduce(
+                    (acc, log) => {
+                      if (!acc[log.dayCount]) acc[log.dayCount] = [];
+                      acc[log.dayCount].push(log);
+                      return acc;
+                    },
+                    {} as Record<number, ActionLog[]>,
+                  );
+
+                  const formatLogContentModal = (content: string) => {
+                    const playerNames = Object.keys(playerRoles);
+                    if (!playerNames.length) return content;
+                    const sortedNames = [...playerNames].sort(
+                      (a, b) => b.length - a.length,
+                    );
+                    const escapeRegExp = (str: string) =>
+                      str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                    const regex = new RegExp(
+                      `(${sortedNames.map(escapeRegExp).join("|")})`,
+                      "g",
+                    );
+                    return content.split(regex).map((part, i) => {
+                      if (playerNames.includes(part)) {
+                        return (
+                          <span key={i} className="font-bold text-zinc-900">
+                            {part}
+                            {part === playerName && (
+                              <span className="ml-1 text-[11px] font-normal italic opacity-80">
+                                (Bạn)
+                              </span>
+                            )}
+                          </span>
+                        );
+                      }
+                      return part;
+                    });
+                  };
+
+                  return Object.keys(groupedLogs)
+                    .sort((a, b) => Number(a) - Number(b))
+                    .map((dayKey) => {
+                      const dayNum = Number(dayKey);
+                      const logsForDay = groupedLogs[dayNum];
+                      return (
+                        <div key={dayNum} className="mb-4 last:mb-0">
+                          <h4
+                            className={`flex items-center text-sm font-bold mb-2 border-b pb-1 ${summaryTab === "night" ? "border-indigo-100 text-indigo-600" : "border-amber-100 text-amber-600"}`}
+                          >
+                            {summaryTab === "night" ? (
+                              <FaMoon className="mr-2" />
+                            ) : (
+                              <FaSun className="mr-2" />
+                            )}
+                            {summaryTab === "night"
+                              ? `Đêm ${dayNum}`
+                              : `Ngày ${dayNum}`}
+                          </h4>
+                          <div className="space-y-2">
+                            {logsForDay.map((log) => {
+                              const roleName =
+                                log.roleId === "system"
+                                  ? "Quản trò"
+                                  : defaultRoles.find(
+                                      (r) => r.id === log.roleId,
+                                    )?.name || log.roleId;
+                              const isSystem = log.roleId === "system";
+                              return (
+                                <div
+                                  key={log.id}
+                                  className="text-sm bg-zinc-50 p-3 rounded-lg border border-zinc-100"
+                                >
+                                  <span
+                                    className={`font-semibold ${isSystem ? "text-amber-600" : "text-indigo-600"}`}
+                                  >
+                                    {roleName}{" "}
+                                    {log.playerName !== "system"
+                                      ? `(${log.playerName}${log.playerName === playerName ? " - Bạn" : ""})`
+                                      : ""}
+                                  </span>
+                                  <p className="mt-1 text-zinc-700">
+                                    {formatLogContentModal(log.content)}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+                })()}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowGameSummaryModal(false)}
+            className="w-full cursor-pointer rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+          >
+            Đóng
+          </button>
+        </div>
+      </Modal>
+
+      {/* Main Layout Grid */}
+      <div
+        className={`grid w-full flex-1 grid-cols-1 gap-8 md:grid-cols-2 ${gameStarted ? "max-w-7xl lg:grid-cols-[320px_1fr_350px]" : "max-w-5xl lg:grid-cols-[400px_1fr]"}`}
+      >
+        {/* Left Column: Title & Actions */}
+        <div className="flex flex-col items-center text-center md:items-start md:text-left">
+          <h1
+            className={`mb-2 text-4xl font-light tracking-tight transition-colors duration-1000 ${
+              phase === "night" && gameStarted
+                ? "text-zinc-100"
+                : "text-zinc-900"
+            }`}
+          >
+            Ma Sói <span className="font-semibold">(Werewolf)</span>
+          </h1>
+          <p
+            className={`mb-6 text-sm leading-relaxed transition-colors duration-1000 ${
+              phase === "night" && gameStarted
+                ? "text-slate-400"
+                : "text-zinc-500"
+            }`}
+          >
+            Trò chơi ẩn vai trò, suy luận và lừa gạt. Hãy để bắt đầu cuộc chiến
+            giữa Dân Làng và Ma Sói.
+          </p>
+
+          {!showNameModal && (
+            <div className="flex w-full flex-col space-y-6">
+              {/* Copy Link */}
+              <div>
+                <label
+                  className={`mb-2 block text-xs font-medium ${isNight ? "text-slate-400" : "text-zinc-700"}`}
+                >
+                  Mời bạn bè tham gia:
+                </label>
+                <div
+                  className={`flex w-full items-center space-x-2 rounded-lg border px-3 py-2 shadow-sm ${isNight ? "border-slate-700 bg-slate-800" : "border-zinc-200 bg-white"}`}
+                >
+                  <span className="flex-1 select-all truncate text-left text-xs text-zinc-500">
+                    {typeof window !== "undefined" ? window.location.href : ""}
+                  </span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.href);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    }}
+                    className="cursor-pointer whitespace-nowrap rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-zinc-800"
+                  >
+                    {linkCopied ? "Đã copy!" : "Copy Link"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div
+                className={`flex flex-col items-center rounded-xl border p-6 shadow-sm md:items-start ${isNight ? "border-slate-700 bg-slate-800" : "border-zinc-200 bg-white"}`}
+              >
+                {phase === "night" && gameStarted ? (
+                  <>
+                    <h3 className="mb-2 flex items-center text-sm font-semibold text-indigo-300">
+                      <FaMoon className="mr-2 text-indigo-700" /> Đêm {dayCount}
+                    </h3>
+                    <div className="flex flex-col items-center justify-center w-full py-4 bg-indigo-900/30 rounded-lg border border-indigo-900/50 mb-4">
+                      <span className="text-4xl font-mono text-indigo-200 mb-2">
+                        {Math.floor(nightTimeLeft / 60)}:
+                        {(nightTimeLeft % 60).toString().padStart(2, "0")}
+                      </span>
+                      <span className="text-sm font-medium text-indigo-300 uppercase tracking-wider">
+                        Lượt của:{" "}
+                        {defaultRoles.find((r) => r.id === nightPhase)?.name ||
+                          "..."}
+                      </span>
+                    </div>
+                    {hostName === playerName && (
+                      <button
+                        onClick={handleResetGame}
+                        className="w-full cursor-pointer rounded-lg bg-red-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-red-700"
+                      >
+                        Kết thúc / Chơi lại
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <h3
+                      className={`mb-2 text-sm font-semibold ${isNight ? "text-slate-200" : "text-zinc-800"}`}
+                    >
+                      {gameStarted
+                        ? `Trạng thái: ${phase === "role_reveal" ? "Phát vai trò" : phase === "game_over" ? "Kết thúc" : `Ngày ${dayCount}`}`
+                        : "Trạng thái phòng"}
+                    </h3>
+                    <p
+                      className={`mb-4 text-sm ${isNight ? "text-slate-400" : "text-zinc-500"}`}
+                    >
+                      {gameStarted
+                        ? `${alivePlayers.length} người còn sống.`
+                        : `${players.length} người chơi đã sẵn sàng trong sảnh.`}
+                    </p>
+
+                    {phase === "game_over" && (
+                      <>
+                        <div
+                          className={`w-full mb-4 flex flex-col items-center justify-center py-4 rounded-xl border ${winner === "wolves" ? "bg-red-50 border-red-200 text-red-700" : winner === "lovers" ? "bg-pink-50 border-pink-200 text-pink-700" : winner === "fool" ? "bg-pink-50 border-pink-200 text-pink-700" : winner === "headhunter" ? "bg-cyan-50 border-cyan-200 text-cyan-700" : winner === "assassin" ? "bg-red-950 border-red-900 text-red-900" : winner === "pied_piper" ? "bg-emerald-100 border-emerald-300 text-emerald-800" : "bg-emerald-50 border-emerald-200 text-emerald-700"}`}
+                        >
+                          <h3 className="text-lg font-bold mb-1">
+                            Trò chơi kết thúc!
+                          </h3>
+                          <span className="font-bold uppercase tracking-wider">
+                            {winner === "wolves"
+                              ? "Phe Sói thắng!"
+                              : winner === "lovers"
+                                ? "Cặp đôi thắng!"
+                                : winner === "fool"
+                                  ? "Kẻ Ngốc thắng!"
+                                  : winner === "headhunter"
+                                    ? "Thợ Săn Người thắng!"
+                                    : winner === "assassin"
+                                      ? "Sát Thủ thắng!"
+                                      : winner === "white_wolf"
+                                        ? "Sói Trắng thắng!"
+                                        : winner === "pied_piper"
+                                          ? "Người Thổi Sáo thắng!"
+                                          : "Phe Dân Làng thắng!"}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => setShowGameSummaryModal(true)}
+                          className={`w-full mb-4 cursor-pointer rounded-lg px-4 py-3 text-sm font-medium transition-colors ${isNight ? "bg-slate-700 text-slate-200 hover:bg-slate-600" : "bg-zinc-800 text-white hover:bg-zinc-900"}`}
+                        >
+                          Lịch sử
+                        </button>
+                      </>
+                    )}
+
+                    {hostName === playerName ? (
+                      !gameStarted ? (
+                        <button
+                          onClick={handleStartGame}
+                          className="w-full cursor-pointer rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-green-700"
+                        >
+                          Bắt đầu Game
+                        </button>
+                      ) : (
+                        <div className="flex w-full flex-col space-y-3">
+                          {phase === "role_reveal" ||
+                          (phase === "day" && !dayPhase) ? (
+                            <button
+                              onClick={handleNextPhase}
+                              className="w-full cursor-pointer rounded-lg bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+                            >
+                              Chuyển sang Đêm{" "}
+                              {phase === "day" ? dayCount + 1 : 1}
+                            </button>
+                          ) : null}
+                          <button
+                            onClick={handleResetGame}
+                            className="w-full cursor-pointer rounded-lg bg-red-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-red-700"
+                          >
+                            Kết thúc / Chơi lại
+                          </button>
+                        </div>
+                      )
+                    ) : (
+                      <div
+                        className={`w-full rounded-lg p-3 text-center text-sm font-medium ${isNight ? "bg-slate-700/50 text-slate-300" : "bg-zinc-100 text-zinc-600"}`}
+                      >
+                        {gameStarted
+                          ? phase === "game_over"
+                            ? "Trò chơi đã kết thúc, đang chờ chủ phòng..."
+                            : "Trò chơi đang diễn ra..."
+                          : "Đang chờ chủ phòng bắt đầu..."}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <RoleConfigPanel
+                roleConfig={roleConfig}
+                playersCount={players.length}
+                hostName={hostName}
+                playerName={playerName}
+                gameStarted={gameStarted}
+                updateRoleCount={updateRoleCount}
+                isNight={isNight}
+              />
+
+              <div className="border-t border-zinc-200 pt-4">
+                <Link
+                  href="/"
+                  className="inline-flex cursor-pointer items-center justify-center rounded-full border border-zinc-200 bg-white px-6 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+                >
+                  ← Đổi trò chơi khác
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Players Grid */}
+        <div className="flex w-full flex-col space-y-6">
+          <PlayerGrid
+            players={players}
+            spectators={spectators}
+            alivePlayers={alivePlayers}
+            playerRoles={playerRoles}
+            originalRoles={gameState.originalRoles}
+            playerName={playerName}
+            hostName={hostName}
+            gameStarted={gameStarted}
+            phase={phase}
+            headhunterTarget={headhunterTarget}
+            cupidTargets={cupidTargets}
+            hypnotizedPlayers={gameState.hypnotizedPlayers}
+            isNight={isNight}
+            onKickPlayer={handleKickPlayer}
+          />
+
+          {/* Spectators */}
+          {spectators.length > 0 && (
+            <div
+              className={`w-full rounded-xl border p-6 shadow-sm ${isNight ? "border-slate-700 bg-slate-800" : "border-zinc-200 bg-white"}`}
+            >
+              <h3
+                className={`mb-4 border-b pb-3 text-base font-medium ${isNight ? "border-slate-700 text-slate-200" : "border-zinc-100 text-zinc-900"}`}
+              >
+                Người xem ({spectators.length})
+              </h3>
+              <div className="flex flex-wrap gap-3">
+                {spectators.map((spec, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex items-center space-x-2 rounded-full border px-3 py-1.5 ${isNight ? "border-slate-600 bg-slate-700" : "border-zinc-100 bg-zinc-50"}`}
+                  >
+                    <div
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${isNight ? "bg-slate-600 text-slate-300" : "bg-zinc-200 text-zinc-700"}`}
+                    >
+                      {spec.charAt(0).toUpperCase()}
+                    </div>
+                    <span
+                      className={`text-xs font-medium ${isNight ? "text-slate-200" : "text-zinc-800"}`}
+                    >
+                      {spec}
+                    </span>
+                    {hostName === playerName && !gameStarted && (
+                      <button
+                        onClick={() => handleKickPlayer(spec)}
+                        className={`ml-1 flex h-4 w-4 items-center justify-center rounded-full transition-colors ${isNight ? "bg-red-900/80 text-red-200 hover:bg-red-700" : "bg-red-100 text-red-600 hover:bg-red-200"} text-[10px] font-bold`}
+                        title="Đuổi người xem"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Game Actions / Night Actions */}
+        {!showNameModal && gameStarted && (
+          <div className="flex w-full flex-col space-y-6">
+            {!alivePlayers.includes(playerName) && (
+              <div
+                className={`flex w-full flex-col items-center rounded-xl border p-6 shadow-sm md:items-start ${isNight ? "border-slate-700 bg-slate-800/80" : "border-zinc-200 bg-zinc-100"}`}
+              >
+                <h3
+                  className={`mb-2 flex items-center text-sm font-bold ${isNight ? "text-slate-300" : "text-zinc-600"}`}
+                >
+                  <FaGhost className="mr-2 text-zinc-500" />
+                  Trạng thái: Đã chết
+                </h3>
+
+                <p
+                  className={`text-sm ${isNight ? "text-slate-400" : "text-zinc-500"}`}
+                >
+                  Bạn không còn khả năng tham gia vào các hoạt động của làng
+                  nữa. Hãy giữ im lặng để không ảnh hưởng đến người chơi khác.
+                </p>
+              </div>
+            )}
+
+            {/* Night Action Area */}
+            {phase === "night" && alivePlayers.includes(playerName) && (
+              <div className="flex flex-col items-center rounded-xl border border-indigo-900/50 bg-slate-800/80 p-6 shadow-sm md:items-start">
+                <h3 className="mb-4 flex items-center text-sm font-bold text-indigo-300">
+                  Chức năng: {playerRoles[playerName]?.name}
+                  <RoleIcon
+                    id={playerRoles[playerName]?.id}
+                    className="ml-2 text-lg"
+                  />
+                </h3>
+
+                {playerRoles[playerName]?.id === "villager" ||
+                playerRoles[playerName]?.id === "mayor" ||
+                playerRoles[playerName]?.id === "half_wolf" ||
+                playerRoles[playerName]?.id === "fool" ? (
+                  <p className="w-full py-4 text-center text-sm text-indigo-300">
+                    Nhân vật của bạn không có chức năng trong đêm. Hãy nhắm mắt
+                    lại!
+                  </p>
+                ) : nightPhase === "werewolf" &&
+                  ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(
+                    playerRoles[playerName]?.id as string,
+                  ) ? (
+                  <WerewolfNightUI
+                    gameState={gameState}
+                    dispatch={dispatch}
+                    channel={channel}
+                    playerName={playerName}
+                    executeAction={executeAction}
+                  />
+                ) : nightPhase !== playerRoles[playerName]?.id &&
+                  playerRoles[playerName]?.id !== "seer" &&
+                  playerRoles[playerName]?.id !== "hunter" &&
+                  playerRoles[playerName]?.id !== "medium" &&
+                  playerRoles[playerName]?.id !== "pied_piper" ? (
+                  <p className="w-full animate-pulse py-4 text-center text-sm font-medium text-indigo-300">
+                    Hãy nhắm mắt lại. Đang chờ các vai trò khác hành động...
+                  </p>
+                ) : ROLE_STRATEGIES[playerRoles[playerName]?.id] ? (
+                  (() => {
+                    const ActiveRoleUI =
+                      ROLE_STRATEGIES[playerRoles[playerName]?.id];
+                    return (
+                      <ActiveRoleUI
+                        gameState={gameState}
+                        dispatch={dispatch}
+                        channel={channel}
+                        playerName={playerName}
+                        executeAction={executeAction}
+                      />
+                    );
+                  })()
+                ) : null}
+              </div>
+            )}
+
+            {/* Day Action Area */}
+            {phase === "day" && gameStarted && (
+              <div className="flex flex-col items-center rounded-xl border border-amber-200 bg-amber-50 p-6 shadow-sm md:items-start">
+                <h3 className="mb-4 flex items-center text-sm font-bold text-amber-900">
+                  <FaSun className="mr-2 text-lg" /> Ban Ngày - Ngày {dayCount}
+                </h3>
+
+                {!dayPhase && (
+                  <div className="w-full text-center">
+                    <p className="mb-2 text-sm text-amber-800">
+                      Trời sắp tối. Tự động chuyển sang Đêm {dayCount + 1} sau:
+                    </p>
+                    <div className="text-4xl font-mono font-bold text-amber-900">
+                      {dayTimeLeft}s
+                    </div>
+                  </div>
+                )}
+
+                {dayPhase === "discussion" && (
+                  <div className="w-full text-center">
+                    <p className="mb-2 text-sm text-amber-800">
+                      Thời gian thảo luận tự do:
+                    </p>
+                    <div className="text-4xl font-mono font-bold text-amber-900">
+                      {Math.floor(dayTimeLeft / 60)}:
+                      {(dayTimeLeft % 60).toString().padStart(2, "0")}
+                    </div>
+                    {hostName === playerName && (
+                      <button
+                        onClick={() =>
+                          dispatch({
+                            type: "UPDATE",
+                            payload: { dayTimeLeft: 0 },
+                          })
+                        }
+                        className="mt-4 cursor-pointer rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                      >
+                        Bỏ qua thảo luận (Skip)
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {dayPhase === "voting" && (
+                  <div className="w-full">
+                    <p className="mb-4 text-sm text-center text-amber-800">
+                      Chọn người bị nghi ngờ là Sói để đưa lên biểu quyết:
+                    </p>
+                    <div className="text-2xl text-center font-mono font-bold text-amber-900 mb-6">
+                      {Math.floor(dayTimeLeft / 60)}:
+                      {(dayTimeLeft % 60).toString().padStart(2, "0")}
+                    </div>
+                    {alivePlayers.includes(playerName) ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        {alivePlayers.map((p) => {
+                          const votesForPWeight = alivePlayers.reduce(
+                            (acc, voter) => {
+                              if (dayVotes[voter] === p) {
+                                return (
+                                  acc +
+                                  (playerRoles[voter]?.id === "mayor" ? 2 : 1)
+                                );
+                              }
+                              return acc;
+                            },
+                            0,
+                          );
+                          return (
+                            <button
+                              key={p}
+                              onClick={() => {
+                                dispatch({
+                                  type: "UPDATE_FUNCTION",
+                                  payload: (prev) => ({
+                                    dayVotes: {
+                                      ...prev.dayVotes,
+                                      [playerName]: p,
+                                    },
+                                  }),
+                                });
+
+                                if (channel)
+                                  channel.send({
+                                    type: "broadcast",
+                                    event: "day-vote",
+                                    payload: { playerName, target: p },
+                                  });
+                              }}
+                              className={`relative cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${dayVotes[playerName] === p ? "border-amber-600 bg-amber-600 text-white" : "border-amber-200 bg-white text-amber-900 hover:bg-amber-100"}`}
+                            >
+                              {p}
+                              {votesForPWeight > 0 && (
+                                <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-purple-500 text-xs text-white">
+                                  {votesForPWeight}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                        <button
+                          onClick={() => {
+                            dispatch({
+                              type: "UPDATE_FUNCTION",
+                              payload: (prev) => ({
+                                dayVotes: {
+                                  ...prev.dayVotes,
+                                  [playerName]: "skip",
+                                },
+                              }),
+                            });
+
+                            if (channel)
+                              channel.send({
+                                type: "broadcast",
+                                event: "day-vote",
+                                payload: { playerName, target: "skip" },
+                              });
+                          }}
+                          className={`relative col-span-2 mt-2 cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${dayVotes[playerName] === "skip" ? "border-zinc-600 bg-zinc-600 text-white" : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"}`}
+                        >
+                          Không chọn ai
+                          {(() => {
+                            const skipVotesWeight = alivePlayers.reduce(
+                              (acc, voter) => {
+                                if (dayVotes[voter] === "skip") {
+                                  return (
+                                    acc +
+                                    (playerRoles[voter]?.id === "mayor" ? 2 : 1)
+                                  );
+                                }
+                                return acc;
+                              },
+                              0,
+                            );
+                            return skipVotesWeight > 0 ? (
+                              <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-xs text-white">
+                                {skipVotesWeight}
+                              </span>
+                            ) : null;
+                          })()}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-center text-sm text-zinc-500">
+                        Bạn đã chết, chỉ có thể quan sát.
+                      </p>
+                    )}
+                    {hostName === playerName && (
+                      <div className="mt-4 flex w-full justify-center">
+                        <button
+                          onClick={() =>
+                            dispatch({
+                              type: "UPDATE",
+                              payload: { dayTimeLeft: 0 },
+                            })
+                          }
+                          className="cursor-pointer rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                        >
+                          Kết thúc Vote sớm (Skip)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {dayPhase === "defense" && (
+                  <div className="w-full text-center">
+                    <p className="mb-2 text-lg font-bold text-purple-600">
+                      {accusedPlayer} đang bị đưa lên giàn treo cổ!
+                    </p>
+                    <p className="mb-4 text-sm text-amber-800">
+                      Thời gian để biện hộ:
+                    </p>
+                    <div className="text-4xl font-mono font-bold text-amber-900">
+                      {Math.floor(dayTimeLeft / 60)}:
+                      {(dayTimeLeft % 60).toString().padStart(2, "0")}
+                    </div>
+                    {hostName === playerName && (
+                      <button
+                        onClick={() =>
+                          dispatch({
+                            type: "UPDATE",
+                            payload: { dayTimeLeft: 0 },
+                          })
+                        }
+                        className="mt-4 cursor-pointer rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                      >
+                        Bỏ qua biện hộ (Skip)
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {dayPhase === "execution" && (
+                  <div className="w-full">
+                    <p className="mb-2 text-center text-lg font-bold text-purple-600">
+                      Quyết định số phận của {accusedPlayer}:
+                    </p>
+                    <div className="text-2xl text-center font-mono font-bold text-amber-900 mb-4">
+                      {Math.floor(dayTimeLeft / 60)}:
+                      {(dayTimeLeft % 60).toString().padStart(2, "0")}
+                    </div>
+
+                    {(() => {
+                      let killVotes = 0;
+                      let saveVotes = 0;
+                      Object.entries(executionVotes).forEach(
+                        ([voter, vote]) => {
+                          const weight =
+                            playerRoles[voter]?.id === "mayor" ? 2 : 1;
+                          if (vote === "kill") killVotes += weight;
+                          else if (vote === "save") saveVotes += weight;
+                        },
+                      );
+                      return (
+                        <div className="mb-6 flex justify-center gap-12 text-sm font-medium rounded-lg bg-white/50 py-3 border border-amber-200/50">
+                          <div className="flex flex-col items-center">
+                            <span className="text-purple-700 mb-1">
+                              💀 Treo cổ
+                            </span>
+                            <span className="text-2xl font-bold text-purple-600">
+                              {killVotes}
+                            </span>
+                          </div>
+                          <div className="flex flex-col items-center">
+                            <span className="text-emerald-700 mb-1">
+                              🕊️ Tha bổng
+                            </span>
+                            <span className="text-2xl font-bold text-emerald-600">
+                              {saveVotes}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {alivePlayers.includes(playerName) &&
+                    playerName !== accusedPlayer ? (
+                      <div className="flex justify-center gap-4">
+                        <button
+                          onClick={() => {
+                            dispatch({
+                              type: "UPDATE_FUNCTION",
+                              payload: (prev) => ({
+                                executionVotes: {
+                                  ...prev.executionVotes,
+                                  [playerName]: "kill",
+                                },
+                              }),
+                            });
+
+                            if (channel)
+                              channel.send({
+                                type: "broadcast",
+                                event: "execution-vote",
+                                payload: { playerName, vote: "kill" },
+                              });
+                          }}
+                          className={`w-full py-3 cursor-pointer rounded-lg font-bold transition-colors ${executionVotes[playerName] === "kill" ? "bg-purple-500 text-white" : "bg-white border border-purple-200 text-purple-700 hover:bg-purple-50"}`}
+                        >
+                          Treo cổ 💀
+                        </button>
+                        <button
+                          onClick={() => {
+                            dispatch({
+                              type: "UPDATE_FUNCTION",
+                              payload: (prev) => ({
+                                executionVotes: {
+                                  ...prev.executionVotes,
+                                  [playerName]: "save",
+                                },
+                              }),
+                            });
+
+                            if (channel)
+                              channel.send({
+                                type: "broadcast",
+                                event: "execution-vote",
+                                payload: { playerName, vote: "save" },
+                              });
+                          }}
+                          className={`w-full py-3 cursor-pointer rounded-lg font-bold transition-colors ${executionVotes[playerName] === "save" ? "bg-emerald-600 text-white" : "bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50"}`}
+                        >
+                          Tha bổng 🕊️
+                        </button>
+                      </div>
+                    ) : playerName === accusedPlayer ? (
+                      <p className="text-center text-sm text-zinc-500">
+                        Bạn đang bị xét xử, không thể tự vote.
+                      </p>
+                    ) : (
+                      <p className="text-center text-sm text-zinc-500">
+                        Bạn đã chết, chỉ có thể quan sát.
+                      </p>
+                    )}
+
+                    {hostName === playerName && (
+                      <div className="mt-4 flex w-full justify-center">
+                        <button
+                          onClick={() =>
+                            dispatch({
+                              type: "UPDATE",
+                              payload: { dayTimeLeft: 0 },
+                            })
+                          }
+                          className="cursor-pointer rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
+                        >
+                          Kết thúc Vote sớm (Skip)
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Nút tung sương mù cho Sói Sương Mù */}
+                {playerRoles[playerName]?.id === "fog_wolf" &&
+                  alivePlayers.includes(playerName) &&
+                  !fogWolfUsed && (
+                    <div className="mt-6 flex w-full justify-center border-t border-amber-200 pt-4">
+                      <button
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "Bạn có chắc muốn tung sương mù để hủy bỏ hoàn toàn ban ngày và chuyển ngay sang ban đêm không? (Chỉ dùng 1 lần/trận)",
+                            )
+                          ) {
+                            dispatch({
+                              type: "UPDATE",
+                              payload: { fogWolfUsed: true },
+                            });
+
+                            if (channel) {
+                              channel.send({
+                                type: "broadcast",
+                                event: "use-fog",
+                                payload: { playerName },
+                              });
+                            }
+
+                            if (hostName === playerName) {
+                              const state = stateRef.current;
+                              const sysLog: ActionLog = {
+                                id: generateId(),
+                                dayCount: state.dayCount,
+                                roleId: "system",
+                                playerName: "system",
+                                content: `🌫️ Sương mù dày đặc bao phủ ngôi làng! Sói Sương Mù đã kích hoạt kỹ năng. Mọi cuộc biểu quyết bị hủy bỏ, màn đêm lập tức buông xuống!`,
+                              };
+                              const newLogs = [...state.actionLogs, sysLog];
+
+                              const nextDay = state.dayCount + 1;
+                              const firstNightPhase = getNextNightPhase(
+                                null,
+                                state.playerRoles,
+                                nextDay,
+                              );
+
+                              if (firstNightPhase) {
+                                const timeLimit =
+                                  firstNightPhase === "hunter" && nextDay > 1
+                                    ? 15
+                                    : 120;
+
+                                const nightUpdates = {
+                                  phase: "night" as const,
+                                  dayCount: nextDay,
+                                  nightPhase: firstNightPhase,
+                                  nightTimeLeft: timeLimit,
+                                  confirmedPlayers: [],
+                                  nightSelection: null,
+                                  actionConfirmed: false,
+                                  seerResult: null,
+                                  wolfVotes: {},
+                                  wolfVictim: [],
+                                  witchAction: { heal: [], poison: null },
+                                  actionLogs: newLogs,
+                                  dayPhase: null,
+                                  dayTimeLeft: 0,
+                                  dayVotes: {},
+                                  accusedPlayer: null,
+                                  executionVotes: {},
+                                  fogWolfUsed: true,
+                                  assassinTarget: null,
+                                  extraWolfKill: false,
+                                  activeExtraWolfKill:
+                                    stateRef.current.extraWolfKill,
+                                };
+                                dispatch({
+                                  type: "UPDATE",
+                                  payload: nightUpdates,
+                                });
+
+                                if (channel) {
+                                  channel.send({
+                                    type: "broadcast",
+                                    event: "phase-change",
+                                    payload: nightUpdates,
+                                  });
+                                }
+                              }
+                            }
+                          }
+                        }}
+                        className="w-full cursor-pointer rounded-lg bg-slate-700 px-4 py-3 text-sm font-bold text-white shadow-md hover:bg-slate-800"
+                      >
+                        🌫️ Tung Sương Mù (Bỏ qua Ngày)
+                      </button>
+                    </div>
+                  )}
+              </div>
+            )}
+
+            <ActionLogsArea
+              actionLogs={actionLogs}
+              activeLogTab={activeLogTab}
+              setActiveLogTab={setActiveLogTab}
+              playerName={playerName}
+              playerRoles={playerRoles}
+              isNight={isNight}
+            />
+
+            {/* Private Chat Area */}
+            {(() => {
+              const isWolf =
+                playerRoles[playerName]?.id === "werewolf" ||
+                playerRoles[playerName]?.id === "cursed_wolf" ||
+                playerRoles[playerName]?.id === "fog_wolf" ||
+                playerRoles[playerName]?.id === "wolf_cub" ||
+                playerRoles[playerName]?.id === "white_wolf";
+              const isLover = !!(
+                cupidTargets && cupidTargets.includes(playerName)
+              );
+              const showChat =
+                isWolf ||
+                isLover ||
+                (phase === "day" && alivePlayers.includes(playerName));
+
+              if (!showChat) return null;
+
+              return (
+                <PrivateChat
+                  wolfChat={wolfChat}
+                  loversChat={loversChat}
+                  generalChat={gameState.generalChat}
+                  playerName={playerName}
+                  alivePlayers={alivePlayers}
+                  isWolf={isWolf}
+                  isLover={isLover}
+                  phase={phase}
+                  onSendWolfMessage={(msg) => {
+                    const newMsg: ChatMessage = {
+                      id: generateId(),
+                      playerName,
+                      message: msg,
+                      timestamp: Date.now(),
+                    };
+                    dispatch({
+                      type: "UPDATE_FUNCTION",
+                      payload: (prev) => ({
+                        wolfChat: [newMsg, ...(prev.wolfChat || [])],
+                      }),
+                    });
+                    if (channel) {
+                      channel.send({
+                        type: "broadcast",
+                        event: "wolf-chat",
+                        payload: { message: newMsg },
+                      });
+                    }
+                  }}
+                  onSendLoversMessage={(msg) => {
+                    const newMsg: ChatMessage = {
+                      id: generateId(),
+                      playerName,
+                      message: msg,
+                      timestamp: Date.now(),
+                    };
+                    dispatch({
+                      type: "UPDATE_FUNCTION",
+                      payload: (prev) => ({
+                        loversChat: [newMsg, ...(prev.loversChat || [])],
+                      }),
+                    });
+                    if (channel) {
+                      channel.send({
+                        type: "broadcast",
+                        event: "lovers-chat",
+                        payload: { message: newMsg },
+                      });
+                    }
+                  }}
+                  onSendGeneralMessage={(msg) => {
+                    const newMsg: ChatMessage = {
+                      id: generateId(),
+                      playerName,
+                      message: msg,
+                      timestamp: Date.now(),
+                    };
+                    dispatch({
+                      type: "UPDATE_FUNCTION",
+                      payload: (prev) => ({
+                        generalChat: [newMsg, ...(prev.generalChat || [])],
+                      }),
+                    });
+                    if (channel) {
+                      channel.send({
+                        type: "broadcast",
+                        event: "general-chat",
+                        payload: { message: newMsg },
+                      });
+                    }
+                  }}
+                  isNight={isNight}
+                />
+              );
+            })()}
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
+
+export default WerewolfGameUI;

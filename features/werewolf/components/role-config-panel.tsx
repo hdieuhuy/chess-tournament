@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
-import { RoleConfig } from "./types";
-import { RoleIcon, getRoleColor, getRoleDescription } from "./utils";
+import { RoleConfig } from "../types";
+import { RoleIcon, getRoleColor, getRoleDescription } from "../utils";
 
 type RoleConfigPanelProps = {
   roleConfig: RoleConfig[];

@@ -1,7 +1,7 @@
 import { FaCrown, FaGhost, FaHeart } from "react-icons/fa";
 import { GiBullseye, GiMusicalNotes } from "react-icons/gi";
-import { RoleConfig } from "./types";
-import { RoleIcon, getRoleColor } from "./utils";
+import { RoleConfig } from "../types";
+import { RoleIcon, getRoleColor } from "../utils";
 
 type PlayerGridProps = {
   players: string[];
