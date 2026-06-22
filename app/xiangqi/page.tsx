@@ -172,8 +172,8 @@ function XiangqiGameContent({ isDarkMode, toggleTheme }: { isDarkMode: boolean, 
           <XiangqiSidebar isDarkMode={isDarkMode} />
         </div>
         
-        <div className="flex items-center justify-center w-full h-full overflow-hidden">
-          <div className="flex flex-col items-center justify-center relative w-full h-full max-w-[600px]">
+        <div className="flex w-full h-full overflow-y-auto overflow-x-hidden p-4">
+          <div className="flex flex-col items-center justify-center relative w-full min-h-full max-w-[540px] mx-auto">
             
             {/* Review Controls - Positioned fixed at bottom */}
             {reviewIndex !== null && (

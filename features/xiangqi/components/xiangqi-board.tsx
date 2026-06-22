@@ -34,7 +34,7 @@ export function XiangqiBoard({
       className={`transition-opacity ${isDisabled ? "opacity-50 pointer-events-none" : "opacity-100"}`}
     >
       <div
-        className="relative mx-auto max-w-[600px] w-[90vw] aspect-[9/10] bg-[#e3c498] border-2 sm:border-4 border-[#8B4513] shadow-xl p-1 sm:p-2 select-none overflow-hidden"
+        className="relative mx-auto max-w-[540px] w-[90vw] aspect-[9/10] bg-[#e3c498] border-2 sm:border-4 border-[#8B4513] shadow-xl p-1 sm:p-2 select-none overflow-hidden"
       >
         <div className="absolute inset-1 sm:inset-2 border-2 border-[#8B4513]">
           <svg className="w-full h-full block" xmlns="http://www.w3.org/2000/svg">

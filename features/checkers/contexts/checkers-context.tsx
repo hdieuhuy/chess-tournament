@@ -135,7 +135,9 @@ export function CheckersProvider({
       stateRef.current.player1Name = playerName;
     }
 
-    const roomChannel = supabase.channel(`checkers-room-${roomId}`);
+    const roomChannel = supabase.channel(`checkers-room-${roomId}`, {
+      config: { broadcast: { self: true } },
+    });
 
     roomChannel
       .on("broadcast", { event: "sync-move" }, (payload) => {

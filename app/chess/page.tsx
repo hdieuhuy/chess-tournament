@@ -210,8 +210,8 @@ function ChessGameContent() {
         <div className="w-full h-full overflow-hidden">
           <ChessSidebar isDarkMode={isDarkMode} />
         </div>
-        <div className="flex items-center justify-center w-full h-full overflow-hidden">
-          <div className="flex flex-col items-center justify-center relative w-full h-full max-w-[800px]">
+        <div className="flex w-full h-full overflow-y-auto overflow-x-hidden p-4">
+          <div className="flex flex-col items-center justify-center relative w-full min-h-full max-w-[600px] mx-auto">
             {/* Player 2 (Top) */}
             <div className={`flex w-full justify-between items-end mb-4 transition-opacity ${!player2Name ? "opacity-50" : "opacity-100"}`}>
               <div className="flex items-center gap-3">
