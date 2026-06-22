@@ -9,7 +9,7 @@ const beVietnamPro = Be_Vietnam_Pro({
 });
 
 export const metadata: Metadata = {
-  title: "BoardGame Portal",
+  title: "BoardRealm",
   description: "Nền tảng tổ chức giải đấu cờ vua, cờ tướng, cờ vây nội bộ",
 };
 

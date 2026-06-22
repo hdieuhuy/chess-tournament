@@ -13,6 +13,8 @@ export const getNextNightPhase = (
     "white_wolf",
     "assassin",
     "seer",
+    "medium",
+    "pied_piper",
     "witch",
     "hunter",
   ];

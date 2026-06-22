@@ -183,8 +183,8 @@ export default function LandingPage() {
             className="mb-6 relative flex flex-col items-center"
           >
             <div className="absolute inset-0 bg-indigo-500/30 blur-3xl rounded-full scale-[2.0]" />
-            <Image src="/logo.png" alt="Boardgame Portal Logo" width={160} height={160} className="relative z-10 w-32 h-32 sm:w-40 sm:h-40 object-contain drop-shadow-[0_20px_50px_rgba(79,70,229,0.3)] mb-4" />
-            <span className="relative z-10 text-2xl sm:text-3xl font-black tracking-tight text-slate-800">Boardgame Portal</span>
+            <Image src="/logo.png" alt="BoardRealm Logo" width={160} height={160} className="relative z-10 w-32 h-32 sm:w-40 sm:h-40 object-contain drop-shadow-[0_20px_50px_rgba(79,70,229,0.3)] mb-4" />
+            <span className="relative z-10 text-2xl sm:text-3xl font-black tracking-tight text-slate-800">BoardRealm</span>
           </motion.div>
 
           <motion.div
@@ -247,7 +247,7 @@ export default function LandingPage() {
       <section className="relative z-10 py-20 bg-white/50 backdrop-blur-xl border-y border-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 mb-4">Tại sao chọn Boardgame Portal?</h2>
+            <h2 className="text-3xl font-bold text-slate-900 mb-4">Tại sao chọn BoardRealm?</h2>
             <p className="text-slate-600 max-w-2xl mx-auto">Thiết kế tối giản, công nghệ hiện đại, mang lại trải nghiệm chơi game tuyệt vời nhất cho bạn và bạn bè.</p>
           </div>
           <div className="grid md:grid-cols-3 gap-8">
@@ -370,8 +370,8 @@ export default function LandingPage() {
 
       {/* FOOTER */}
       <footer className="relative z-10 bg-slate-950 text-slate-500 py-10 text-center text-sm border-t border-slate-800">
-        <p>© 2026 Boardgame Portal. All rights reserved.</p>
-        <p className="mt-2">Built with Next.js, TailwindCSS & Supabase.</p>
+        <p>© 2026 BoardRealm. All rights reserved.</p>
+        <p className="mt-2">Built with (CoeS).</p>
       </footer>
 
     </div>

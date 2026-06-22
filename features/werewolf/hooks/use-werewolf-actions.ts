@@ -195,20 +195,20 @@ export const useWerewolfActions = () => {
         content = `Làng đã biểu quyết treo cổ ${executedPlayer}, nhưng với quyền năng của Trưởng Làng, người này vẫn còn sống!`;
       }
 
-      const execVoteDetails = Object.entries(state.executionVotes)
-        .map(
-          ([voter, vote]) =>
-            `${voter} ➔ ${vote === "kill" ? "Treo cổ" : "Tha bổng"}`,
-        )
-        .join(", ");
+      let killVotesCount = 0;
+      let saveVotesCount = 0;
+      Object.entries(state.executionVotes).forEach(([voter, vote]) => {
+        const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
+        if (vote === "kill") killVotesCount += weight;
+        else if (vote === "save") saveVotesCount += weight;
+      });
+
       const execVoteLog: ActionLog = {
         id: generateId(),
         dayCount: state.dayCount,
         roleId: "system",
         playerName: "system",
-        content: execVoteDetails
-          ? `Chi tiết phiếu sinh tử: ${execVoteDetails}`
-          : "Không có ai tham gia phiếu sinh tử.",
+        content: `Kết quả phiếu sinh tử: ${killVotesCount} phiếu Treo cổ, ${saveVotesCount} phiếu Tha bổng.`,
       };
 
       const sysLog: ActionLog = {
@@ -565,7 +565,8 @@ export const useWerewolfActions = () => {
         (p) =>
           state.playerRoles[p]?.id === "seer" ||
           state.playerRoles[p]?.id === "hunter" ||
-          state.playerRoles[p]?.id === "medium",
+          state.playerRoles[p]?.id === "medium" ||
+          state.playerRoles[p]?.id === "pied_piper",
       );
 
       dispatch({
@@ -694,19 +695,28 @@ export const useWerewolfActions = () => {
         }
       });
 
-      const voteDetails = Object.entries(state.dayVotes)
-        .map(
-          ([voter, target]) =>
-            `${voter} ➔ ${target === "skip" ? "Bỏ qua" : target}`,
-        )
-        .join(", ");
+      const skipVotesWeight = Object.entries(state.dayVotes).reduce((acc, [voter, target]) => {
+        if (target === "skip") {
+          return acc + (state.playerRoles[voter]?.id === "mayor" ? 2 : 1);
+        }
+        return acc;
+      }, 0);
+
+      const voteSummaryParts: string[] = [];
+      Object.entries(voteCounts).forEach(([target, count]) => {
+        voteSummaryParts.push(`${target} (${count} phiếu)`);
+      });
+      if (skipVotesWeight > 0) {
+        voteSummaryParts.push(`Bỏ qua (${skipVotesWeight} phiếu)`);
+      }
+
       const voteLog: ActionLog = {
         id: generateId(),
         dayCount: state.dayCount,
         roleId: "system",
         playerName: "system",
-        content: voteDetails
-          ? `Chi tiết biểu quyết: ${voteDetails}`
+        content: voteSummaryParts.length > 0
+          ? `Kết quả biểu quyết: ${voteSummaryParts.join(", ")}`
           : "Không có ai tham gia biểu quyết.",
       };
 
@@ -815,20 +825,20 @@ export const useWerewolfActions = () => {
       if (killVotes > saveVotes && state.accusedPlayer) {
         executeDayExecution(state.accusedPlayer);
       } else {
-        const execVoteDetails = Object.entries(state.executionVotes)
-          .map(
-            ([voter, vote]) =>
-              `${voter} ➔ ${vote === "kill" ? "Treo cổ" : "Tha bổng"}`,
-          )
-          .join(", ");
+        let killVotesCount = 0;
+        let saveVotesCount = 0;
+        Object.entries(state.executionVotes).forEach(([voter, vote]) => {
+          const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
+          if (vote === "kill") killVotesCount += weight;
+          else if (vote === "save") saveVotesCount += weight;
+        });
+
         const execVoteLog: ActionLog = {
           id: generateId(),
           dayCount: state.dayCount,
           roleId: "system",
           playerName: "system",
-          content: execVoteDetails
-            ? `Chi tiết phiếu sinh tử: ${execVoteDetails}`
-            : "Không có ai tham gia phiếu sinh tử.",
+          content: `Kết quả phiếu sinh tử: ${killVotesCount} phiếu Treo cổ, ${saveVotesCount} phiếu Tha bổng.`,
         };
 
         const sysLog: ActionLog = {

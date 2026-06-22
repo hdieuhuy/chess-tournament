@@ -98,6 +98,15 @@ const WerewolfNightUI = ({
   } = gameState;
   const maxTargets = activeExtraWolfKill ? 2 : 1;
 
+  const aliveWolves = alivePlayers.filter(
+    (w: any) =>
+      playerRoles[w]?.id === "werewolf" ||
+      playerRoles[w]?.id === "cursed_wolf" ||
+      playerRoles[w]?.id === "fog_wolf" ||
+      playerRoles[w]?.id === "wolf_cub" ||
+      playerRoles[w]?.id === "white_wolf",
+  );
+
   if (actionConfirmed) {
     const myVotes = wolfVotes[playerName] || [];
     return (
@@ -112,29 +121,31 @@ const WerewolfNightUI = ({
         <p className="mt-1 text-xs text-indigo-400">
           Đợi các Sói khác và Phù thủy...
         </p>
-        <button
-          onClick={() => {
-            dispatch({
-              type: "UPDATE_FUNCTION",
-              payload: (prev: any) => ({
-                actionConfirmed: false,
-                confirmedPlayers: prev.confirmedPlayers.filter(
-                  (p: any) => p !== playerName,
-                ),
-              }),
-            });
-            if (channel) {
-              channel.send({
-                type: "broadcast",
-                event: "player-unconfirm",
-                payload: { playerName },
+        {aliveWolves.length > 1 && (
+          <button
+            onClick={() => {
+              dispatch({
+                type: "UPDATE_FUNCTION",
+                payload: (prev: any) => ({
+                  actionConfirmed: false,
+                  confirmedPlayers: prev.confirmedPlayers.filter(
+                    (p: any) => p !== playerName,
+                  ),
+                }),
               });
-            }
-          }}
-          className="mt-3 w-full cursor-pointer rounded-lg border border-red-700 px-4 py-2 text-sm font-bold text-red-400 transition-colors hover:bg-red-900/30"
-        >
-          Chọn lại
-        </button>
+              if (channel) {
+                channel.send({
+                  type: "broadcast",
+                  event: "player-unconfirm",
+                  payload: { playerName },
+                });
+              }
+            }}
+            className="mt-3 w-full cursor-pointer rounded-lg border border-red-700 px-4 py-2 text-sm font-bold text-red-400 transition-colors hover:bg-red-900/30"
+          >
+            Chọn lại
+          </button>
+        )}
       </div>
     );
   }
@@ -166,14 +177,6 @@ const WerewolfNightUI = ({
   };
 
   const myVote = wolfVotes[playerName] || [];
-  const aliveWolves = alivePlayers.filter(
-    (w: any) =>
-      playerRoles[w]?.id === "werewolf" ||
-      playerRoles[w]?.id === "cursed_wolf" ||
-      playerRoles[w]?.id === "fog_wolf" ||
-      playerRoles[w]?.id === "wolf_cub" ||
-      playerRoles[w]?.id === "white_wolf",
-  );
   const isWaitingForOthers = aliveWolves.some((w: any) => {
     const v = wolfVotes[w] || [];
     if (v.length !== myVote.length) return true;
@@ -584,7 +587,7 @@ const WitchNightUI = ({
             content += `${playerName} đã không dùng bình nào.`;
           executeAction(
             content.trim(),
-            {},
+            { witchAction }, // pass witchAction directly so host state is updated atomically
             {
               name: "witch-action",
               payload: { action: witchAction, playerName },
