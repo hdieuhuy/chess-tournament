@@ -75,6 +75,13 @@ export type GameState = {
   hypnotizedPlayers: string[];
   extraWolfKill: boolean;
   activeExtraWolfKill: boolean;
+  elderDied: boolean;
+  timeSettings: {
+    discussion: number;
+    voting: number;
+    defense: number;
+    night: number;
+  };
 };
 
 export type GameAction =

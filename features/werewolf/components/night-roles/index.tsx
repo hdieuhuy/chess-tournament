@@ -30,7 +30,7 @@ const BodyguardNightUI = ({
         <p className="text-sm font-medium text-green-700">
           <GiShield className="mr-1 inline text-green-700" />
           Bạn đã chọn bảo vệ:
-          <span className="ml-1 font-bold">{nightSelection}</span>
+          <span className="ml-1 font-bold">{lastProtected}</span>
         </p>
       </div>
     );
@@ -40,24 +40,7 @@ const BodyguardNightUI = ({
       <p className="text-sm font-medium text-indigo-300">
         Chọn 1 người để bảo vệ đêm nay (không được bảo vệ người cũ của đêm qua):
       </p>
-      <div className="grid grid-cols-2 gap-3 w-full">
-        {alivePlayers.map((p: any) => (
-          <button
-            key={p}
-            disabled={p === lastProtected}
-            onClick={() =>
-              dispatch({ type: "UPDATE", payload: { nightSelection: p } })
-            }
-            className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-              nightSelection === p
-                ? "border-indigo-600 bg-indigo-600 text-white"
-                : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"
-            }`}
-          >
-            {p} {p === lastProtected && "(Đã bảo vệ)"}
-          </button>
-        ))}
-      </div>
+
       <button
         onClick={() => {
           executeAction(
@@ -190,33 +173,10 @@ const WerewolfNightUI = ({
           ? "Sói Con đã chết, đêm nay Sói được chọn tối đa 2 người để cắn."
           : "Chọn 1 người để cắn. Sói cần phải thống nhất vote cùng người."}
       </p>
-      <div className="grid grid-cols-2 gap-3 w-full">
-        {alivePlayers.map((p: any) => {
-          const wolvesVotingForP = aliveWolves.filter((w: any) =>
-            (wolfVotes[w] || []).includes(p),
-          );
-          return (
-            <button
-              key={p}
-              onClick={() => handleVote(p)}
-              className={`relative cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                myVote.includes(p)
-                  ? "border-red-600 bg-red-600 text-white"
-                  : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"
-              }`}
-            >
-              {p}
-              {wolvesVotingForP.length > 0 && (
-                <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-800 text-xs text-white">
-                  {wolvesVotingForP.length}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      <div className="flex gap-3 w-full">
         <button
           onClick={() => handleVote("none")}
-          className={`relative cursor-pointer col-span-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+          className={`relative w-full cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
             myVote.length === 0
               ? "border-slate-500 bg-slate-600 text-white"
               : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"
@@ -377,33 +337,15 @@ const SeerNightUI = ({
       <p className="text-sm font-medium text-indigo-300">
         Chọn 1 người để soi xem họ có phải là Sói hay không:
       </p>
-      <div className="grid grid-cols-2 gap-3 w-full">
-        {players
-          .filter((p: any) => p !== playerName)
-          .map((p: any) => (
-            <button
-              key={p}
-              onClick={() =>
-                dispatch({ type: "UPDATE", payload: { nightSelection: p } })
-              }
-              className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                nightSelection === p
-                  ? "border-indigo-600 bg-indigo-600 text-white"
-                  : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-      </div>
       <button
         onClick={() => {
+          const targetRoleId = playerRoles[nightSelection as string]?.id;
           const isWolf = [
             "werewolf",
             "cursed_wolf",
             "fog_wolf",
             "wolf_cub",
-          ].includes(playerRoles[nightSelection as string]?.id || "");
+          ].includes(targetRoleId || "");
           executeAction(
             `${playerName} đã soi ${nightSelection} ${isWolf ? "LÀ SÓI" : "KHÔNG PHẢI là Sói"}`,
             { seerResult: { name: nightSelection as string, isWolf } },
@@ -638,25 +580,7 @@ const HunterNightUI = ({
           Mục tiêu đang ghim: {hunterTarget || "Chưa có"}
         </p>
       )}
-      <div className="grid grid-cols-2 gap-3 w-full">
-        {alivePlayers
-          .filter((p: any) => p !== playerName)
-          .map((p: any) => (
-            <button
-              key={p}
-              onClick={() =>
-                dispatch({ type: "UPDATE", payload: { nightSelection: p } })
-              }
-              className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                nightSelection === p
-                  ? "border-orange-600 bg-orange-600 text-white"
-                  : "border-orange-900/50 bg-slate-700 text-orange-300 hover:bg-orange-900/50"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-      </div>
+
       <div className="flex gap-3 w-full">
         <button
           onClick={() => {
@@ -722,29 +646,12 @@ const AssassinNightUI = ({
       <p className="text-sm font-medium text-indigo-300">
         Chọn 1 người để ám sát trong đêm nay:
       </p>
-      <div className="grid grid-cols-2 gap-3 w-full">
-        {alivePlayers
-          .filter((p: any) => p !== playerName)
-          .map((p: any) => (
-            <button
-              key={p}
-              onClick={() =>
-                dispatch({ type: "UPDATE", payload: { nightSelection: p } })
-              }
-              className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                nightSelection === p
-                  ? "border-red-900 bg-red-900 text-white"
-                  : "border-red-900/50 bg-slate-700 text-red-300 hover:bg-red-900/50"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
+      <div className="flex gap-3 w-full">
         <button
           onClick={() =>
             dispatch({ type: "UPDATE", payload: { nightSelection: "none" } })
           }
-          className={`col-span-2 cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+          className={`w-full cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
             nightSelection === "none"
               ? "border-slate-500 bg-slate-600 text-white"
               : "border-red-900/50 bg-slate-700 text-red-300 hover:bg-red-900/50"
@@ -788,8 +695,7 @@ const CupidNightUI = ({
   playerName,
   executeAction,
 }: RoleUIProps) => {
-  const { alivePlayers, actionConfirmed, cupidTargets } = gameState;
-  const [selected, setSelected] = useState<string[]>([]);
+  const { alivePlayers, actionConfirmed, cupidTargets, nightSelection } = gameState;
 
   if (actionConfirmed || cupidTargets) {
     return (
@@ -805,13 +711,7 @@ const CupidNightUI = ({
     );
   }
 
-  const toggleSelection = (p: string) => {
-    if (selected.includes(p)) {
-      setSelected(selected.filter((x: any) => x !== p));
-    } else if (selected.length < 2) {
-      setSelected([...selected, p]);
-    }
-  };
+  const selected = nightSelection ? nightSelection.split(",") : [];
 
   return (
     <div className="flex flex-col gap-4 w-full mt-2">
@@ -819,17 +719,11 @@ const CupidNightUI = ({
         Chọn 2 người để ghép đôi (có thể chọn chính mình). Hai người này sẽ sống
         chết có nhau!
       </p>
-      <div className="grid grid-cols-2 gap-3 w-full">
-        {alivePlayers.map((p: any) => (
-          <button
-            key={p}
-            onClick={() => toggleSelection(p)}
-            className={`cursor-pointer rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${selected.includes(p) ? "border-pink-500 bg-pink-600 text-white" : "border-indigo-800 bg-slate-700 text-indigo-300 hover:bg-indigo-900/50"}`}
-          >
-            {p}
-          </button>
-        ))}
-      </div>
+      {selected.length > 0 && (
+        <p className="text-sm font-bold text-pink-500">
+          Đang chọn: {selected.join(" và ")}
+        </p>
+      )}
       <button
         onClick={() =>
           executeAction(

@@ -38,9 +38,10 @@ export default function DayActionController({
   const fogWolfUsed = gameState.fogWolfUsed;
 
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-amber-200 bg-amber-50/70 p-6 shadow-sm w-full md:items-start">
+    <div className="flex flex-col items-center p-4 w-full md:items-start">
       <h3 className="mb-4 flex items-center text-sm font-extrabold text-amber-900 uppercase tracking-wider">
-        <FaSun className="mr-2 text-lg text-amber-600 animate-spin-slow" style={{ animationDuration: "12s" }} /> Ban Ngày - Ngày {dayCount}
+        <FaSun className="mr-2 text-lg text-amber-600 animate-spin-slow" style={{ animationDuration: "12s" }} /> 
+        Ban Ngày - Ngày {dayCount} ({Math.floor(dayTimeLeft / 60)}:{(dayTimeLeft % 60).toString().padStart(2, "0")})
       </h3>
 
       {/* Discussion Phase */}
@@ -80,13 +81,9 @@ export default function DayActionController({
             </div>
           )}
         <div className="w-full text-center md:text-left">
-          <p className="mb-2 text-sm font-bold text-amber-800">
-            Thời gian thảo luận tự do:
+          <p className="mb-4 text-sm font-bold text-amber-800">
+            Thời gian thảo luận tự do đang diễn ra...
           </p>
-          <div className="text-4xl font-mono font-black text-amber-900 mb-4">
-            {Math.floor(dayTimeLeft / 60)}:
-            {(dayTimeLeft % 60).toString().padStart(2, "0")}
-          </div>
           {isHost && (
             <button
               onClick={() => dispatch({ type: "UPDATE", payload: { dayTimeLeft: 0 } })}
@@ -103,13 +100,9 @@ export default function DayActionController({
       {/* Target Voting Phase */}
       {dayPhase === "voting" && (
         <div className="w-full">
-          <p className="mb-3 text-sm font-bold text-center text-amber-800 md:text-left">
+          <p className="mb-5 text-sm font-bold text-center text-amber-800 md:text-left">
             Chọn người nghi ngờ là Sói để đưa lên giàn treo cổ:
           </p>
-          <div className="text-3xl text-center font-mono font-black text-amber-900 mb-5 md:text-left">
-            {Math.floor(dayTimeLeft / 60)}:
-            {(dayTimeLeft % 60).toString().padStart(2, "0")}
-          </div>
           
           {isAlive ? (
             <div className="grid grid-cols-2 gap-3 w-full">
@@ -232,13 +225,9 @@ export default function DayActionController({
           <p className="mb-2 text-md font-extrabold text-purple-700">
             ⚖️ {accusedPlayer} đang bị tố giác và chuẩn bị lên giàn treo cổ!
           </p>
-          <p className="mb-3 text-xs font-semibold text-amber-800">
-            Thời gian biện hộ tự do của {accusedPlayer}:
+          <p className="mb-4 text-xs font-semibold text-amber-800">
+            Đang trong thời gian biện hộ tự do của {accusedPlayer}...
           </p>
-          <div className="text-4xl font-mono font-black text-amber-900 mb-4">
-            {Math.floor(dayTimeLeft / 60)}:
-            {(dayTimeLeft % 60).toString().padStart(2, "0")}
-          </div>
           {isHost && (
             <button
               onClick={() => dispatch({ type: "UPDATE", payload: { dayTimeLeft: 0 } })}
@@ -253,13 +242,9 @@ export default function DayActionController({
       {/* Trial Execution Phase */}
       {dayPhase === "execution" && (
         <div className="w-full">
-          <p className="mb-3 text-center text-sm font-bold text-purple-800 md:text-left">
-            Quyết định treo cổ hay tha bổng cho {accusedPlayer}:
+          <p className="mb-5 text-sm font-bold text-amber-800">
+            Biểu quyết sinh tử cho {accusedPlayer}:
           </p>
-          <div className="text-3xl text-center font-mono font-black text-amber-900 mb-4 md:text-left">
-            {Math.floor(dayTimeLeft / 60)}:
-            {(dayTimeLeft % 60).toString().padStart(2, "0")}
-          </div>
 
           {/* Voting scoreboard */}
           {(() => {

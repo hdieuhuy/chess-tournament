@@ -105,6 +105,9 @@ export default function NightActionController() {
   const activeRoleName = defaultRoles.find((r) => r.id === nightPhase)?.name || nightPhase;
   const myRoleName = defaultRoles.find((r) => r.id === myRole)?.name || myRole;
 
+  const isVillageRole = ["seer", "bodyguard", "witch", "hunter", "medium", "mayor", "cupid", "half_wolf", "elder", "villager"].includes(myRole);
+  const isElderDisabled = gameState.elderDied && isVillageRole;
+
   const executeAction = (log: string | null, actionState: any, bcast: any) => {
     const nextUpdates = { ...actionState, actionConfirmed: true };
     dispatch({ type: "UPDATE", payload: nextUpdates });
@@ -144,15 +147,17 @@ export default function NightActionController() {
 
   return (
     <div className="w-full">
-      {/* 1. If player role has no night actions (e.g. Villager, Mayor, Fool) */}
+      {/* 1. If player has NO strategy (Villager, Fool, etc.), just wait */}
       {!hasStrategy && (
-        <div className="flex flex-col items-center rounded-2xl border border-indigo-900/30 bg-slate-900/40 p-6 text-center shadow-lg shadow-indigo-950/20 backdrop-blur-sm">
+        <div className="flex flex-col items-center p-4 text-center">
           <FaBed className="text-3xl text-indigo-400/80 mb-3 animate-pulse" />
           <h3 className="text-sm font-extrabold uppercase tracking-wider text-indigo-200">
             Bạn Đang Ngủ Ngon
           </h3>
           <p className="mt-2 text-xs text-indigo-300 max-w-sm leading-relaxed">
-            Bạn là <span className="font-bold text-indigo-100">{myRoleName}</span>. Đêm nay bạn không có hành động nào. Hãy giữ im lặng và đợi bình minh thức giấc.
+            {isElderDisabled 
+              ? "Già làng đã hy sinh, bạn đã mất chức năng. Hãy kiên nhẫn đợi trời sáng."
+              : `Bạn là ${myRoleName}. Đêm nay bạn không có hành động nào. Hãy giữ im lặng và đợi bình minh thức giấc.`}
           </p>
           <div className="mt-4 rounded-lg bg-slate-950/40 px-3 py-1.5 border border-indigo-950 text-[10px] text-slate-400">
             Lượt hiện tại: <span className="font-bold text-indigo-300">{activeRoleName}</span>
@@ -160,9 +165,39 @@ export default function NightActionController() {
         </div>
       )}
 
+      {/* Elder disabled UI for roles with strategy */}
+      {hasStrategy && isElderDisabled && (
+        <div className="flex flex-col items-center p-4 text-center">
+          <FaBed className="text-3xl text-red-400/80 mb-3 animate-pulse" />
+          <h3 className="text-sm font-extrabold uppercase tracking-wider text-red-300">
+            Mất Chức Năng
+          </h3>
+          <p className="mt-2 text-xs text-red-200 max-w-sm leading-relaxed mb-4">
+            Già làng đã hy sinh! Các vai trò thuộc phe Dân Làng đã bị vô hiệu hóa chức năng.
+          </p>
+          
+          {(phaseState === "active" || phaseState === "before") && !gameState.actionConfirmed && (
+            <button
+              onClick={() => executeAction(null, {}, { name: "night-action", payload: { role: myRole, target: null, playerName } })}
+              className="w-full rounded-lg bg-red-900/50 px-4 py-3 text-sm font-bold text-white hover:bg-red-800 transition"
+            >
+              Xác Nhận Bỏ Qua
+            </button>
+          )}
+
+          {gameState.actionConfirmed && (
+            <p className="text-sm font-medium text-emerald-400">Đã xác nhận bỏ qua.</p>
+          )}
+          
+          <div className="mt-4 rounded-lg bg-slate-950/40 px-3 py-1.5 border border-indigo-950 text-[10px] text-slate-400">
+            Lượt hiện tại: <span className="font-bold text-indigo-300">{activeRoleName}</span>
+          </div>
+        </div>
+      )}
+
       {/* 2. If player has action, but it's BEFORE their turn */}
-      {hasStrategy && phaseState === "before" && (
-        <div className="flex flex-col items-center rounded-2xl border border-indigo-900/30 bg-slate-900/40 p-6 text-center shadow-lg shadow-indigo-950/20 backdrop-blur-sm">
+      {hasStrategy && !isElderDisabled && phaseState === "before" && (
+        <div className="flex flex-col items-center p-4 text-center">
           <FaHourglassHalf className="text-3xl text-indigo-400 mb-3 animate-pulse" />
           <h3 className="text-sm font-extrabold uppercase tracking-wider text-indigo-200">
             Đang Chờ Đến Lượt
@@ -177,11 +212,11 @@ export default function NightActionController() {
       )}
 
       {/* 3. If player is ACTIVE (their turn now) */}
-      {hasStrategy && phaseState === "active" && (
+      {hasStrategy && !isElderDisabled && phaseState === "active" && (
         <motion.div
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col items-center rounded-2xl border border-indigo-500/30 bg-slate-900/60 p-6 shadow-xl shadow-indigo-950/30 backdrop-blur-md w-full md:items-start"
+          className="flex flex-col items-center p-4 w-full md:items-start"
         >
           <h3 className="mb-2 flex items-center text-sm font-extrabold text-indigo-200 uppercase tracking-wider">
             <FaMoon className="mr-2 text-lg text-indigo-400 animate-pulse" /> Lượt Của Bạn: {myRoleName}
@@ -208,11 +243,9 @@ export default function NightActionController() {
       )}
 
       {/* 4. If player has acted and it is AFTER their turn */}
-      {hasStrategy && phaseState === "after" && (
-        <div className="flex flex-col items-center rounded-2xl border border-indigo-950 bg-slate-950/50 p-6 text-center shadow-lg shadow-indigo-950/10 backdrop-blur-sm animate-fade-in">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-900 border border-emerald-500/30 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.15)] mb-3">
-            <FaCheckCircle className="text-xl animate-bounce" style={{ animationIterationCount: 1, animationDuration: "500ms" }} />
-          </div>
+      {hasStrategy && !isElderDisabled && phaseState === "after" && (
+        <div className="flex flex-col items-center p-4 text-center">
+          <FaCheckCircle className="text-3xl text-emerald-400 mb-3 animate-bounce" />
           <h3 className="text-sm font-extrabold uppercase tracking-wider text-emerald-400">
             Hành Động Hoàn Tất
           </h3>

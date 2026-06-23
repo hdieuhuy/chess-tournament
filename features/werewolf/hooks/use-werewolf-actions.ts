@@ -105,45 +105,37 @@ export const useWerewolfActions = () => {
   const executeDayExecution = useCallback(
     (executedPlayer: string) => {
       const state = stateRef.current;
+      type DamageSource = "execution" | "hunter" | "cupid";
+      const damageQueue: { target: string, source: DamageSource }[] = [
+        { target: executedPlayer, source: "execution" },
+      ];
+
       const newExtraLives = { ...state.extraLives };
       const actualDeaths = new Set<string>();
 
-      if (newExtraLives[executedPlayer] > 0) {
-        newExtraLives[executedPlayer] -= 1;
-      } else {
-        actualDeaths.add(executedPlayer);
-      }
+      while (damageQueue.length > 0) {
+        const { target, source } = damageQueue.shift()!;
+        if (actualDeaths.has(target)) continue;
 
-      const deathQueue = Array.from(actualDeaths);
-      while (deathQueue.length > 0) {
-        const currentDead = deathQueue.shift()!;
+        if (newExtraLives[target] > 0) {
+          newExtraLives[target] -= 1;
+        } else {
+          actualDeaths.add(target);
 
-        if (
-          state.playerRoles[currentDead]?.id === "hunter" &&
-          state.hunterTarget
-        ) {
-          const hTarget = state.hunterTarget;
-          if (newExtraLives[hTarget] > 0) {
-            newExtraLives[hTarget] -= 1;
-          } else if (!actualDeaths.has(hTarget)) {
-            actualDeaths.add(hTarget);
-            deathQueue.push(hTarget);
+          if (
+            state.playerRoles[target]?.id === "hunter" &&
+            state.hunterTarget &&
+            !state.elderDied
+          ) {
+            damageQueue.push({ target: state.hunterTarget, source: "hunter" });
           }
-        }
 
-        if (state.cupidTargets) {
-          const [l1, l2] = state.cupidTargets;
-          if (currentDead === l1 && !actualDeaths.has(l2)) {
-            if (newExtraLives[l2] > 0) newExtraLives[l2] -= 1;
-            else {
-              actualDeaths.add(l2);
-              deathQueue.push(l2);
-            }
-          } else if (currentDead === l2 && !actualDeaths.has(l1)) {
-            if (newExtraLives[l1] > 0) newExtraLives[l1] -= 1;
-            else {
-              actualDeaths.add(l1);
-              deathQueue.push(l1);
+          if (state.cupidTargets) {
+            const [l1, l2] = state.cupidTargets;
+            if (target === l1) {
+              damageQueue.push({ target: l2, source: "cupid" });
+            } else if (target === l2) {
+              damageQueue.push({ target: l1, source: "cupid" });
             }
           }
         }
@@ -152,9 +144,13 @@ export const useWerewolfActions = () => {
       const newAlive = state.alivePlayers.filter((p) => !actualDeaths.has(p));
 
       let newExtraWolfKill = state.extraWolfKill;
+      let newElderDied = state.elderDied;
       actualDeaths.forEach((dead) => {
         if (state.playerRoles[dead]?.id === "wolf_cub") {
           newExtraWolfKill = true;
+        }
+        if (state.playerRoles[dead]?.id === "elder") {
+          newElderDied = true;
         }
       });
 
@@ -192,13 +188,13 @@ export const useWerewolfActions = () => {
       if (actualDeaths.has(executedPlayer)) {
         content = `Làng đã quyết định treo cổ ${executedPlayer}. ${finalDeadArray.length > 1 ? `Ngoài ra ${finalDeadArray.filter((p) => p !== executedPlayer).join(", ")} cũng đã chết theo.` : ""}`;
       } else {
-        content = `Làng đã biểu quyết treo cổ ${executedPlayer}, nhưng với quyền năng của Trưởng Làng, người này vẫn còn sống!`;
+        content = `Làng đã biểu quyết treo cổ ${executedPlayer}, nhưng với quyền năng đặc biệt, người này vẫn còn sống!`;
       }
 
       let killVotesCount = 0;
       let saveVotesCount = 0;
       Object.entries(state.executionVotes).forEach(([voter, vote]) => {
-        const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
+        const weight = state.playerRoles[voter]?.id === "mayor" && !state.elderDied ? 2 : 1;
         if (vote === "kill") killVotesCount += weight;
         else if (vote === "save") saveVotesCount += weight;
       });
@@ -210,7 +206,7 @@ export const useWerewolfActions = () => {
         playerName: "system",
         content: `Kết quả phiếu sinh tử: ${killVotesCount} phiếu Treo cổ, ${saveVotesCount} phiếu Tha bổng.`,
       };
-
+      
       const sysLog: ActionLog = {
         id: generateId(),
         dayCount: state.dayCount,
@@ -219,7 +215,7 @@ export const useWerewolfActions = () => {
         content,
       };
 
-      const newLogs = [...state.actionLogs, execVoteLog, sysLog];
+      const addedLogs: ActionLog[] = [execVoteLog, sysLog];
 
       if (newWinner) {
         const endLog: ActionLog = {
@@ -227,6 +223,7 @@ export const useWerewolfActions = () => {
           dayCount: state.dayCount,
           roleId: "system",
           playerName: "system",
+
           content:
             newWinner === "lovers"
               ? "Trò chơi kết thúc! Cặp đôi đã sống sót đến cuối cùng và giành chiến thắng!"
@@ -242,7 +239,7 @@ export const useWerewolfActions = () => {
                         ? "Trò chơi kết thúc! Người Thổi Sáo đã thôi miên toàn bộ dân làng và giành chiến thắng!"
                         : "Trò chơi kết thúc! Phe Dân làng đã chiến thắng.",
         };
-        newLogs.push(endLog);
+        addedLogs.push(endLog);
       }
 
       const updatePayload: Partial<GameState> = {
@@ -250,14 +247,20 @@ export const useWerewolfActions = () => {
         extraLives: newExtraLives,
         dayPhase: null,
         dayTimeLeft: newWinner ? 0 : 5,
-        actionLogs: newLogs,
         extraWolfKill: newExtraWolfKill,
+        elderDied: newElderDied,
       };
       if (newWinner) {
         updatePayload.phase = "game_over";
         updatePayload.winner = newWinner;
       }
-      dispatch({ type: "UPDATE", payload: updatePayload });
+      dispatch({
+        type: "UPDATE_FUNCTION",
+        payload: (prev: any) => ({
+          ...updatePayload,
+          actionLogs: [...prev.actionLogs, ...addedLogs],
+        }),
+      });
 
       if (channel) {
         channel.send({
@@ -270,8 +273,8 @@ export const useWerewolfActions = () => {
             extraLives: newExtraLives,
             dayPhase: null,
             dayTimeLeft: newWinner ? 0 : 5,
-            actionLogs: newLogs,
             extraWolfKill: newExtraWolfKill,
+            elderDied: newElderDied,
           },
         });
       }
@@ -281,51 +284,51 @@ export const useWerewolfActions = () => {
 
   const executeNightResolution = useCallback(() => {
     const state = stateRef.current;
-    const deaths = new Set<string>();
+    type DamageSource = "wolf" | "poison" | "assassin" | "white_wolf" | "hunter" | "cupid";
+    const damageQueue: { target: string, source: DamageSource }[] = [];
 
     const newPlayerRoles = { ...state.playerRoles };
-    const newLogs = [...state.actionLogs];
+    const addedLogs: ActionLog[] = [];
 
+    // 1. Collect all initial night damages
     if (state.wolfVictim && state.wolfVictim.length > 0) {
       state.wolfVictim.forEach((victim) => {
-        const protectedByGuard = state.lastProtected === victim;
-        const savedByWitch = (state.witchAction.heal || []).includes(victim);
-        if (!protectedByGuard && !savedByWitch) {
-          if (state.infectedPlayer === victim) {
-            // Will handle in infectedPlayer block
-          } else if (state.playerRoles[victim]?.id === "half_wolf") {
+        if (state.infectedPlayer === victim) {
+          // Handled separately below
+        } else if (state.playerRoles[victim]?.id === "half_wolf") {
+          const protectedByGuard = state.lastProtected === victim;
+          const savedByWitch = (state.witchAction.heal || []).includes(victim);
+          if (!protectedByGuard && !savedByWitch) {
             newPlayerRoles[victim] = {
               id: "werewolf",
               name: "Sói",
               count: 1,
             };
-            newLogs.push({
+            addedLogs.push({
               id: generateId(),
               dayCount: state.dayCount,
               roleId: "werewolf",
               playerName: victim,
               content: `Bán Sói ${victim} đã bị cắn và biến thành Sói từ đêm nay!`,
             });
-          } else {
-            deaths.add(victim);
           }
+        } else {
+          damageQueue.push({ target: victim, source: "wolf" });
         }
       });
     }
 
     if (state.witchAction.poison) {
-      deaths.add(state.witchAction.poison);
+      damageQueue.push({ target: state.witchAction.poison, source: "poison" });
     }
 
     if (state.assassinTarget) {
-      if (state.lastProtected !== state.assassinTarget) {
-        deaths.add(state.assassinTarget);
-      }
+      damageQueue.push({ target: state.assassinTarget, source: "assassin" });
     }
 
     if (state.infectedPlayer) {
       if (state.infectedPlayer === state.lastProtected) {
-        newLogs.push({
+        addedLogs.push({
           id: generateId(),
           dayCount: state.dayCount,
           roleId: "werewolf",
@@ -338,7 +341,7 @@ export const useWerewolfActions = () => {
           name: "Sói",
           count: 1,
         };
-        newLogs.push({
+        addedLogs.push({
           id: generateId(),
           dayCount: state.dayCount,
           roleId: "werewolf",
@@ -349,61 +352,66 @@ export const useWerewolfActions = () => {
     }
 
     if (state.whiteWolfVictim) {
-      deaths.add(state.whiteWolfVictim);
+      damageQueue.push({ target: state.whiteWolfVictim, source: "white_wolf" });
     }
 
-    const deadArray = Array.from(deaths);
+    // 2. Process damage queue sequentially (allows stacking)
     const newExtraLives = { ...state.extraLives };
     const actualDeaths = new Set<string>();
 
-    // Process initial deaths
-    for (const dead of deadArray) {
-      if (newExtraLives[dead] > 0) {
-        newExtraLives[dead] -= 1;
-      } else {
-        actualDeaths.add(dead);
+    while (damageQueue.length > 0) {
+      const { target, source } = damageQueue.shift()!;
+      if (actualDeaths.has(target)) continue;
+
+      let isBlocked = false;
+      const protectedByGuard = state.lastProtected === target;
+      
+      // Guard blocks all physical attacks during the night
+      if (protectedByGuard && (source === "wolf" || source === "assassin" || source === "white_wolf" || source === "hunter")) {
+        isBlocked = true;
       }
-    }
-
-    const deathQueue = Array.from(actualDeaths);
-    while (deathQueue.length > 0) {
-      const currentDead = deathQueue.shift()!;
-
-      if (
-        state.playerRoles[currentDead]?.id === "hunter" &&
-        state.hunterTarget
-      ) {
-        const hTarget = state.hunterTarget;
-        if (newExtraLives[hTarget] > 0) {
-          newExtraLives[hTarget] -= 1;
-        } else if (!actualDeaths.has(hTarget)) {
-          actualDeaths.add(hTarget);
-          deathQueue.push(hTarget);
-        }
+      
+      // Witch heal blocks wolf attacks
+      const savedByWitch = (state.witchAction.heal || []).includes(target);
+      if (savedByWitch && source === "wolf") {
+        isBlocked = true;
       }
 
-      if (state.cupidTargets) {
-        const [l1, l2] = state.cupidTargets;
-        if (currentDead === l1 && !actualDeaths.has(l2)) {
-          if (newExtraLives[l2] > 0) newExtraLives[l2] -= 1;
-          else {
-            actualDeaths.add(l2);
-            deathQueue.push(l2);
+      if (!isBlocked) {
+        if (newExtraLives[target] > 0) {
+          newExtraLives[target] -= 1;
+        } else {
+          actualDeaths.add(target);
+
+          // Death cascade triggers
+          if (
+            state.playerRoles[target]?.id === "hunter" &&
+            state.hunterTarget &&
+            !state.elderDied
+          ) {
+            damageQueue.push({ target: state.hunterTarget, source: "hunter" });
           }
-        } else if (currentDead === l2 && !actualDeaths.has(l1)) {
-          if (newExtraLives[l1] > 0) newExtraLives[l1] -= 1;
-          else {
-            actualDeaths.add(l1);
-            deathQueue.push(l1);
+
+          if (state.cupidTargets) {
+            const [l1, l2] = state.cupidTargets;
+            if (target === l1) {
+              damageQueue.push({ target: l2, source: "cupid" });
+            } else if (target === l2) {
+              damageQueue.push({ target: l1, source: "cupid" });
+            }
           }
         }
       }
     }
 
     let newExtraWolfKill = state.extraWolfKill;
+    let newElderDied = state.elderDied;
     actualDeaths.forEach((dead) => {
       if (state.playerRoles[dead]?.id === "wolf_cub") {
         newExtraWolfKill = true;
+      }
+      if (state.playerRoles[dead]?.id === "elder") {
+        newElderDied = true;
       }
     });
 
@@ -446,10 +454,10 @@ export const useWerewolfActions = () => {
           ? `Báo cáo buổi sáng: Đêm qua những người sau đã chết: ${finalDeadArray.join(", ")}`
           : "Báo cáo buổi sáng: Đêm qua là một đêm bình yên, không có ai chết!",
     };
-    newLogs.push(sysLog);
+    addedLogs.push(sysLog);
 
     if (state.mediumResurrect) {
-      newLogs.push({
+      addedLogs.push({
         id: generateId(),
         dayCount: state.dayCount,
         roleId: "system",
@@ -477,22 +485,19 @@ export const useWerewolfActions = () => {
                     ? "Trò chơi kết thúc! Người Thổi Sáo đã thôi miên toàn bộ dân làng và giành chiến thắng!"
                     : "Trò chơi kết thúc! Phe Dân làng đã chiến thắng.",
       };
-      newLogs.push(endLog);
+      addedLogs.push(endLog);
     }
 
-    dispatch({
-      type: "UPDATE",
-      payload: {
+    const updatePayload: Partial<GameState> = {
         playerRoles: newPlayerRoles,
         alivePlayers: newAlive,
         extraLives: newExtraLives,
         witchPotions: newPotions,
         deadThisNight: Array.from(actualDeaths),
-        actionLogs: newLogs,
         phase: newPhase,
         winner: newWinner,
         dayPhase: newPhase === "day" ? "discussion" : null,
-        dayTimeLeft: newPhase === "day" ? 480 : 0,
+        dayTimeLeft: newPhase === "day" ? state.timeSettings.discussion : 0,
         nightPhase: null,
         nightTimeLeft: 0,
         confirmedPlayers: [],
@@ -512,42 +517,38 @@ export const useWerewolfActions = () => {
         mediumResurrect: null,
         extraWolfKill: newExtraWolfKill,
         activeExtraWolfKill: false,
-      },
+        elderDied: newElderDied,
+    };
+
+    dispatch({
+        type: "UPDATE_FUNCTION",
+        payload: (prev: any) => ({
+          ...updatePayload,
+          actionLogs: [...prev.actionLogs, ...addedLogs],
+        }),
     });
 
     if (channel) {
-      channel.send({
-        type: "broadcast",
-        event: "phase-change",
-        payload: {
-          phase: newPhase,
-          winner: newWinner,
-          dayCount: state.dayCount,
-          alivePlayers: newAlive,
-          playerRoles: newPlayerRoles,
-          infectedPlayer: null,
-          extraLives: newExtraLives,
-          witchPotions: newPotions,
-          deadThisNight: Array.from(actualDeaths),
-          nightPhase: null,
-          nightTimeLeft: 0,
-          confirmedPlayers: [],
-          actionLogs: newLogs,
-          dayPhase: newPhase === "day" ? "discussion" : null,
-          dayTimeLeft: newPhase === "day" ? 480 : 0,
-          dayVotes: {},
-          accusedPlayer: null,
-          executionVotes: {},
-          whiteWolfVictim: null,
-          assassinTarget: null,
-          mediumUsed: currentMediumUsed,
-          mediumResurrect: null,
-          extraWolfKill: newExtraWolfKill,
-          activeExtraWolfKill: false,
-        },
-      });
-    }
-  }, [channel]);
+        addedLogs.forEach((log) => {
+          channel.send({
+            type: "broadcast",
+            event: "add-log",
+            payload: { log },
+          });
+        });
+
+        channel.send({
+          type: "broadcast",
+          event: "phase-change",
+          payload: {
+            ...updatePayload,
+            phase: newPhase,
+            dayPhase: newPhase === "day" ? "discussion" : null,
+            dayTimeLeft: newPhase === "day" ? state.timeSettings.discussion : 0,
+          },
+        });
+      }
+    }, [channel]);
 
   const advanceNightPhase = useCallback(() => {
     const state = stateRef.current;
@@ -559,7 +560,7 @@ export const useWerewolfActions = () => {
 
     if (nextNightPhase) {
       const timeLimit =
-        nextNightPhase === "hunter" && state.dayCount > 1 ? 15 : 120;
+        nextNightPhase === "hunter" && state.dayCount > 1 ? 15 : state.timeSettings.night;
 
       const newConfirmedPlayers = state.confirmedPlayers.filter(
         (p) =>
@@ -613,7 +614,7 @@ export const useWerewolfActions = () => {
 
         if (firstNightPhase) {
           const timeLimit =
-            firstNightPhase === "hunter" && nextDay > 1 ? 15 : 120;
+            firstNightPhase === "hunter" && nextDay > 1 ? 15 : stateRef.current.timeSettings.night;
           dispatch({
             type: "UPDATE",
             payload: {
@@ -671,7 +672,7 @@ export const useWerewolfActions = () => {
     if (state.dayPhase === "discussion") {
       dispatch({
         type: "UPDATE",
-        payload: { dayPhase: "voting", dayTimeLeft: 45 },
+        payload: { dayPhase: "voting", dayTimeLeft: state.timeSettings.voting },
       });
       if (channel) {
         channel.send({
@@ -679,7 +680,7 @@ export const useWerewolfActions = () => {
           event: "day-phase-change",
           payload: {
             dayPhase: "voting",
-            dayTimeLeft: 45,
+            dayTimeLeft: state.timeSettings.voting,
             dayVotes: {},
             accusedPlayer: null,
             executionVotes: {},
@@ -690,14 +691,14 @@ export const useWerewolfActions = () => {
       const voteCounts: Record<string, number> = {};
       Object.entries(state.dayVotes).forEach(([voter, target]) => {
         if (target !== "skip") {
-          const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
+          const weight = state.playerRoles[voter]?.id === "mayor" && !state.elderDied ? 2 : 1;
           voteCounts[target] = (voteCounts[target] || 0) + weight;
         }
       });
 
       const skipVotesWeight = Object.entries(state.dayVotes).reduce((acc, [voter, target]) => {
         if (target === "skip") {
-          return acc + (state.playerRoles[voter]?.id === "mayor" ? 2 : 1);
+          return acc + (state.playerRoles[voter]?.id === "mayor" && !state.elderDied ? 2 : 1);
         }
         return acc;
       }, 0);
@@ -748,7 +749,7 @@ export const useWerewolfActions = () => {
           type: "UPDATE",
           payload: {
             dayPhase: "defense",
-            dayTimeLeft: 90,
+            dayTimeLeft: state.timeSettings.defense,
             accusedPlayer: accused,
             actionLogs: newLogs,
           },
@@ -760,7 +761,7 @@ export const useWerewolfActions = () => {
             event: "day-phase-change",
             payload: {
               dayPhase: "defense",
-              dayTimeLeft: 90,
+              dayTimeLeft: state.timeSettings.defense,
               accusedPlayer: accused,
               actionLogs: newLogs,
             },
@@ -804,13 +805,13 @@ export const useWerewolfActions = () => {
     } else if (state.dayPhase === "defense") {
       dispatch({
         type: "UPDATE",
-        payload: { dayPhase: "execution", dayTimeLeft: 45 },
+        payload: { dayPhase: "execution", dayTimeLeft: state.timeSettings.voting },
       });
       if (channel) {
         channel.send({
           type: "broadcast",
           event: "day-phase-change",
-          payload: { dayPhase: "execution", dayTimeLeft: 45 },
+          payload: { dayPhase: "execution", dayTimeLeft: state.timeSettings.voting },
         });
       }
     } else if (state.dayPhase === "execution") {
@@ -979,7 +980,7 @@ export const useWerewolfActions = () => {
         (nightPhase === "white_wolf" && (dayCount < 2 || dayCount % 2 !== 0))
       ) {
         // Nếu role đã chết (hoặc không ai sống), random delay 10-30s để fake hành động
-        const currentLimit = nightPhase === "hunter" && dayCount > 1 ? 15 : 120;
+        const currentLimit = nightPhase === "hunter" && dayCount > 1 ? 15 : stateRef.current.timeSettings.night;
         const maxDelay = Math.min(30, currentLimit - 1);
         const minDelay = Math.min(10, maxDelay);
         const randomDelay = getRandomInt(minDelay, maxDelay);
@@ -1110,7 +1111,7 @@ export const useWerewolfActions = () => {
       players.forEach((player, idx) => {
         const role = shuffledRolePool[idx];
         newPlayerRoles[player] = role;
-        if (role.id === "mayor") {
+        if (role.id === "elder") {
           newExtraLives[player] = 1;
         }
       });
@@ -1204,6 +1205,7 @@ export const useWerewolfActions = () => {
           hypnotizedPlayers: [],
           extraWolfKill: false,
           activeExtraWolfKill: false,
+          elderDied: false,
         },
       });
 

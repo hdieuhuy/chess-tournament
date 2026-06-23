@@ -117,6 +117,8 @@ export const useWerewolfSync = () => {
         if (data.hypnotizedPlayers) updates.hypnotizedPlayers = data.hypnotizedPlayers;
         if (data.extraWolfKill !== undefined) updates.extraWolfKill = data.extraWolfKill;
         if (data.activeExtraWolfKill !== undefined) updates.activeExtraWolfKill = data.activeExtraWolfKill;
+        if (data.elderDied !== undefined) updates.elderDied = data.elderDied;
+        if (data.timeSettings !== undefined) updates.timeSettings = data.timeSettings;
 
         dispatch({ type: "UPDATE", payload: updates });
       })
@@ -167,6 +169,7 @@ export const useWerewolfSync = () => {
             hypnotizedPlayers: [],
             extraWolfKill: data.extraWolfKill || false,
             activeExtraWolfKill: data.activeExtraWolfKill || false,
+            elderDied: data.elderDied || false,
           },
         });
       })
@@ -207,6 +210,12 @@ export const useWerewolfSync = () => {
           payload: { roleConfig: payload.payload.roleConfig },
         });
       })
+      .on("broadcast", { event: "update-time-settings" }, (payload) => {
+        dispatch({
+          type: "UPDATE",
+          payload: { timeSettings: payload.payload.timeSettings },
+        });
+      })
       .on("broadcast", { event: "phase-change" }, (payload) => {
         const data = payload.payload;
         const updates: Partial<GameState> = {
@@ -242,6 +251,7 @@ export const useWerewolfSync = () => {
         if (data.hypnotizedPlayers) updates.hypnotizedPlayers = data.hypnotizedPlayers;
         if (data.extraWolfKill !== undefined) updates.extraWolfKill = data.extraWolfKill;
         if (data.activeExtraWolfKill !== undefined) updates.activeExtraWolfKill = data.activeExtraWolfKill;
+        if (data.elderDied !== undefined) updates.elderDied = data.elderDied;
         dispatch({ type: "UPDATE", payload: updates });
       })
       .on("broadcast", { event: "day-phase-change" }, (payload) => {

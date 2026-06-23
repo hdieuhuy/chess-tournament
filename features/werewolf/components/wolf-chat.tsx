@@ -32,9 +32,9 @@ export default function PrivateChat({
   onSendGeneralMessage,
   isNight,
 }: PrivateChatProps) {
-  const showGeneral = phase === "day" && alivePlayers.includes(playerName);
+  const showGeneral = phase === "day";
   const [activeTab, setActiveTab] = useState<"wolf" | "lovers" | "general">(
-    showGeneral ? "general" : isWolf ? "wolf" : "lovers",
+    showGeneral ? "general" : isWolf ? "wolf" : isLover ? "lovers" : "general",
   );
   const [chatInput, setChatInput] = useState<string>("");
 
@@ -45,11 +45,13 @@ export default function PrivateChat({
   }, [phase]);
 
   const currentChat =
-    (activeTab === "wolf"
+    activeTab === "wolf" && isWolf
       ? wolfChat
-      : activeTab === "lovers"
+      : activeTab === "lovers" && isLover
         ? loversChat
-        : generalChat) || [];
+        : activeTab === "general" && showGeneral
+          ? generalChat
+          : [];
 
   // Phát âm thanh khi có tin nhắn mới từ người khác
   const prevChatLen = useRef(currentChat.length);

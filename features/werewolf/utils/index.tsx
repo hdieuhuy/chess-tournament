@@ -13,6 +13,7 @@ import {
   GiBowieKnife,
   GiMagicSwirl,
   GiMusicalNotes,
+  GiOldKing,
 } from "react-icons/gi";
 import { RoleConfig } from "../types";
 
@@ -38,6 +39,8 @@ export const RoleIcon = ({
       return <GiMusket className={className} />;
     case "mayor":
       return <FaUserTie className={className} />;
+    case "elder":
+      return <GiOldKing className={className} />;
     case "cursed_wolf":
       return <GiWerewolf className={className} />;
     case "white_wolf":
@@ -81,6 +84,8 @@ export const getRoleColor = (id?: string) => {
       return "text-orange-600";
     case "mayor":
       return "text-yellow-600";
+    case "elder":
+      return "text-amber-500";
     case "cursed_wolf":
       return "text-rose-700";
     case "white_wolf":
@@ -123,7 +128,9 @@ export const getRoleDescription = (id?: string) => {
     case "hunter":
       return "Mỗi đêm sẽ được chọn 1 người để ghim. nếu Thợ Sơn chết sẽ kéo theo người đó chết";
     case "mayor":
-      return "Có 2 mạng (sống sót 1 lần bị giết). Khi biểu quyết ban ngày, phiếu của Trưởng Làng được tính bằng 2.";
+      return "Ban ngày phiếu biểu quyết của Trưởng Làng được tính bằng 2.";
+    case "elder":
+      return "Già làng có 2 mạng (sống sót 1 lần bị giết). Khi già làng chết thì tất cả người chơi thuộc phe dân làng đều bị mất hết chức năng của vai trò.";
     case "cursed_wolf":
       return "Cùng Sói cắn người. Được quyền chọn lây nhiễm 1 lần/trận thay vì cắn chết. Người bị lây sẽ thành Sói vào hôm sau.";
     case "white_wolf":
@@ -159,6 +166,7 @@ export const defaultRoles: RoleConfig[] = [
   { id: "witch", name: "Phù Thủy", count: 0 },
   { id: "hunter", name: "Thợ Săn", count: 0 },
   { id: "mayor", name: "Trưởng Làng", count: 0 },
+  { id: "elder", name: "Già Làng", count: 0 },
   { id: "cursed_wolf", name: "Sói Nguyền", count: 0 },
   { id: "white_wolf", name: "Sói Trắng", count: 0 },
   { id: "fog_wolf", name: "Sói Sương Mù", count: 0 },

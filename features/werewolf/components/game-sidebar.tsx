@@ -31,6 +31,9 @@ type GameSidebarProps = {
 
   // Role config
   roleConfig: RoleConfig[];
+
+  // Action
+  actionComponent?: React.ReactNode;
 };
 
 export default function GameSidebar({
@@ -39,6 +42,8 @@ export default function GameSidebar({
   playerRoles,
   phase,
   isNight,
+  // Action
+  actionComponent,
   
   wolfChat,
   loversChat,
@@ -55,21 +60,69 @@ export default function GameSidebar({
 
   roleConfig,
 }: GameSidebarProps) {
-  const [activeTab, setActiveTab] = useState<"chat" | "logs" | "roles">("chat");
+  const [activeTab, setActiveTab] = useState<"action" | "chat" | "logs" | "roles">(
+    actionComponent ? "action" : "chat"
+  );
+
+  const [unreadCount, setUnreadCount] = useState(0);
+  const showGeneral = phase === "day";
+  const visibleWolfCount = isWolf ? wolfChat.length : 0;
+  const visibleLoversCount = isLover ? loversChat.length : 0;
+  const visibleGeneralCount = showGeneral ? generalChat.length : 0;
+  const totalMessages = visibleWolfCount + visibleLoversCount + visibleGeneralCount;
+  const lastReadTotal = React.useRef(totalMessages);
+
+  React.useEffect(() => {
+    if (activeTab === "chat") {
+      lastReadTotal.current = totalMessages;
+      setUnreadCount(0);
+    } else {
+      setUnreadCount(totalMessages - lastReadTotal.current);
+    }
+  }, [totalMessages, activeTab]);
+
+  const hasActionComponentRef = React.useRef(!!actionComponent);
+
+  // Auto-switch to action tab ONLY when actionComponent first becomes available
+  React.useEffect(() => {
+    if (actionComponent && !hasActionComponentRef.current) {
+      setActiveTab("action");
+    } else if (!actionComponent && hasActionComponentRef.current && activeTab === "action") {
+      setActiveTab("chat");
+    }
+    hasActionComponentRef.current = !!actionComponent;
+  }, [actionComponent, activeTab]);
 
   const activeRolesInGame = roleConfig.filter((r) => r.count > 0);
 
   return (
     <div
-      className={`flex flex-col h-[580px] rounded-2xl border shadow-sm ${
+      className={`flex flex-col flex-1 h-full overflow-hidden rounded-2xl border shadow-sm ${
         isNight ? "border-slate-800 bg-slate-900/60" : "border-zinc-200 bg-white"
       }`}
     >
       {/* Navigation tabs */}
       <div className={`flex border-b overflow-hidden rounded-t-2xl ${isNight ? "border-slate-800" : "border-zinc-100"}`}>
+        {actionComponent && (
+          <button
+            onClick={() => setActiveTab("action")}
+            className={`flex flex-col flex-1 items-center justify-center py-3 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+              activeTab === "action"
+                ? isNight
+                  ? "bg-slate-800 text-indigo-400 border-b-2 border-indigo-500"
+                  : "bg-zinc-50 text-indigo-700 border-b-2 border-indigo-600"
+                : isNight
+                  ? "text-slate-400 hover:bg-slate-800/50"
+                  : "text-zinc-500 hover:bg-zinc-50"
+            }`}
+          >
+            <span className="mb-1 text-lg">⚡</span>
+            <span>Hành Động</span>
+          </button>
+        )}
         <button
           onClick={() => setActiveTab("chat")}
-          className={`flex flex-1 items-center justify-center p-3.5 text-xs font-bold uppercase tracking-wider transition-colors ${
+          className={`relative flex flex-col flex-1 items-center justify-center py-3 text-[10px] font-bold uppercase tracking-wider transition-colors ${
             activeTab === "chat"
               ? isNight
                 ? "bg-slate-800 text-indigo-400 border-b-2 border-indigo-500"
@@ -79,11 +132,19 @@ export default function GameSidebar({
                 : "text-zinc-500 hover:bg-zinc-50"
           }`}
         >
-          <FaComments className="mr-2 text-sm" /> Chat
+          <div className="relative mb-1 text-lg">
+            <FaComments />
+            {unreadCount > 0 && (
+              <span className="absolute -right-2 -top-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-black text-white shadow-sm ring-2 ring-white">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </div>
+          <span>Chat</span>
         </button>
         <button
           onClick={() => setActiveTab("logs")}
-          className={`flex flex-1 items-center justify-center p-3.5 text-xs font-bold uppercase tracking-wider transition-colors ${
+          className={`flex flex-col flex-1 items-center justify-center py-3 text-[10px] font-bold uppercase tracking-wider transition-colors ${
             activeTab === "logs"
               ? isNight
                 ? "bg-slate-800 text-indigo-400 border-b-2 border-indigo-500"
@@ -93,11 +154,12 @@ export default function GameSidebar({
                 : "text-zinc-500 hover:bg-zinc-50"
           }`}
         >
-          <FaClipboardList className="mr-2 text-sm" /> Nhật Ký
+          <FaClipboardList className="mb-1 text-lg" />
+          <span>Nhật Ký</span>
         </button>
         <button
           onClick={() => setActiveTab("roles")}
-          className={`flex flex-1 items-center justify-center p-3.5 text-xs font-bold uppercase tracking-wider transition-colors ${
+          className={`flex flex-col flex-1 items-center justify-center py-3 text-[10px] font-bold uppercase tracking-wider transition-colors ${
             activeTab === "roles"
               ? isNight
                 ? "bg-slate-800 text-indigo-400 border-b-2 border-indigo-500"
@@ -107,12 +169,19 @@ export default function GameSidebar({
                 : "text-zinc-500 hover:bg-zinc-50"
           }`}
         >
-          <FaAddressCard className="mr-2 text-sm" /> Vai Trò
+          <FaAddressCard className="mb-1 text-lg" />
+          <span>Vai Trò</span>
         </button>
       </div>
 
       {/* Tab contents */}
       <div className="flex-1 overflow-hidden flex flex-col p-3">
+        {activeTab === "action" && actionComponent && (
+          <div className="flex-1 flex flex-col h-full overflow-y-auto">
+            {actionComponent}
+          </div>
+        )}
+
         {activeTab === "chat" && (
           <div className="flex-1 flex flex-col h-full overflow-hidden">
             <PrivateChat

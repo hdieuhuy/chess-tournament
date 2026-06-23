@@ -187,10 +187,9 @@ export default function PlayerGrid({
                           <span>{originalRole.name}</span>
                         </span>
                       )}
-                      <span
-                        className={`flex items-center justify-center space-x-1 text-xs font-bold ${getRoleColor(role.id)}`}
-                      >
-                        <RoleIcon id={role.id} className="text-sm" />
+                      <span className={`whitespace-nowrap mt-1 flex items-center space-x-1 rounded px-2 py-0.5 text-[10px] font-extrabold shadow-sm border ${getRoleColor(role.id)} ${
+                    isNight ? "border-slate-600 bg-slate-700/80" : "border-zinc-200 bg-white"
+                  }`}>  <RoleIcon id={role.id} className="text-sm" />
                         <span>{role.name}</span>
                       </span>
                     </div>

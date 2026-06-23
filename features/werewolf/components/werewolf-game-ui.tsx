@@ -96,6 +96,7 @@ function WerewolfGameUI() {
     witchAction = { heal: [], poison: null },
     cupidTargets,
     headhunterTarget,
+    timeSettings = { discussion: 480, voting: 45, defense: 90, night: 60 },
   } = gameState;
 
   const isNight = phase === "night" && gameStarted;
@@ -163,6 +164,44 @@ function WerewolfGameUI() {
         return { roleConfig: newConfig };
       },
     });
+  };
+
+  const applyRolePreset = (presetCounts: Record<string, number>) => {
+    if (hostName !== playerName) return;
+    dispatch({
+      type: "UPDATE_FUNCTION",
+      payload: (prev) => {
+        const newConfig = prev.roleConfig.map((role) => ({
+          ...role,
+          count: presetCounts[role.id] || 0,
+        }));
+        if (channel) {
+          channel.send({
+            type: "broadcast",
+            event: "update-roles",
+            payload: { roleConfig: newConfig },
+          });
+        }
+        return { roleConfig: newConfig };
+      },
+    });
+  };
+
+  const updateTimeSettings = (newSettings: { discussion: number; voting: number; defense: number; night: number }) => {
+    if (hostName !== playerName) return;
+
+    dispatch({
+      type: "UPDATE",
+      payload: { timeSettings: newSettings },
+    });
+    
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "update-time-settings",
+        payload: { timeSettings: newSettings },
+      });
+    }
   };
 
   const onCopyLink = () => {
@@ -243,7 +282,8 @@ function WerewolfGameUI() {
     // Night action selections
     if (phase === "night") {
       const myRole = playerRoles[playerName]?.id;
-      const isMyTurn = nightPhase === myRole;
+      const isActAnytimeRole = ["hunter", "medium", "pied_piper", "seer"].includes(myRole || "");
+      const isMyTurn = nightPhase === myRole || isActAnytimeRole;
 
       // Werewolf selection
       const isWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(myRole || "");
@@ -307,7 +347,13 @@ function WerewolfGameUI() {
           if (currentHeal.includes(targetPlayerName)) {
             newHeal = currentHeal.filter((x: any) => x !== targetPlayerName);
           } else {
-            newHeal = [...currentHeal, targetPlayerName];
+            if (currentHeal.length < witchPotions.heal) {
+              newHeal = [...currentHeal, targetPlayerName];
+            } else if (witchPotions.heal === 1) {
+              newHeal = [targetPlayerName];
+            } else {
+              newHeal = currentHeal; // Do not add if max reached
+            }
           }
           dispatch({
             type: "UPDATE_FUNCTION",
@@ -332,6 +378,50 @@ function WerewolfGameUI() {
         }
         return;
       }
+
+      // Cupid target selection
+      if (isMyTurn && myRole === "cupid" && dayCount === 1) {
+        if (!alivePlayers.includes(targetPlayerName)) return;
+        let selected = nightSelection ? nightSelection.split(",") : [];
+        if (selected.includes(targetPlayerName)) {
+          selected = selected.filter((p) => p !== targetPlayerName);
+        } else if (selected.length < 2) {
+          selected.push(targetPlayerName);
+        }
+        dispatch({
+          type: "UPDATE",
+          payload: { nightSelection: selected.length ? selected.join(",") : null },
+        });
+        return;
+      }
+
+      // Medium target selection (dead players)
+      if (isMyTurn && myRole === "medium") {
+        if (alivePlayers.includes(targetPlayerName)) return; // Only dead
+        const newSelection = nightSelection === targetPlayerName ? null : targetPlayerName;
+        dispatch({ type: "UPDATE", payload: { nightSelection: newSelection } });
+        return;
+      }
+
+      // Pied Piper target selection
+      if (isMyTurn && myRole === "pied_piper") {
+        if (!alivePlayers.includes(targetPlayerName) || targetPlayerName === playerName) return;
+        if ((gameState.hypnotizedPlayers || []).includes(targetPlayerName)) return; // already hypnotized
+        const newSelection = nightSelection === targetPlayerName ? null : targetPlayerName;
+        dispatch({ type: "UPDATE", payload: { nightSelection: newSelection } });
+        return;
+      }
+
+      // White Wolf target selection
+      if (isMyTurn && myRole === "white_wolf") {
+        if (!alivePlayers.includes(targetPlayerName) || targetPlayerName === playerName) return;
+        const targetRole = playerRoles[targetPlayerName]?.id;
+        const isTargetWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "white_wolf"].includes(targetRole || "");
+        if (!isTargetWolf) return; // Only target other wolves
+        const newSelection = nightSelection === targetPlayerName ? null : targetPlayerName;
+        dispatch({ type: "UPDATE", payload: { nightSelection: newSelection } });
+        return;
+      }
     }
   };
 
@@ -350,7 +440,8 @@ function WerewolfGameUI() {
 
     if (phase === "night") {
       const myRole = playerRoles[playerName]?.id;
-      const isMyTurn = nightPhase === myRole;
+      const isActAnytimeRole = ["hunter", "medium", "pied_piper", "seer"].includes(myRole || "");
+      const isMyTurn = nightPhase === myRole || isActAnytimeRole;
       const isWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(myRole || "");
 
       if (isWolf && nightPhase === "werewolf") {
@@ -408,8 +499,8 @@ function WerewolfGameUI() {
 
   return (
     <main
-      className={`relative flex min-h-screen flex-col items-center px-4 py-8 md:justify-center overflow-x-hidden ${
-        isNight ? "bg-slate-950 text-white" : "bg-zinc-50 text-zinc-950"
+      className={`relative flex min-h-screen flex-col items-center px-4 py-8 md:justify-center overflow-x-hidden transition-colors duration-1000 ease-in-out ${
+        isNight ? "bg-slate-950 text-slate-50" : "bg-zinc-50 text-zinc-950"
       }`}
     >
       {/* 3D Twinkling Starry night background layer */}
@@ -423,7 +514,7 @@ function WerewolfGameUI() {
 
       {/* Floating profile avatar button to change name */}
       {hasInitialized && (
-        <div className="fixed right-6 top-6 z-[40]">
+        <div className="fixed left-6 top-6 z-[40]">
           <button
             onClick={() => setShowNameModal(true)}
             className={`flex h-11 w-11 items-center justify-center rounded-full text-base font-black shadow-md hover:scale-105 transition-transform ${
@@ -519,19 +610,36 @@ function WerewolfGameUI() {
             {(() => {
               const logs = actionLogs.filter((l) => (summaryTab === "night" ? l.roleId !== "system" : l.roleId === "system"));
               if (logs.length === 0) return <p className="text-xs text-zinc-400 text-center py-6 italic">Chưa có bản ghi nào.</p>;
-              return logs.map((log) => {
-                const roleName = log.roleId === "system" ? "Hệ thống" : defaultRoles.find((r) => r.id === log.roleId)?.name || log.roleId;
-                return (
-                  <div key={log.id} className="text-xs bg-zinc-50 border border-zinc-100 rounded-xl p-3">
-                    <span className={`font-extrabold ${log.roleId === "system" ? "text-amber-600" : "text-indigo-600"}`}>
-                      {roleName} {log.playerName !== "system" && `(${log.playerName})`}
-                    </span>
-                    <p className="mt-1 text-zinc-600 font-medium leading-relaxed">
-                      {getLogFormatted(log.content)}
-                    </p>
+              
+              const groupedLogs = logs.reduce((acc, log) => {
+                const day = log.dayCount || 1;
+                if (!acc[day]) acc[day] = [];
+                acc[day].push(log);
+                return acc;
+              }, {} as Record<number, typeof logs>);
+
+              return Object.entries(groupedLogs).sort(([a], [b]) => Number(a) - Number(b)).map(([day, dayLogs]) => (
+                <div key={`day-group-${day}`} className="mb-6">
+                  <h4 className="text-sm font-black text-zinc-800 mb-3 border-b pb-1">
+                    {summaryTab === "night" ? `🌙 Đêm ${day}` : `☀️ Ngày ${day}`}
+                  </h4>
+                  <div className="space-y-3 pl-2 border-l-2 border-indigo-100">
+                    {dayLogs.map((log) => {
+                      const roleName = log.roleId === "system" ? "Hệ thống" : defaultRoles.find((r) => r.id === log.roleId)?.name || log.roleId;
+                      return (
+                        <div key={log.id} className="text-xs bg-zinc-50 border border-zinc-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-shadow">
+                          <span className={`font-extrabold ${log.roleId === "system" ? "text-amber-600" : "text-indigo-600"}`}>
+                            {roleName} {log.playerName !== "system" && `(${log.playerName})`}
+                          </span>
+                          <p className="mt-1 text-zinc-600 font-medium leading-relaxed">
+                            {getLogFormatted(log.content)}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              });
+                </div>
+              ));
             })()}
           </div>
           
@@ -556,6 +664,9 @@ function WerewolfGameUI() {
               hostName={hostName}
               roleConfig={roleConfig}
               updateRoleCount={updateRoleCount}
+              applyRolePreset={applyRolePreset}
+              timeSettings={timeSettings}
+              updateTimeSettings={updateTimeSettings}
               handleStartGame={handleStartGame}
               handleKickPlayer={handleKickPlayer}
               linkCopied={linkCopied}
@@ -589,15 +700,15 @@ function WerewolfGameUI() {
 
           {/* Active Gaming Screen Layout */}
           {gameStarted && phase !== "game_over" && (
-            <div className="flex flex-col w-full max-w-7xl mt-4 gap-4">
+            <div className="flex flex-col w-full max-w-7xl mt-4 gap-4 h-[calc(100vh-8rem)] min-h-[600px]">
               {/* Night sequence turn progress tracker - full width at the top */}
               {isNight && <NightSequenceTracker />}
 
               {/* 3-column grid layout */}
-              <div className="grid w-full flex-1 grid-cols-1 gap-6 lg:grid-cols-[280px_1fr_350px]">
+              <div className="grid w-full flex-1 grid-cols-1 gap-6 lg:grid-cols-[280px_1fr_350px] overflow-hidden">
               
               {/* Left Column: Self Card & Host actions */}
-              <div className="flex flex-col space-y-6">
+              <div className="flex flex-col space-y-6 overflow-y-auto pr-2 pb-4 custom-scrollbar">
                 {/* Visual Status Panel */}
                 <div className={`w-full rounded-2xl border p-5 shadow-sm transition-all duration-500 ${
                   isNight
@@ -674,13 +785,15 @@ function WerewolfGameUI() {
               </div>
 
               {/* Middle Column: Game Header & Interactive Board */}
-              <div className="flex flex-col space-y-6">
+              <div className="flex flex-col space-y-6 overflow-y-auto pr-2 pb-4 custom-scrollbar">
                 {/* Visual Header Instructions Banner */}
-                <div className={`w-full rounded-2xl border p-4 shadow-sm transition-all duration-300 ${
-                  isNight
-                    ? "border-indigo-900/50 bg-slate-800/80 text-indigo-100 shadow-indigo-950/10"
-                    : "border-zinc-200 bg-white text-zinc-800 shadow-zinc-200/50"
-                }`}>
+                <div
+                  className={`w-full rounded-2xl border p-4 shadow-sm transition-all duration-700 ease-in-out ${
+                    isNight
+                      ? "border-indigo-900/50 bg-slate-800/80 text-indigo-100 shadow-indigo-950/10"
+                      : "border-zinc-200 bg-white text-zinc-800 shadow-zinc-200/50"
+                  }`}
+                >
                   <p className="text-sm font-bold text-center leading-relaxed">
                     {getPromptText()}
                   </p>
@@ -715,21 +828,6 @@ function WerewolfGameUI() {
                   onPlayerClick={handlePlayerCardClick}
                 />
 
-                {/* Night Action panel controller card */}
-                {phase === "night" && alivePlayers.includes(playerName) && (
-                  <NightActionController />
-                )}
-
-                {/* Day Action panel controller card */}
-                {phase === "day" && (
-                  <DayActionController
-                    gameState={gameState}
-                    dispatch={dispatch}
-                    channel={channel}
-                    playerName={playerName}
-                  />
-                )}
-                
                 {/* Dead player alert box inside board column */}
                 {!alivePlayers.includes(playerName) && (
                   <div className={`flex w-full items-start space-x-3 rounded-2xl border p-5 ${
@@ -747,8 +845,23 @@ function WerewolfGameUI() {
               </div>
 
               {/* Right Column: Unified Sidebar (Chat / Logs / Roles cheat sheet) */}
-              <div className="flex flex-col space-y-6">
+              <div className="flex flex-col space-y-4 h-full overflow-hidden pb-2">
                 <GameSidebar
+                  actionComponent={
+                    <>
+                      {phase === "night" && alivePlayers.includes(playerName) && (
+                        <NightActionController />
+                      )}
+                      {phase === "day" && (
+                        <DayActionController
+                          gameState={gameState}
+                          dispatch={dispatch}
+                          channel={channel}
+                          playerName={playerName}
+                        />
+                      )}
+                    </>
+                  }
                   playerName={playerName}
                   alivePlayers={alivePlayers}
                   playerRoles={playerRoles}

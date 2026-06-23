@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { FaCrown, FaShareAlt, FaPlay, FaComments, FaSlidersH, FaSignOutAlt } from "react-icons/fa";
 import { RoleConfig, ChatMessage } from "../types";
-import RoleConfigPanel from "./role-config-panel";
+import GameConfigPanel from "./game-config-panel";
 import PrivateChat from "./wolf-chat";
 import { motion } from "framer-motion";
 
@@ -14,7 +14,10 @@ type LobbyScreenProps = {
   playerName: string;
   hostName: string | null;
   roleConfig: RoleConfig[];
+  timeSettings: { discussion: number; voting: number; defense: number; night: number };
   updateRoleCount: (id: string, delta: number) => void;
+  applyRolePreset?: (presetCounts: Record<string, number>) => void;
+  updateTimeSettings: (newSettings: { discussion: number; voting: number; defense: number; night: number }) => void;
   handleStartGame: () => void;
   handleKickPlayer: (name: string) => void;
   linkCopied: boolean;
@@ -31,7 +34,10 @@ export default function LobbyScreen({
   playerName,
   hostName,
   roleConfig,
+  timeSettings,
   updateRoleCount,
+  applyRolePreset,
+  updateTimeSettings,
   handleStartGame,
   handleKickPlayer,
   linkCopied,
@@ -189,9 +195,9 @@ export default function LobbyScreen({
       </div>
 
       {/* Sidebar Panel */}
-      <div className="flex flex-col h-[600px] rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+      <div className="flex flex-col h-[600px] rounded-2xl border border-zinc-200 bg-white shadow-sm">
         {/* Navigation Tabs */}
-        <div className="flex border-b border-zinc-100 bg-zinc-50/50">
+        <div className="flex border-b border-zinc-100 bg-zinc-50/50 rounded-t-2xl overflow-hidden">
           <button
             onClick={() => setActiveTab("roles")}
             className={`flex flex-1 items-center justify-center p-4 text-xs font-bold uppercase tracking-wider transition-colors ${
@@ -215,16 +221,19 @@ export default function LobbyScreen({
         </div>
 
         {/* Tab contents */}
-        <div className="flex-1 overflow-hidden flex flex-col p-3">
+        <div className={`flex-1 flex flex-col p-3 ${activeTab === 'chat' ? 'overflow-hidden' : ''}`}>
           {activeTab === "roles" && (
-            <div className="flex-1 overflow-y-auto max-h-[500px] pr-1">
-              <RoleConfigPanel
+            <div className="flex-1 pr-1">
+              <GameConfigPanel
                 roleConfig={roleConfig}
                 playersCount={players.length}
                 hostName={hostName}
                 playerName={playerName}
                 gameStarted={false}
                 updateRoleCount={updateRoleCount}
+                applyRolePreset={applyRolePreset}
+                timeSettings={timeSettings}
+                updateTimeSettings={updateTimeSettings}
                 isNight={false}
               />
             </div>

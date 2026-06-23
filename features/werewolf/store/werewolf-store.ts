@@ -48,6 +48,13 @@ export const initialGameState: GameState = {
   hypnotizedPlayers: [],
   extraWolfKill: false,
   activeExtraWolfKill: false,
+  elderDied: false,
+  timeSettings: {
+    discussion: 480,
+    voting: 45,
+    defense: 90,
+    night: 60,
+  },
 };
 
 export function gameReducer(state: GameState, action: GameAction): GameState {

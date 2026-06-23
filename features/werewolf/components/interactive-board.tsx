@@ -5,8 +5,6 @@ import { FaCrown, FaGhost, FaHeart } from "react-icons/fa";
 import { GiBullseye, GiMusicalNotes } from "react-icons/gi";
 import { RoleConfig, GameState } from "../types";
 import { RoleIcon, getRoleColor } from "../utils";
-import { motion } from "framer-motion";
-
 type InteractiveBoardProps = {
   players: string[];
   alivePlayers: string[];
@@ -65,7 +63,8 @@ export default function InteractiveBoard({
   const getPlayerSelectionType = (pName: string) => {
     if (!gameStarted || !onPlayerClick) return null;
     const myRole = playerRoles[playerName]?.id;
-    const isMyTurn = nightPhase === myRole;
+    const isActAnytimeRole = ["hunter", "medium", "pied_piper", "seer"].includes(myRole || "");
+    const isMyTurn = nightPhase === myRole || isActAnytimeRole;
 
     // Day Voting selection
     if (phase === "day" && dayPhase === "voting") {
@@ -78,15 +77,20 @@ export default function InteractiveBoard({
       if (nightPhase === "werewolf" && isWolf) {
         return (wolfVotes[playerName] || []).includes(pName) ? "wolf-vote" : null;
       }
+      if (myRole === "witch") {
+        if ((witchAction.heal || []).includes(pName)) return "witch-heal";
+        if (witchAction.poison === pName) return "witch-poison";
+        if (isMyTurn && wolfVictim.includes(pName)) return "witch-victim";
+      }
       if (isMyTurn) {
         if (myRole === "seer" && nightSelection === pName) return "seer-spy";
         if (myRole === "bodyguard" && nightSelection === pName) return "bodyguard-shield";
         if (myRole === "hunter" && nightSelection === pName) return "hunter-ghim";
         if (myRole === "assassin" && nightSelection === pName) return "assassin-kill";
-        if (myRole === "witch") {
-          if ((witchAction.heal || []).includes(pName)) return "witch-heal";
-          if (witchAction.poison === pName) return "witch-poison";
-        }
+        if (myRole === "cupid" && nightSelection?.split(",").includes(pName)) return "cupid-love";
+        if (myRole === "medium" && nightSelection === pName) return "medium-revive";
+        if (myRole === "pied_piper" && nightSelection === pName) return "pied-piper-charm";
+        if (myRole === "white_wolf" && nightSelection === pName) return "white-wolf-kill";
       }
     }
     return null;
@@ -111,6 +115,16 @@ export default function InteractiveBoard({
         return "border-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.4)] ring-2 ring-emerald-500/20";
       case "witch-poison":
         return "border-fuchsia-600 shadow-[0_0_12px_rgba(217,70,239,0.4)] ring-2 ring-fuchsia-600/20";
+      case "witch-victim":
+        return "border-rose-500 shadow-[0_0_12px_rgba(244,63,94,0.4)] ring-2 ring-rose-500/40 animate-pulse";
+      case "cupid-love":
+        return "border-pink-500 shadow-[0_0_12px_rgba(236,72,153,0.4)] ring-2 ring-pink-500/20";
+      case "medium-revive":
+        return "border-teal-500 shadow-[0_0_12px_rgba(20,184,166,0.4)] ring-2 ring-teal-500/20";
+      case "pied-piper-charm":
+        return "border-emerald-600 shadow-[0_0_12px_rgba(5,150,105,0.4)] ring-2 ring-emerald-600/20";
+      case "white-wolf-kill":
+        return "border-zinc-400 shadow-[0_0_12px_rgba(161,161,170,0.4)] ring-2 ring-zinc-400/20";
       default:
         return isNight ? "border-slate-700/60 hover:border-indigo-500/30" : "border-zinc-200/80 hover:border-zinc-400";
     }
@@ -197,26 +211,29 @@ export default function InteractiveBoard({
           const selectionStyles = getSelectionStyles(selectionType);
           const voters = getVotesOnPlayer(p);
 
+          const isMediumAction = phase === "night" && myRole?.id === "medium";
+          const isPlayerTargetable = isMediumAction ? !isAlive : isAlive;
+          
+          const isActAnytimeRole = ["hunter", "medium", "pied_piper", "seer"].includes(myRole?.id || "");
+
           // Check if clickable
           const isClickable =
             gameStarted &&
-            isAlive &&
+            isPlayerTargetable &&
             onPlayerClick &&
             // Can only click if it's voting day or our active night turn
             ((phase === "day" && dayPhase === "voting") ||
               (phase === "night" &&
-                (nightPhase === myRole?.id ||
+                (isActAnytimeRole || nightPhase === myRole?.id ||
                   (nightPhase === "werewolf" &&
                     ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(myRole?.id || "")))));
 
           return (
-            <motion.div
+            <div
               key={idx}
-              whileHover={isClickable ? { scale: 1.03 } : {}}
-              whileTap={isClickable ? { scale: 0.98 } : {}}
               onClick={() => isClickable && onPlayerClick && onPlayerClick(p)}
               className={`relative flex flex-col items-center justify-center rounded-2xl border p-4 shadow-sm transition-all duration-300 ${
-                isClickable ? "cursor-pointer" : "cursor-default"
+                isClickable ? "cursor-pointer hover:scale-105 active:scale-95" : "cursor-default"
               } ${isNight ? "bg-slate-800/40" : "bg-zinc-50/50"} ${
                 !isAlive && gameStarted
                   ? `opacity-40 grayscale ${isNight ? "border-slate-800 bg-slate-950/20" : "border-zinc-200 bg-zinc-200/30"}`
@@ -315,7 +332,7 @@ export default function InteractiveBoard({
                       <span>{originalRole.name}</span>
                     </span>
                   )}
-                  <span className={`flex items-center space-x-0.5 rounded px-1.5 py-0.5 text-[9px] font-extrabold border ${getRoleColor(role.id)} ${
+                  <span className={`whitespace-nowrap flex items-center space-x-0.5 rounded px-1.5 py-0.5 text-[9px] font-extrabold border ${getRoleColor(role.id)} ${
                     isNight ? "border-slate-700 bg-slate-800/80" : "border-zinc-200 bg-white"
                   }`}>
                     <RoleIcon id={role.id} className="text-[10px] mr-0.5" />
@@ -340,7 +357,7 @@ export default function InteractiveBoard({
                   <span className="ml-1 text-[9px] font-black text-white">({voters.length})</span>
                 </div>
               )}
-            </motion.div>
+            </div>
           );
         })}
       </div>
