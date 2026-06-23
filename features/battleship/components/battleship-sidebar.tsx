@@ -164,7 +164,7 @@ export function BattleshipSidebar({ isDarkMode }: BattleshipSidebarProps) {
                 <DoorOpen className="w-4 h-4 sm:w-5 sm:h-5" />
               </Link>
               <div className="absolute top-full mt-2 right-0 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-[60]">
-                Đổi trò chơi
+                Về Trang Chủ
               </div>
             </div>
           </div>

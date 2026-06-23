@@ -1,11 +1,13 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useLobbyInit } from "@/features/lobby/hooks/use-lobby-init";
 import { JoinRoomModal } from "@/features/lobby/components/join-room-modal";
 import { JungleProvider } from "@/features/jungle/contexts/jungle-context";
 import { JungleBoard } from "@/features/jungle/components/jungle-board";
 import { JungleSidebar } from "@/features/jungle/components/jungle-sidebar";
+import { GlobalActionMenu } from "@/components/global-action-menu";
+import { GameRulesModal } from "@/components/game-rules-modal";
 
 function JungleGameContent() {
   const {
@@ -20,6 +22,8 @@ function JungleGameContent() {
     handleJoinRoom,
     isCreator,
   } = useLobbyInit("Jungle");
+
+  const [showRulesModal, setShowRulesModal] = useState(false);
 
   const isDarkMode = false; // Jungle board handles its own theme colors, we use false for sidebar layout
 
@@ -63,6 +67,19 @@ function JungleGameContent() {
       isCreator={isCreator}
       hasInitialized={hasInitialized}
     >
+      {hasInitialized && (
+        <GlobalActionMenu
+          playerName={playerName || ""}
+          onRenameClick={() => setShowNameModal(true)}
+          onShowRules={() => setShowRulesModal(true)}
+        />
+      )}
+
+      <GameRulesModal
+        isOpen={showRulesModal}
+        onClose={() => setShowRulesModal(false)}
+        gameId="jungle"
+      />
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 w-full max-w-7xl mx-auto h-full p-4 lg:p-6">
         {/* Cột trái: Sidebar Lobby */}
         <div className="w-full lg:w-80 xl:w-96 shrink-0 h-[500px] lg:h-auto">

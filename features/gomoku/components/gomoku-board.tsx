@@ -14,7 +14,7 @@ export function GomokuBoard({ isDarkMode, isDisabled }: GomokuBoardProps) {
     <div className="flex w-full h-full items-center justify-center p-2 sm:p-4">
       {/* Board Wrapper - Scales automatically to fit height/width */}
       <div
-        className={`relative aspect-square w-full max-h-full max-w-full rounded-sm shadow-2xl transition-all flex ${isDarkMode ? "bg-[#332918]" : "bg-[#e5b76b]"} ${isDisabled ? "opacity-50 pointer-events-none" : "opacity-100"}`}
+        className={`relative aspect-square w-full max-h-full max-w-full rounded-sm shadow-2xl transition-all flex ${isDarkMode ? "bg-slate-800 border border-slate-700" : "bg-white border border-slate-200"} ${isDisabled ? "opacity-50 pointer-events-none" : "opacity-100"}`}
         style={{ maxWidth: "min(100%, 85vh)" }}
       >
         <div className="absolute inset-4 sm:inset-6">
@@ -37,7 +37,7 @@ export function GomokuBoard({ isDarkMode, isDisabled }: GomokuBoardProps) {
           </div>
 
           <div
-            className={`grid w-full h-full gap-0 transition-colors`}
+            className={`grid w-full h-full gap-px border transition-colors ${isDarkMode ? "bg-slate-600 border-slate-600" : "bg-slate-300 border-slate-300"}`}
             style={{
               gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
               gridTemplateRows: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
@@ -54,44 +54,25 @@ export function GomokuBoard({ isDarkMode, isDisabled }: GomokuBoardProps) {
                   <div
                     key={`${rowIndex}-${colIndex}`}
                     onClick={() => handleCellClick(rowIndex, colIndex)}
-                    className={`relative flex items-center justify-center cursor-pointer group ${isWinningCell ? "bg-red-500/40" : ""}`}
+                    className={`relative flex items-center justify-center cursor-pointer group ${isDarkMode ? "bg-slate-800 hover:bg-slate-700" : "bg-white hover:bg-slate-50"} transition-colors ${isLastMove && !isWinningCell ? (isDarkMode ? "!bg-yellow-900/40" : "!bg-yellow-100") : ""} ${isWinningCell ? (isDarkMode ? "!bg-red-900/60" : "!bg-red-100") : ""}`}
                   >
-                    {/* Background Intersection Lines */}
-                    <div className="absolute inset-0 pointer-events-none">
-                      {/* Vertical line */}
-                      <div className={`absolute left-1/2 w-[1px] -translate-x-1/2 ${isDarkMode ? "bg-black/60" : "bg-black/50"}
-                        ${rowIndex === 0 ? "top-1/2 bottom-0" : rowIndex === BOARD_SIZE - 1 ? "top-0 bottom-1/2" : "top-0 bottom-0"}
-                      `} />
-                      {/* Horizontal line */}
-                      <div className={`absolute top-1/2 h-[1px] -translate-y-1/2 ${isDarkMode ? "bg-black/60" : "bg-black/50"}
-                        ${colIndex === 0 ? "left-1/2 right-0" : colIndex === BOARD_SIZE - 1 ? "left-0 right-1/2" : "left-0 right-0"}
-                      `} />
-                    </div>
 
-                    {/* Hoshi (Star Points) */}
-                    {[4, 12, 20].includes(rowIndex) && [4, 12, 20].includes(colIndex) && (
-                      <div className={`absolute w-[4px] h-[4px] md:w-[6px] md:h-[6px] rounded-full ${isDarkMode ? "bg-black/80" : "bg-black/70"} z-0 pointer-events-none`} />
-                    )}
 
-                    {/* Highlight on hover for empty cell */}
-                    {!cell && !winner && (
-                      <div className={`absolute w-[70%] h-[70%] rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-0 ${isDarkMode ? "bg-white/20" : "bg-black/10"}`} />
-                    )}
 
-                    {/* Piece (Stone) */}
+                    {/* Piece (Stone -> X / O) */}
                     {cell && (
                       <div
-                        className={`absolute w-[85%] h-[85%] rounded-full z-10 transition-transform duration-200 ${isLastMove ? "scale-105" : ""}`}
-                        style={{
-                          background: cell === "B" 
-                            ? "radial-gradient(circle at 30% 30%, #555, #111)" 
-                            : "radial-gradient(circle at 30% 30%, #fff, #bbb)",
-                          boxShadow: "2px 2px 4px rgba(0,0,0,0.5)"
-                        }}
+                        className={`absolute flex items-center justify-center w-full h-full z-10 transition-transform duration-200`}
                       >
-                        {/* Last move indicator dot inside the piece */}
-                        {isLastMove && (
-                          <div className={`absolute top-1/2 left-1/2 w-1.5 h-1.5 sm:w-2 sm:h-2 -translate-x-1/2 -translate-y-1/2 rounded-full ${cell === "B" ? "bg-white/80" : "bg-red-500/80"}`} />
+                        {cell === "B" ? (
+                          <svg viewBox="0 0 24 24" className={`w-[85%] h-[85%] text-red-600 ${isDarkMode ? "drop-shadow-[0_0_3px_rgba(220,38,38,0.5)]" : "drop-shadow-sm"}`} fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round">
+                            <line x1="4" y1="4" x2="20" y2="20" />
+                            <line x1="20" y1="4" x2="4" y2="20" />
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" className={`w-[85%] h-[85%] text-emerald-500 ${isDarkMode ? "drop-shadow-[0_0_3px_rgba(16,185,129,0.5)]" : "drop-shadow-sm"}`} fill="none" stroke="currentColor" strokeWidth="3.5">
+                            <circle cx="12" cy="12" r="8" />
+                          </svg>
                         )}
                       </div>
                     )}

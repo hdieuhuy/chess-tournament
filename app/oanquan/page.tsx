@@ -1,11 +1,13 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useLobbyInit } from "@/features/lobby/hooks/use-lobby-init";
 import { JoinRoomModal } from "@/features/lobby/components/join-room-modal";
 import { OAnQuanProvider, useOAnQuan } from "@/features/oanquan/contexts/oanquan-context";
 import { OAnQuanBoard } from "@/features/oanquan/components/oanquan-board";
 import { OAnQuanSidebar } from "@/features/oanquan/components/oanquan-sidebar";
+import { GlobalActionMenu } from "@/components/global-action-menu";
+import { GameRulesModal } from "@/components/game-rules-modal";
 
 function OAnQuanGameContent() {
   const {
@@ -20,6 +22,8 @@ function OAnQuanGameContent() {
     handleJoinRoom,
     isCreator,
   } = useLobbyInit("OAnQuan");
+
+  const [showRulesModal, setShowRulesModal] = useState(false);
 
   // O An Quan does not currently have a theme toggle like Gomoku, but we can pass `isDarkMode={false}`
   const isDarkMode = false;
@@ -64,6 +68,19 @@ function OAnQuanGameContent() {
       isCreator={isCreator}
       hasInitialized={hasInitialized}
     >
+      {hasInitialized && (
+        <GlobalActionMenu
+          playerName={playerName || ""}
+          onRenameClick={() => setShowNameModal(true)}
+          onShowRules={() => setShowRulesModal(true)}
+        />
+      )}
+
+      <GameRulesModal
+        isOpen={showRulesModal}
+        onClose={() => setShowRulesModal(false)}
+        gameId="oanquan"
+      />
       <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 w-full max-w-7xl mx-auto h-full p-4 lg:p-6">
         {/* Cột trái: Sidebar Lobby */}
         <div className="w-full lg:w-80 xl:w-96 shrink-0 h-[500px] lg:h-auto">

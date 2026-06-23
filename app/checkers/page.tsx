@@ -5,9 +5,11 @@ import { useLobbyInit } from "@/features/lobby/hooks/use-lobby-init";
 import { JoinRoomModal } from "@/features/lobby/components/join-room-modal";
 import { CheckersProvider, useCheckers } from "@/features/checkers/contexts/checkers-context";
 import { CheckersBoard } from "@/features/checkers/components/checkers-board";
+import { GameRulesModal } from "@/components/game-rules-modal";
 import { CheckersSidebar } from "@/features/checkers/components/checkers-sidebar";
 import confetti from "canvas-confetti";
 import { User, Sun, Moon } from "lucide-react";
+import { GlobalActionMenu } from "@/components/global-action-menu";
 
 function CheckersGameContent() {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -82,6 +84,7 @@ function CheckersLayout({
   playerName,
 }: any) {
   const { winner, gameStarted } = useCheckers();
+  const [showRulesModal, setShowRulesModal] = useState(false);
 
   useEffect(() => {
     if (winner && winner !== "Draw") {
@@ -118,35 +121,21 @@ function CheckersLayout({
     >
       {/* Floating Buttons: Settings & Theme */}
       {hasInitialized && (
-        <div className="fixed right-4 top-4 z-50 flex gap-3">
-          <div className="relative group flex justify-center">
-            <button
-              onClick={() => setShowNameModal(true)}
-              className={`flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full shadow-lg transition-all hover:scale-105 ${isDarkMode ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200"}`}
-            >
-              <User className="w-5 h-5" />
-            </button>
-            <div className="absolute top-full mt-2 right-0 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
-              Đổi tên người chơi
-            </div>
-          </div>
-          <div className="relative group flex justify-center">
-            <button
-              onClick={toggleTheme}
-              className={`flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full shadow-lg transition-all hover:scale-105 ${
-                isDarkMode
-                  ? "bg-slate-800 text-yellow-400 hover:bg-slate-700"
-                  : "bg-white text-slate-800 hover:bg-zinc-100 border border-zinc-200"
-              }`}
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
-            <div className="absolute top-full mt-2 right-0 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
-              {isDarkMode ? "Giao diện sáng" : "Giao diện tối"}
-            </div>
-          </div>
-        </div>
+        <GlobalActionMenu
+          playerName={playerName || ""}
+          onRenameClick={() => setShowNameModal(true)}
+          hasThemeToggle={true}
+          isDarkMode={isDarkMode}
+          onThemeToggle={toggleTheme}
+          onShowRules={() => setShowRulesModal(true)}
+        />
       )}
+
+      <GameRulesModal
+        isOpen={showRulesModal}
+        onClose={() => setShowRulesModal(false)}
+        gameId="checkers"
+      />
 
       <JoinRoomModal
         isOpen={showNameModal}

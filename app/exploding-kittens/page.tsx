@@ -26,6 +26,8 @@ import {
 import { GiSwordClash } from "react-icons/gi";
 import { BsFillRocketFill } from "react-icons/bs";
 import { IoWarningOutline } from "react-icons/io5";
+import { GlobalActionMenu } from "@/components/global-action-menu";
+import { GameRulesModal } from "@/components/game-rules-modal";
 
 const generateId = () => Math.random().toString(36).substring(2, 10);
 const shuffleArray = <T,>(array: T[]): T[] =>
@@ -41,6 +43,7 @@ function ExplodingKittensGame() {
   const [playerName, setPlayerName] = useState<string>("");
   const [inputName, setInputName] = useState<string>("");
   const [showNameModal, setShowNameModal] = useState<boolean>(true);
+  const [showRulesModal, setShowRulesModal] = useState<boolean>(false);
   const [hasInitialized, setHasInitialized] = useState<boolean>(false);
   const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
 
@@ -1605,6 +1608,19 @@ function ExplodingKittensGame() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12">
+      {hasInitialized && (
+        <GlobalActionMenu
+          playerName={playerName || ""}
+          onRenameClick={() => setShowNameModal(true)}
+          onShowRules={() => setShowRulesModal(true)}
+        />
+      )}
+
+      <GameRulesModal
+        isOpen={showRulesModal}
+        onClose={() => setShowRulesModal(false)}
+        gameId="exploding-kittens"
+      />
       <Modal
         isOpen={showNameModal}
         title={

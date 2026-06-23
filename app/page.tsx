@@ -140,18 +140,13 @@ const FEATURES = [
 const STEPS = [
   {
     step: "1",
-    title: "Chọn Trò Chơi",
-    desc: "Khám phá bộ sưu tập board game và party game phong phú."
+    title: "Chọn Game",
+    desc: "Khám phá và chọn ngay một trò chơi bạn muốn tham gia."
   },
   {
     step: "2",
-    title: "Tạo Phòng",
-    desc: "Nhấn 'Tạo phòng mới' hoặc tham gia phòng sẵn có bằng Mã (Room ID)."
-  },
-  {
-    step: "3",
-    title: "Gửi Link & Chơi",
-    desc: "Sao chép link phòng, gửi cho bạn bè và bắt đầu tranh tài!"
+    title: "Gửi Link Cho Bạn Bè",
+    desc: "Vào thẳng phòng chơi, copy link gửi bạn bè và bắt đầu ngay!"
   }
 ];
 
@@ -223,7 +218,7 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.3 }}
-            className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto"
+            className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full"
           >
             <button
               onClick={scrollToGames}
@@ -232,12 +227,6 @@ export default function LandingPage() {
               <Gamepad2 className="w-5 h-5 group-hover:-rotate-12 transition-transform" />
               Khám Phá Trò Chơi
             </button>
-            <a
-              href="#how-it-works"
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-white text-slate-700 rounded-2xl font-bold text-lg border border-slate-200 hover:bg-slate-50 transition-all hover:shadow-md active:scale-95 cursor-pointer"
-            >
-              Cách Chơi
-            </a>
           </motion.div>
 
         </div>
@@ -265,6 +254,62 @@ export default function LandingPage() {
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-3">{feat.title}</h3>
                 <p className="text-slate-600 leading-relaxed">{feat.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* HOW IT WORKS */}
+      <section id="how-it-works" className="relative z-10 py-24 mt-10 overflow-hidden">
+        {/* Background Gradients for this section */}
+        <div className="absolute inset-0 bg-slate-950" />
+        <div className="absolute inset-0 bg-[url('/noise.png')] opacity-20 mix-blend-overlay" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="relative max-w-7xl mx-auto px-6">
+          <div className="text-center mb-20">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-sm font-bold mb-6"
+            >
+              <Zap className="w-4 h-4" />
+              <span>Nhanh Chóng & Dễ Dàng</span>
+            </motion.div>
+            <h2 className="text-4xl md:text-5xl font-black text-white mb-6 tracking-tight">Bắt Đầu Chỉ Trong <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">2 Bước</span></h2>
+            <p className="text-lg text-slate-400 max-w-2xl mx-auto">Không cần đăng ký rườm rà. Hệ thống được thiết kế để bạn và bạn bè có thể lao vào cuộc chiến ngay lập tức.</p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 relative max-w-3xl mx-auto">
+            {/* Connecting Line (Desktop) */}
+            <div className="hidden md:block absolute top-12 left-[25%] right-[25%] h-[2px] bg-gradient-to-r from-indigo-500/0 via-indigo-500/30 to-indigo-500/0" />
+
+            {STEPS.map((s, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.2 }}
+                className="relative flex flex-col group"
+              >
+                <div className="relative z-10 flex flex-col items-center p-8 rounded-3xl bg-slate-900/50 backdrop-blur-xl border border-slate-700/50 hover:border-indigo-500/50 transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_0_40px_-10px_rgba(99,102,241,0.3)]">
+                  {/* Step Number Badge */}
+                  <div className="absolute -top-6 w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-500 p-[2px] shadow-lg shadow-indigo-500/25 group-hover:scale-110 transition-transform duration-300">
+                    <div className="w-full h-full rounded-2xl bg-slate-950 flex items-center justify-center">
+                      <span className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-br from-indigo-400 to-cyan-400">
+                        0{s.step}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-8 text-center">
+                    <h3 className="text-2xl font-bold text-white mb-4 group-hover:text-indigo-300 transition-colors">{s.title}</h3>
+                    <p className="text-slate-400 leading-relaxed">{s.desc}</p>
+                  </div>
+                </div>
               </motion.div>
             ))}
           </div>
@@ -312,61 +357,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* HOW IT WORKS */}
-      <section id="how-it-works" className="relative z-10 py-24 mt-10 overflow-hidden">
-        {/* Background Gradients for this section */}
-        <div className="absolute inset-0 bg-slate-950" />
-        <div className="absolute inset-0 bg-[url('/noise.png')] opacity-20 mix-blend-overlay" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none" />
 
-        <div className="relative max-w-7xl mx-auto px-6">
-          <div className="text-center mb-20">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-sm font-bold mb-6"
-            >
-              <Zap className="w-4 h-4" />
-              <span>Nhanh Chóng & Dễ Dàng</span>
-            </motion.div>
-            <h2 className="text-4xl md:text-5xl font-black text-white mb-6 tracking-tight">Bắt Đầu Chỉ Trong <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">3 Bước</span></h2>
-            <p className="text-lg text-slate-400 max-w-2xl mx-auto">Không cần đăng ký rườm rà. Hệ thống được thiết kế để bạn và bạn bè có thể lao vào cuộc chiến ngay lập tức.</p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8 relative">
-            {/* Connecting Line (Desktop) */}
-            <div className="hidden md:block absolute top-12 left-[15%] right-[15%] h-[2px] bg-gradient-to-r from-indigo-500/0 via-indigo-500/30 to-indigo-500/0" />
-
-            {STEPS.map((s, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.2 }}
-                className="relative flex flex-col group"
-              >
-                <div className="relative z-10 flex flex-col items-center p-8 rounded-3xl bg-slate-900/50 backdrop-blur-xl border border-slate-700/50 hover:border-indigo-500/50 transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_0_40px_-10px_rgba(99,102,241,0.3)]">
-                  {/* Step Number Badge */}
-                  <div className="absolute -top-6 w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-500 p-[2px] shadow-lg shadow-indigo-500/25 group-hover:scale-110 transition-transform duration-300">
-                    <div className="w-full h-full rounded-2xl bg-slate-950 flex items-center justify-center">
-                      <span className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-br from-indigo-400 to-cyan-400">
-                        0{s.step}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-8 text-center">
-                    <h3 className="text-2xl font-bold text-white mb-4 group-hover:text-indigo-300 transition-colors">{s.title}</h3>
-                    <p className="text-slate-400 leading-relaxed">{s.desc}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* FOOTER */}
       <footer className="relative z-10 bg-slate-950 text-slate-500 py-10 text-center text-sm border-t border-slate-800">

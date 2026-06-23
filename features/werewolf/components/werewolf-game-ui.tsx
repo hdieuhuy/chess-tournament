@@ -22,8 +22,9 @@ import PostGameScreen from "./post-game-screen";
 import DayActionController from "./day-action-controller";
 import NightActionController from "./night-action-controller";
 import NightSequenceTracker from "./night-sequence-tracker";
+import { GlobalActionMenu } from "@/components/global-action-menu";
 
-import { defaultRoles, RoleIcon } from "../utils";
+import { defaultRoles, RoleIcon, getRoleColor, getRoleDescription } from "../utils";
 
 function WerewolfGameUI() {
   const searchParams = useSearchParams();
@@ -38,6 +39,7 @@ function WerewolfGameUI() {
   const [summaryTab, setSummaryTab] = useState<"night" | "day">("night");
   const [activeLogTab, setActiveLogTab] = useState<"night" | "day">("night");
   const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
+  const [showRulesModal, setShowRulesModal] = useState<boolean>(false);
 
   const {
     gameState,
@@ -194,7 +196,7 @@ function WerewolfGameUI() {
       type: "UPDATE",
       payload: { timeSettings: newSettings },
     });
-    
+
     if (channel) {
       channel.send({
         type: "broadcast",
@@ -259,7 +261,7 @@ function WerewolfGameUI() {
     if (phase === "day" && dayPhase === "voting" && alivePlayers.includes(targetPlayerName)) {
       const isCurrentlySelected = dayVotes[playerName] === targetPlayerName;
       const newTarget = isCurrentlySelected ? null : targetPlayerName;
-      
+
       dispatch({
         type: "UPDATE_FUNCTION",
         payload: (prev: any) => ({
@@ -459,9 +461,8 @@ function WerewolfGameUI() {
         if (myRole === "white_wolf") return "🐺 Sói Trắng hành động. Chọn 1 con Sói để tiêu diệt.";
         if (myRole === "cursed_wolf") return "🐺 Sói Nguyền hành động. Chọn lây nhiễm nạn nhân bị cắn để biến họ thành Sói.";
       }
-      return `🌙 Đêm ${dayCount}. Làng đang chìm vào giấc ngủ. Đang chờ lượt của ${
-        defaultRoles.find((r) => r.id === nightPhase)?.name || "người khác"
-      }...`;
+      return `🌙 Đêm ${dayCount}. Làng đang chìm vào giấc ngủ. Đang chờ lượt của ${defaultRoles.find((r) => r.id === nightPhase)?.name || "người khác"
+        }...`;
     }
 
     if (phase === "day") {
@@ -499,35 +500,16 @@ function WerewolfGameUI() {
 
   return (
     <main
-      className={`relative flex min-h-screen flex-col items-center px-4 py-8 md:justify-center overflow-x-hidden transition-colors duration-1000 ease-in-out ${
-        isNight ? "bg-slate-950 text-slate-50" : "bg-zinc-50 text-zinc-950"
-      }`}
+      className={`relative flex min-h-screen flex-col items-center px-4 py-8 md:justify-center overflow-x-hidden transition-colors duration-1000 ease-in-out ${isNight ? "bg-slate-950 text-slate-50" : "bg-zinc-50 text-zinc-950"
+        }`}
     >
       {/* 3D Twinkling Starry night background layer */}
       <div
-        className={`absolute inset-0 pointer-events-none z-0 ${
-          isNight ? "opacity-100 visible" : "opacity-0 invisible"
-        }`}
+        className={`absolute inset-0 pointer-events-none z-0 ${isNight ? "opacity-100 visible" : "opacity-0 invisible"
+          }`}
       >
         <NightSkyBackground />
       </div>
-
-      {/* Floating profile avatar button to change name */}
-      {hasInitialized && (
-        <div className="fixed left-6 top-6 z-[40]">
-          <button
-            onClick={() => setShowNameModal(true)}
-            className={`flex h-11 w-11 items-center justify-center rounded-full text-base font-black shadow-md hover:scale-105 transition-transform ${
-              isNight ? "bg-slate-800 text-indigo-300 border border-slate-700" : "bg-zinc-900 text-white"
-            }`}
-            title="Chỉnh sửa tên hiển thị"
-          >
-            {playerName ? playerName.charAt(0).toUpperCase() : <FaUser />}
-          </button>
-        </div>
-      )}
-
-
 
       {/* Name Join Modal */}
       <Modal
@@ -590,27 +572,25 @@ function WerewolfGameUI() {
           <div className="flex border-b border-zinc-200">
             <button
               onClick={() => setSummaryTab("night")}
-              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider text-center border-b-2 transition-colors ${
-                summaryTab === "night" ? "border-indigo-600 text-indigo-700" : "border-transparent text-zinc-400 hover:text-zinc-600"
-              }`}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider text-center border-b-2 transition-colors ${summaryTab === "night" ? "border-indigo-600 text-indigo-700" : "border-transparent text-zinc-400 hover:text-zinc-600"
+                }`}
             >
               <FaMoon className="inline mr-1.5 mb-0.5" /> Lượt Đêm
             </button>
             <button
               onClick={() => setSummaryTab("day")}
-              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider text-center border-b-2 transition-colors ${
-                summaryTab === "day" ? "border-amber-500 text-amber-600" : "border-transparent text-zinc-400 hover:text-zinc-600"
-              }`}
+              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider text-center border-b-2 transition-colors ${summaryTab === "day" ? "border-amber-500 text-amber-600" : "border-transparent text-zinc-400 hover:text-zinc-600"
+                }`}
             >
               <FaSun className="inline mr-1.5 mb-0.5" /> Lượt Ngày
             </button>
           </div>
-          
+
           <div className="space-y-3">
             {(() => {
               const logs = actionLogs.filter((l) => (summaryTab === "night" ? l.roleId !== "system" : l.roleId === "system"));
               if (logs.length === 0) return <p className="text-xs text-zinc-400 text-center py-6 italic">Chưa có bản ghi nào.</p>;
-              
+
               const groupedLogs = logs.reduce((acc, log) => {
                 const day = log.dayCount || 1;
                 if (!acc[day]) acc[day] = [];
@@ -642,7 +622,7 @@ function WerewolfGameUI() {
               ));
             })()}
           </div>
-          
+
           <button
             onClick={() => setShowGameSummaryModal(false)}
             className="w-full cursor-pointer rounded-xl bg-zinc-950 py-3 text-xs font-bold text-white hover:bg-zinc-900"
@@ -652,9 +632,68 @@ function WerewolfGameUI() {
         </div>
       </Modal>
 
+      {/* Rules Modal */}
+      <Modal isOpen={showRulesModal} title="Hướng Dẫn & Luật Chơi" styleClassWrapper="max-w-4xl">
+        <div className="flex flex-col space-y-6 max-h-[70vh] overflow-y-auto pr-2 text-left custom-scrollbar">
+
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <h3 className="text-lg font-black text-indigo-700 mb-2">1. Mục Tiêu Trò Chơi</h3>
+            <p className="text-sm text-slate-700 leading-relaxed">
+              <strong>Phe Dân Làng:</strong> Tìm ra và treo cổ tất cả Sói.<br />
+              <strong>Phe Sói:</strong> Giết Dân Làng cho đến khi số lượng Sói bằng hoặc lớn hơn số lượng Dân Làng sống sót.<br />
+              <strong>Phe Thứ 3 (Tuỳ chọn):</strong> Hoàn thành điều kiện chiến thắng riêng (vd: Kẻ Ngốc bị treo cổ, Thợ Săn Người có mục tiêu bị treo cổ, Cặp Đôi sống sót đến cuối).
+            </p>
+          </div>
+
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <h3 className="text-lg font-black text-indigo-700 mb-2">2. Luật Ban Đêm & Ban Ngày</h3>
+            <p className="text-sm text-slate-700 leading-relaxed mb-3">
+              <strong>Ban Đêm:</strong> Sói chọn người để cắn. Các vai trò đặc biệt (Tiên tri, Bảo vệ, Phù thủy...) có thể tỉnh dậy để sử dụng kỹ năng.
+              <br /><span className="text-rose-600 font-medium">Lưu ý: Đòn tấn công của Sói có thể bị chặn bởi Bảo Vệ hoặc Phù Thuỷ cứu. Các sát thương độc lập (Sói, Phù thuỷ độc, Sát thủ) sẽ cộng dồn (Stack). Nếu mục tiêu nhận nhiều đòn sát thương hơn số mạng đang có, họ sẽ chết.</span>
+            </p>
+            <p className="text-sm text-slate-700 leading-relaxed">
+              <strong>Ban Ngày:</strong> Những người sống sót thức dậy. Thông báo danh sách người chết. Mọi người thảo luận và chọn ra người khả nghi để treo cổ.
+            </p>
+          </div>
+
+          <div>
+            <h3 className="text-lg font-black text-slate-800 mb-4 border-b pb-2">3. Chức Năng Các Vai Trò (Roles)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {defaultRoles.map(r => (
+                <div key={r.id} className="p-3 bg-white border border-slate-200 rounded-xl flex items-start gap-3 shadow-sm hover:shadow-md transition">
+                  <div className={`p-2 rounded-lg text-2xl shrink-0 ${getRoleColor(r.id)} bg-slate-50`}>
+                    <RoleIcon id={r.id} />
+                  </div>
+                  <div>
+                    <h4 className={`font-bold ${getRoleColor(r.id)}`}>{r.name}</h4>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">{getRoleDescription(r.id)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowRulesModal(false)}
+            className="w-full cursor-pointer rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 mt-4"
+          >
+            Đã Hiểu
+          </button>
+        </div>
+      </Modal>
+
       {/* Main Orchestrator layout renderer */}
       {!showNameModal && (
         <div className="w-full flex flex-col items-center z-10">
+
+          <GlobalActionMenu
+            playerName={playerName}
+            onRenameClick={() => setShowNameModal(true)}
+            isDarkMode={false}
+            align="left"
+            onShowRules={() => setShowRulesModal(true)}
+          />
+
           {/* Lobby Screen */}
           {!gameStarted && (
             <LobbyScreen
@@ -706,203 +745,197 @@ function WerewolfGameUI() {
 
               {/* 3-column grid layout */}
               <div className="grid w-full flex-1 grid-cols-1 gap-6 lg:grid-cols-[280px_1fr_350px] overflow-hidden">
-              
-              {/* Left Column: Self Card & Host actions */}
-              <div className="flex flex-col space-y-6 overflow-y-auto pr-2 pb-4 custom-scrollbar">
-                {/* Visual Status Panel */}
-                <div className={`w-full rounded-2xl border p-5 shadow-sm transition-all duration-500 ${
-                  isNight
+
+                {/* Left Column: Self Card & Host actions */}
+                <div className="flex flex-col space-y-6 overflow-y-auto pr-2 pb-4 custom-scrollbar">
+                  {/* Visual Status Panel */}
+                  <div className={`w-full rounded-2xl border p-5 shadow-sm transition-all duration-500 ${isNight
                     ? "border-slate-800 bg-slate-900/60 text-white shadow-indigo-950/20"
                     : "border-zinc-200 bg-white text-zinc-900 shadow-zinc-200/50"
-                }`}>
-                  <div className="flex items-center space-x-3 mb-4">
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl transition-transform hover:scale-105 ${
-                      isNight
+                    }`}>
+                    <div className="flex items-center space-x-3 mb-4">
+                      <div className={`flex h-12 w-12 items-center justify-center rounded-xl transition-transform hover:scale-105 ${isNight
                         ? "bg-indigo-950 text-indigo-400 border border-indigo-800/50 shadow-[0_0_8px_rgba(99,102,241,0.2)]"
                         : "bg-amber-100 text-amber-600 border border-amber-200"
-                    }`}>
-                      {isNight ? <FaMoon className="text-xl animate-pulse" /> : <FaSun className="text-xl animate-spin-slow" style={{ animationDuration: "12s" }} />}
+                        }`}>
+                        {isNight ? <FaMoon className="text-xl animate-pulse" /> : <FaSun className="text-xl animate-spin-slow" style={{ animationDuration: "12s" }} />}
+                      </div>
+                      <div className="text-left">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isNight ? "text-indigo-400" : "text-amber-600"
+                          }`}>
+                          Vòng đấu hiện tại
+                        </span>
+                        <h2 className="text-xl font-extrabold tracking-tight">
+                          {isNight ? `Đêm ${dayCount}` : `Ngày ${dayCount}`}
+                        </h2>
+                      </div>
                     </div>
-                    <div className="text-left">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                        isNight ? "text-indigo-400" : "text-amber-600"
-                      }`}>
-                        Vòng đấu hiện tại
-                      </span>
-                      <h2 className="text-xl font-extrabold tracking-tight">
-                        {isNight ? `Đêm ${dayCount}` : `Ngày ${dayCount}`}
-                      </h2>
-                    </div>
+
+                    {/* Glowing Timer - only shown at night since day time is shown in the DayActionController */}
+                    {isNight && (
+                      <div className="w-full flex flex-col items-center mt-4">
+                        <span className="text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">
+                          Thời gian còn lại
+                        </span>
+                        <div className="w-full flex h-11 items-center justify-center rounded-xl font-mono text-2xl font-extrabold tracking-widest border bg-slate-950 border-indigo-900/60 text-indigo-200 shadow-[inset_0_0_8px_rgba(99,102,241,0.1)] transition-shadow">
+                          {formatTime(nightTimeLeft)}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Glowing Timer - only shown at night since day time is shown in the DayActionController */}
-                  {isNight && (
-                    <div className="w-full flex flex-col items-center mt-4">
-                      <span className="text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">
-                        Thời gian còn lại
-                      </span>
-                      <div className="w-full flex h-11 items-center justify-center rounded-xl font-mono text-2xl font-extrabold tracking-widest border bg-slate-950 border-indigo-900/60 text-indigo-200 shadow-[inset_0_0_8px_rgba(99,102,241,0.1)] transition-shadow">
-                        {formatTime(nightTimeLeft)}
+                  {/* Self secrets Card */}
+                  <SelfRoleCard
+                    playerName={playerName}
+                    role={playerRoles[playerName]}
+                    originalRole={gameState.originalRoles[playerName]}
+                    isNight={isNight}
+                  />
+
+                  {/* Host Force Actions & Quick Reset panel */}
+                  {hostName === playerName && (
+                    <div className={`rounded-2xl border p-5 shadow-sm ${isNight ? "border-slate-800 bg-slate-900/60" : "border-zinc-200 bg-white"
+                      }`}>
+                      <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isNight ? "text-slate-400" : "text-zinc-500"}`}>
+                        Bảng Quản Trị Viên (Host)
+                      </h4>
+                      <div className="flex flex-col gap-2">
+                        {(phase === "role_reveal" || (phase === "day" && !dayPhase)) && (
+                          <button
+                            onClick={handleNextPhase}
+                            className="w-full cursor-pointer rounded-xl bg-indigo-600 hover:bg-indigo-700 py-3 text-xs font-extrabold text-white transition-colors"
+                          >
+                            Chuyển sang Đêm {phase === "day" ? dayCount + 1 : 1}
+                          </button>
+                        )}
+                        <button
+                          onClick={handleResetGame}
+                          className="w-full cursor-pointer rounded-xl bg-red-600 hover:bg-red-700 py-3 text-xs font-extrabold text-white transition-colors"
+                        >
+                          Hủy trận / Reset Phòng
+                        </button>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Self secrets Card */}
-                <SelfRoleCard
-                  playerName={playerName}
-                  role={playerRoles[playerName]}
-                  originalRole={gameState.originalRoles[playerName]}
-                  isNight={isNight}
-                />
-
-                {/* Host Force Actions & Quick Reset panel */}
-                {hostName === playerName && (
-                  <div className={`rounded-2xl border p-5 shadow-sm ${
-                    isNight ? "border-slate-800 bg-slate-900/60" : "border-zinc-200 bg-white"
-                  }`}>
-                    <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${isNight ? "text-slate-400" : "text-zinc-500"}`}>
-                      Bảng Quản Trị Viên (Host)
-                    </h4>
-                    <div className="flex flex-col gap-2">
-                      {(phase === "role_reveal" || (phase === "day" && !dayPhase)) && (
-                        <button
-                          onClick={handleNextPhase}
-                          className="w-full cursor-pointer rounded-xl bg-indigo-600 hover:bg-indigo-700 py-3 text-xs font-extrabold text-white transition-colors"
-                        >
-                          Chuyển sang Đêm {phase === "day" ? dayCount + 1 : 1}
-                        </button>
-                      )}
-                      <button
-                        onClick={handleResetGame}
-                        className="w-full cursor-pointer rounded-xl bg-red-600 hover:bg-red-700 py-3 text-xs font-extrabold text-white transition-colors"
-                      >
-                        Hủy trận / Reset Phòng
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Middle Column: Game Header & Interactive Board */}
-              <div className="flex flex-col space-y-6 overflow-y-auto pr-2 pb-4 custom-scrollbar">
-                {/* Visual Header Instructions Banner */}
-                <div
-                  className={`w-full rounded-2xl border p-4 shadow-sm transition-all duration-700 ease-in-out ${
-                    isNight
+                {/* Middle Column: Game Header & Interactive Board */}
+                <div className="flex flex-col space-y-6 overflow-y-auto pr-2 pb-4 custom-scrollbar">
+                  {/* Visual Header Instructions Banner */}
+                  <div
+                    className={`w-full rounded-2xl border p-4 shadow-sm transition-all duration-700 ease-in-out ${isNight
                       ? "border-indigo-900/50 bg-slate-800/80 text-indigo-100 shadow-indigo-950/10"
                       : "border-zinc-200 bg-white text-zinc-800 shadow-zinc-200/50"
-                  }`}
-                >
-                  <p className="text-sm font-bold text-center leading-relaxed">
-                    {getPromptText()}
-                  </p>
+                      }`}
+                  >
+                    <p className="text-sm font-bold text-center leading-relaxed">
+                      {getPromptText()}
+                    </p>
+                  </div>
+
+                  {/* Night sequence turn progress tracker bar was moved to the left column */}
+
+                  {/* Main Interactive Player Grid Board */}
+                  <InteractiveBoard
+                    players={players}
+                    alivePlayers={alivePlayers}
+                    playerRoles={playerRoles}
+                    originalRoles={gameState.originalRoles}
+                    playerName={playerName}
+                    hostName={hostName}
+                    gameStarted={gameStarted}
+                    phase={phase}
+                    dayPhase={dayPhase}
+                    nightPhase={nightPhase}
+                    headhunterTarget={headhunterTarget}
+                    cupidTargets={cupidTargets}
+                    hypnotizedPlayers={gameState.hypnotizedPlayers}
+                    isNight={isNight}
+                    onKickPlayer={handleKickPlayer}
+                    nightSelection={nightSelection}
+                    dayVotes={dayVotes}
+                    wolfVotes={wolfVotes}
+                    witchAction={witchAction}
+                    activeExtraWolfKill={activeExtraWolfKill}
+                    lastProtected={lastProtected}
+                    wolfVictim={wolfVictim}
+                    onPlayerClick={handlePlayerCardClick}
+                  />
+
+                  {/* Dead player alert box inside board column */}
+                  {!alivePlayers.includes(playerName) && (
+                    <div className={`flex w-full items-start space-x-3 rounded-2xl border p-5 ${isNight ? "border-slate-800 bg-slate-900/50" : "border-zinc-200 bg-zinc-100"
+                      }`}>
+                      <FaGhost className="text-3xl text-zinc-500 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-sm font-extrabold">Bạn Đã Tử Nạn</h4>
+                        <p className={`text-xs mt-1.5 leading-relaxed ${isNight ? "text-slate-400" : "text-zinc-500"}`}>
+                          Mọi tương tác cắn, bảo vệ hoặc bỏ phiếu của bạn đã kết thúc. Vui lòng không tiết lộ bí mật hoặc chat làm phiền trong thời gian này.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Night sequence turn progress tracker bar was moved to the left column */}
+                {/* Right Column: Unified Sidebar (Chat / Logs / Roles cheat sheet) */}
+                <div className="flex flex-col space-y-4 h-full overflow-hidden pb-2">
+                  <GameSidebar
+                    actionComponent={
+                      <>
+                        {phase === "night" && alivePlayers.includes(playerName) && (
+                          <NightActionController />
+                        )}
+                        {phase === "day" && (
+                          <DayActionController
+                            gameState={gameState}
+                            dispatch={dispatch}
+                            channel={channel}
+                            playerName={playerName}
+                          />
+                        )}
+                      </>
+                    }
+                    playerName={playerName}
+                    alivePlayers={alivePlayers}
+                    playerRoles={playerRoles}
+                    phase={phase}
+                    isNight={isNight}
 
-                {/* Main Interactive Player Grid Board */}
-                <InteractiveBoard
-                  players={players}
-                  alivePlayers={alivePlayers}
-                  playerRoles={playerRoles}
-                  originalRoles={gameState.originalRoles}
-                  playerName={playerName}
-                  hostName={hostName}
-                  gameStarted={gameStarted}
-                  phase={phase}
-                  dayPhase={dayPhase}
-                  nightPhase={nightPhase}
-                  headhunterTarget={headhunterTarget}
-                  cupidTargets={cupidTargets}
-                  hypnotizedPlayers={gameState.hypnotizedPlayers}
-                  isNight={isNight}
-                  onKickPlayer={handleKickPlayer}
-                  nightSelection={nightSelection}
-                  dayVotes={dayVotes}
-                  wolfVotes={wolfVotes}
-                  witchAction={witchAction}
-                  activeExtraWolfKill={activeExtraWolfKill}
-                  lastProtected={lastProtected}
-                  wolfVictim={wolfVictim}
-                  onPlayerClick={handlePlayerCardClick}
-                />
+                    // Chat props
+                    wolfChat={wolfChat}
+                    loversChat={loversChat}
+                    generalChat={generalChat}
+                    isWolf={
+                      ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "white_wolf"].includes(playerRoles[playerName]?.id || "")
+                    }
+                    isLover={!!(cupidTargets && cupidTargets.includes(playerName))}
 
-                {/* Dead player alert box inside board column */}
-                {!alivePlayers.includes(playerName) && (
-                  <div className={`flex w-full items-start space-x-3 rounded-2xl border p-5 ${
-                    isNight ? "border-slate-800 bg-slate-900/50" : "border-zinc-200 bg-zinc-100"
-                  }`}>
-                    <FaGhost className="text-3xl text-zinc-500 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-sm font-extrabold">Bạn Đã Tử Nạn</h4>
-                      <p className={`text-xs mt-1.5 leading-relaxed ${isNight ? "text-slate-400" : "text-zinc-500"}`}>
-                        Mọi tương tác cắn, bảo vệ hoặc bỏ phiếu của bạn đã kết thúc. Vui lòng không tiết lộ bí mật hoặc chat làm phiền trong thời gian này.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+                    onSendWolfMessage={(msg) => {
+                      const newMsg = { id: Math.random().toString(), playerName, message: msg, timestamp: Date.now() };
+                      dispatch({ type: "UPDATE_FUNCTION", payload: (prev) => ({ wolfChat: [newMsg, ...(prev.wolfChat || [])] }) });
+                      if (channel) channel.send({ type: "broadcast", event: "wolf-chat", payload: { message: newMsg } });
+                    }}
 
-              {/* Right Column: Unified Sidebar (Chat / Logs / Roles cheat sheet) */}
-              <div className="flex flex-col space-y-4 h-full overflow-hidden pb-2">
-                <GameSidebar
-                  actionComponent={
-                    <>
-                      {phase === "night" && alivePlayers.includes(playerName) && (
-                        <NightActionController />
-                      )}
-                      {phase === "day" && (
-                        <DayActionController
-                          gameState={gameState}
-                          dispatch={dispatch}
-                          channel={channel}
-                          playerName={playerName}
-                        />
-                      )}
-                    </>
-                  }
-                  playerName={playerName}
-                  alivePlayers={alivePlayers}
-                  playerRoles={playerRoles}
-                  phase={phase}
-                  isNight={isNight}
-                  
-                  // Chat props
-                  wolfChat={wolfChat}
-                  loversChat={loversChat}
-                  generalChat={generalChat}
-                  isWolf={
-                    ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "white_wolf"].includes(playerRoles[playerName]?.id || "")
-                  }
-                  isLover={!!(cupidTargets && cupidTargets.includes(playerName))}
-                  
-                  onSendWolfMessage={(msg) => {
-                    const newMsg = { id: Math.random().toString(), playerName, message: msg, timestamp: Date.now() };
-                    dispatch({ type: "UPDATE_FUNCTION", payload: (prev) => ({ wolfChat: [newMsg, ...(prev.wolfChat || [])] }) });
-                    if (channel) channel.send({ type: "broadcast", event: "wolf-chat", payload: { message: newMsg } });
-                  }}
-                  
-                  onSendLoversMessage={(msg) => {
-                    const newMsg = { id: Math.random().toString(), playerName, message: msg, timestamp: Date.now() };
-                    dispatch({ type: "UPDATE_FUNCTION", payload: (prev) => ({ loversChat: [newMsg, ...(prev.loversChat || [])] }) });
-                    if (channel) channel.send({ type: "broadcast", event: "lovers-chat", payload: { message: newMsg } });
-                  }}
-                  
-                  onSendGeneralMessage={(msg) => {
-                    const newMsg = { id: Math.random().toString(), playerName, message: msg, timestamp: Date.now() };
-                    dispatch({ type: "UPDATE_FUNCTION", payload: (prev) => ({ generalChat: [newMsg, ...(prev.generalChat || [])] }) });
-                    if (channel) channel.send({ type: "broadcast", event: "general-chat", payload: { message: newMsg } });
-                  }}
+                    onSendLoversMessage={(msg) => {
+                      const newMsg = { id: Math.random().toString(), playerName, message: msg, timestamp: Date.now() };
+                      dispatch({ type: "UPDATE_FUNCTION", payload: (prev) => ({ loversChat: [newMsg, ...(prev.loversChat || [])] }) });
+                      if (channel) channel.send({ type: "broadcast", event: "lovers-chat", payload: { message: newMsg } });
+                    }}
 
-                  // Logs props
-                  actionLogs={actionLogs}
-                  activeLogTab={activeLogTab}
-                  setActiveLogTab={setActiveLogTab}
+                    onSendGeneralMessage={(msg) => {
+                      const newMsg = { id: Math.random().toString(), playerName, message: msg, timestamp: Date.now() };
+                      dispatch({ type: "UPDATE_FUNCTION", payload: (prev) => ({ generalChat: [newMsg, ...(prev.generalChat || [])] }) });
+                      if (channel) channel.send({ type: "broadcast", event: "general-chat", payload: { message: newMsg } });
+                    }}
 
-                  // Reference props
-                  roleConfig={roleConfig}
-                />
+                    // Logs props
+                    actionLogs={actionLogs}
+                    activeLogTab={activeLogTab}
+                    setActiveLogTab={setActiveLogTab}
+
+                    // Reference props
+                    roleConfig={roleConfig}
+                  />
 
                 </div>
               </div>

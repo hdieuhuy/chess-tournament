@@ -6,7 +6,9 @@ import { JoinRoomModal } from "@/features/lobby/components/join-room-modal";
 import { GoProvider, useGo, KOMI } from "@/features/go/contexts/go-context";
 import { GoSidebar } from "@/features/go/components/go-sidebar";
 import { GoBoard } from "@/features/go/components/go-board";
+import { GameRulesModal } from "@/components/game-rules-modal";
 import confetti from "canvas-confetti";
+import { GlobalActionMenu } from "@/components/global-action-menu";
 
 export default function GoPage() {
   return (
@@ -121,6 +123,8 @@ function GoGameContent({
     captures,
     finalScore,
   } = useGo();
+  
+  const [showRulesModal, setShowRulesModal] = useState(false);
 
   useEffect(() => {
     if (winner && winner !== "Draw" && winner !== "End") {
@@ -168,37 +172,21 @@ function GoGameContent({
     >
       {/* Floating Buttons: Settings & Theme */}
       {hasInitialized && (
-        <div className="fixed right-4 top-4 z-50 flex gap-3">
-          <div className="relative group flex justify-center">
-            <button
-              onClick={() => setShowNameModal(true)}
-              className={`flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full shadow-lg transition-all hover:scale-105 ${isDarkMode ? "bg-slate-800 text-slate-200 hover:bg-slate-700" : "bg-white text-zinc-700 hover:bg-zinc-100 border border-zinc-200"}`}
-            >
-              <div className="w-5 h-5 flex items-center justify-center font-bold">
-                {playerName ? playerName.charAt(0).toUpperCase() : "U"}
-              </div>
-            </button>
-            <div className="absolute top-full mt-2 right-0 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
-              Đổi tên người chơi
-            </div>
-          </div>
-          <div className="relative group flex justify-center">
-            <button
-              onClick={toggleTheme}
-              className={`flex h-10 w-10 sm:h-12 sm:w-12 cursor-pointer items-center justify-center rounded-full shadow-lg transition-all hover:scale-105 ${
-                isDarkMode
-                  ? "bg-slate-800 text-yellow-400 hover:bg-slate-700"
-                  : "bg-white text-slate-800 hover:bg-zinc-100 border border-zinc-200"
-              }`}
-            >
-              {isDarkMode ? "☀️" : "🌙"}
-            </button>
-            <div className="absolute top-full mt-2 right-0 px-2 py-1 bg-zinc-900 text-white text-xs font-medium rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50">
-              {isDarkMode ? "Giao diện sáng" : "Giao diện tối"}
-            </div>
-          </div>
-        </div>
+        <GlobalActionMenu
+          playerName={playerName || ""}
+          onRenameClick={() => setShowNameModal(true)}
+          hasThemeToggle={true}
+          isDarkMode={isDarkMode}
+          onThemeToggle={toggleTheme}
+          onShowRules={() => setShowRulesModal(true)}
+        />
       )}
+
+      <GameRulesModal
+        isOpen={showRulesModal}
+        onClose={() => setShowRulesModal(false)}
+        gameId="go"
+      />
 
       <JoinRoomModal
         isOpen={showNameModal}

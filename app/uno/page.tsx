@@ -4,7 +4,9 @@ import { useState, useEffect, Suspense, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Modal } from "@/components/Modal";
-import { FaUser } from "react-icons/fa";
+import { FaUser, FaCrown, FaCheck, FaTimes } from "react-icons/fa";
+import { GlobalActionMenu } from "@/components/global-action-menu";
+import { GameRulesModal } from "@/components/game-rules-modal";
 import { supabase } from "@/lib/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import toast from "react-hot-toast";
@@ -65,6 +67,7 @@ function UnoGame() {
   const [playerName, setPlayerName] = useState<string>("");
   const [inputName, setInputName] = useState<string>("");
   const [showNameModal, setShowNameModal] = useState<boolean>(true);
+  const [showRulesModal, setShowRulesModal] = useState<boolean>(false);
   const [hasInitialized, setHasInitialized] = useState<boolean>(false);
   const [isCheckingStorage, setIsCheckingStorage] = useState<boolean>(true);
 
@@ -869,16 +872,18 @@ function UnoGame() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 py-12">
       {hasInitialized && (
-        <div className="fixed left-4 top-4 z-50">
-          <button
-            onClick={() => setShowNameModal(true)}
-            className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full bg-zinc-900 text-xl font-bold text-white shadow-lg transition-transform hover:scale-105 hover:bg-zinc-800"
-            title="Chỉnh sửa tên"
-          >
-            {playerName ? playerName.charAt(0).toUpperCase() : <FaUser />}
-          </button>
-        </div>
+        <GlobalActionMenu
+          playerName={playerName || ""}
+          onRenameClick={() => setShowNameModal(true)}
+          onShowRules={() => setShowRulesModal(true)}
+        />
       )}
+
+      <GameRulesModal
+        isOpen={showRulesModal}
+        onClose={() => setShowRulesModal(false)}
+        gameId="uno"
+      />
 
       <Modal
         isOpen={showNameModal}
