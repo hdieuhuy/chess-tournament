@@ -1,8 +1,9 @@
-import { CardType, CardInstance, CARD_DEFINITIONS } from "./constants";
+import { CardType, CardInstance } from "../types";
+import { CARD_DEFINITIONS } from "../constants";
 import { v4 as uuidv4 } from "uuid";
 
 // Helper function to shuffle an array
-function shuffle<T>(array: T[]): T[] {
+export function shuffle<T>(array: T[]): T[] {
   let currentIndex = array.length,
     randomIndex;
 

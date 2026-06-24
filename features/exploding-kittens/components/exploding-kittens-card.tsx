@@ -1,5 +1,8 @@
 import Image from "next/image";
-import type { CardDefinition } from "./constants";
+import React from "react";
+import { motion, HTMLMotionProps } from "framer-motion";
+import { CardInstance, CardDefinition } from "../types";
+import { CARD_DEFINITIONS } from "../constants";
 
 interface CardProps {
   card: CardDefinition;
@@ -21,6 +24,7 @@ export function Card({
       <div
         className={`relative aspect-[2.5/3.5] w-32 cursor-pointer overflow-hidden rounded-lg border-4 border-red-900 bg-red-700 shadow-lg ${className}`}
         onClick={onClick}
+        onDragStart={(e) => e.preventDefault()}
       >
         <Image
           src="https://cdn.tgdd.vn/GameApp/2/235774/Screentshots/exploding-kittens-bai-meo-no-235774-logo-28-02-2021.png"
@@ -29,6 +33,7 @@ export function Card({
           style={{ objectFit: "contain" }}
           className="p-2"
           unoptimized
+          draggable={false}
         />
       </div>
     );
@@ -38,6 +43,7 @@ export function Card({
     <div
       className={`group relative aspect-[2.5/3.5] w-32 cursor-pointer rounded-lg shadow-lg transition-transform hover:-translate-y-4 ${className}`}
       onClick={onClick}
+      onDragStart={(e) => e.preventDefault()}
     >
       <div className="relative w-full h-full overflow-hidden rounded-lg">
         <Image
@@ -46,6 +52,7 @@ export function Card({
           fill
           style={{ objectFit: "cover" }}
           unoptimized
+          draggable={false}
         />
       </div>
 
