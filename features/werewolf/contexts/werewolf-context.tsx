@@ -31,13 +31,20 @@ export type WerewolfContextType = {
 
 const WerewolfContext = createContext<WerewolfContextType | undefined>(undefined);
 
-export const WerewolfProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const WerewolfProvider: React.FC<{
+  children: React.ReactNode;
+  roomId?: string | null;
+  playerName?: string;
+  requestedRole?: "player" | "spectator";
+  hasInitialized?: boolean;
+  isCreator?: boolean;
+}> = ({ children, roomId: initialRoomId, playerName: initialPlayerName, requestedRole: initialRequestedRole, hasInitialized: initialHasInitialized, isCreator }) => {
   const [gameState, dispatch] = useReducer(gameReducer, initialGameState);
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
-  const [playerName, setPlayerName] = useState<string>("");
-  const [roomId, setRoomId] = useState<string | null>(null);
-  const [requestedRole, setRequestedRole] = useState<"player" | "spectator">("player");
-  const [hasInitialized, setHasInitialized] = useState<boolean>(false);
+  const [playerName, setPlayerName] = useState<string>(initialPlayerName || "");
+  const [roomId, setRoomId] = useState<string | null>(initialRoomId || null);
+  const [requestedRole, setRequestedRole] = useState<"player" | "spectator">(initialRequestedRole || "player");
+  const [hasInitialized, setHasInitialized] = useState<boolean>(initialHasInitialized || false);
 
   const stateRef = useRef(gameState);
   useEffect(() => {

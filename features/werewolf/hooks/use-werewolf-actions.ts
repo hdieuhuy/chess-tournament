@@ -194,7 +194,7 @@ export const useWerewolfActions = () => {
       let killVotesCount = 0;
       let saveVotesCount = 0;
       Object.entries(state.executionVotes).forEach(([voter, vote]) => {
-        const weight = state.playerRoles[voter]?.id === "mayor" && !state.elderDied ? 2 : 1;
+        const weight = voter === state.currentMayor && !state.elderDied ? 2 : 1;
         if (vote === "kill") killVotesCount += weight;
         else if (vote === "save") saveVotesCount += weight;
       });
@@ -242,14 +242,31 @@ export const useWerewolfActions = () => {
         addedLogs.push(endLog);
       }
 
+      const isMayorDead = state.currentMayor && actualDeaths.has(state.currentMayor);
+
+      const isJudgeExtraVote = state.activeJudgeExtraVote;
+
       const updatePayload: Partial<GameState> = {
         alivePlayers: newAlive,
         extraLives: newExtraLives,
-        dayPhase: null,
-        dayTimeLeft: newWinner ? 0 : 5,
+        dayPhase: (!newWinner && isMayorDead) ? "mayor_transfer" : (!newWinner && isJudgeExtraVote) ? "discussion" : null,
+        dayTimeLeft: newWinner ? 0 : (isMayorDead ? 10 : (isJudgeExtraVote ? 120 : 5)),
         extraWolfKill: newExtraWolfKill,
         elderDied: newElderDied,
+        pendingMayorTransfer: (!newWinner && isMayorDead) ? state.currentMayor : state.pendingMayorTransfer,
+        nextPhaseAfterMayorTransfer: (!newWinner && isMayorDead) ? (isJudgeExtraVote ? "discussion" : "night") : state.nextPhaseAfterMayorTransfer,
+        activeJudgeExtraVote: isJudgeExtraVote ? false : state.activeJudgeExtraVote,
       };
+      
+      if (!newWinner && isJudgeExtraVote) {
+        addedLogs.push({
+          id: generateId(),
+          dayCount: state.dayCount,
+          roleId: "system",
+          playerName: "system",
+          content: "Thẩm phán đã ra lệnh mở thêm một cuộc bỏ phiếu! Làng tiếp tục thảo luận.",
+        });
+      }
       if (newWinner) {
         updatePayload.phase = "game_over";
         updatePayload.winner = newWinner;
@@ -271,10 +288,14 @@ export const useWerewolfActions = () => {
             winner: newWinner,
             alivePlayers: newAlive,
             extraLives: newExtraLives,
-            dayPhase: null,
-            dayTimeLeft: newWinner ? 0 : 5,
+            dayPhase: updatePayload.dayPhase,
+            dayTimeLeft: updatePayload.dayTimeLeft,
             extraWolfKill: newExtraWolfKill,
             elderDied: newElderDied,
+            pendingMayorTransfer: updatePayload.pendingMayorTransfer,
+            nextPhaseAfterMayorTransfer: updatePayload.nextPhaseAfterMayorTransfer,
+            activeJudgeExtraVote: updatePayload.activeJudgeExtraVote,
+            actionLogs: [...state.actionLogs, ...addedLogs],
           },
         });
       }
@@ -488,6 +509,8 @@ export const useWerewolfActions = () => {
       addedLogs.push(endLog);
     }
 
+    const isMayorDead = state.currentMayor && actualDeaths.has(state.currentMayor);
+
     const updatePayload: Partial<GameState> = {
         playerRoles: newPlayerRoles,
         alivePlayers: newAlive,
@@ -496,8 +519,8 @@ export const useWerewolfActions = () => {
         deadThisNight: Array.from(actualDeaths),
         phase: newPhase,
         winner: newWinner,
-        dayPhase: newPhase === "day" ? "discussion" : null,
-        dayTimeLeft: newPhase === "day" ? state.timeSettings.discussion : 0,
+        dayPhase: newWinner ? null : (isMayorDead ? "mayor_transfer" : "discussion"),
+        dayTimeLeft: newWinner ? 0 : (isMayorDead ? 10 : state.timeSettings.discussion),
         nightPhase: null,
         nightTimeLeft: 0,
         confirmedPlayers: [],
@@ -518,6 +541,8 @@ export const useWerewolfActions = () => {
         extraWolfKill: newExtraWolfKill,
         activeExtraWolfKill: false,
         elderDied: newElderDied,
+        pendingMayorTransfer: (!newWinner && isMayorDead) ? state.currentMayor : state.pendingMayorTransfer,
+        nextPhaseAfterMayorTransfer: (!newWinner && isMayorDead) ? "discussion" : state.nextPhaseAfterMayorTransfer,
     };
 
     dispatch({
@@ -543,8 +568,8 @@ export const useWerewolfActions = () => {
           payload: {
             ...updatePayload,
             phase: newPhase,
-            dayPhase: newPhase === "day" ? "discussion" : null,
-            dayTimeLeft: newPhase === "day" ? state.timeSettings.discussion : 0,
+            dayPhase: newWinner ? null : (isMayorDead ? "mayor_transfer" : "discussion"),
+            dayTimeLeft: newWinner ? 0 : (isMayorDead ? 10 : state.timeSettings.discussion),
           },
         });
       }
@@ -691,14 +716,14 @@ export const useWerewolfActions = () => {
       const voteCounts: Record<string, number> = {};
       Object.entries(state.dayVotes).forEach(([voter, target]) => {
         if (target !== "skip") {
-          const weight = state.playerRoles[voter]?.id === "mayor" && !state.elderDied ? 2 : 1;
+          const weight = voter === state.currentMayor && !state.elderDied ? 2 : 1;
           voteCounts[target] = (voteCounts[target] || 0) + weight;
         }
       });
 
       const skipVotesWeight = Object.entries(state.dayVotes).reduce((acc, [voter, target]) => {
         if (target === "skip") {
-          return acc + (state.playerRoles[voter]?.id === "mayor" && !state.elderDied ? 2 : 1);
+          return acc + (voter === state.currentMayor && !state.elderDied ? 2 : 1);
         }
         return acc;
       }, 0);
@@ -778,13 +803,24 @@ export const useWerewolfActions = () => {
               ? `Bầu cử hòa (${maxVotes} phiếu). Làng quyết định không treo cổ ai hôm nay.`
               : `Làng quyết định không treo cổ ai hôm nay.`,
         };
+        const isJudgeExtraVote = state.activeJudgeExtraVote;
         const newLogs = [...state.actionLogs, voteLog, sysLog];
+        if (isJudgeExtraVote) {
+          newLogs.push({
+            id: generateId(),
+            dayCount: state.dayCount,
+            roleId: "system",
+            playerName: "system",
+            content: "Thẩm phán đã ra lệnh mở thêm một cuộc bỏ phiếu! Làng tiếp tục thảo luận.",
+          });
+        }
 
         dispatch({
           type: "UPDATE",
           payload: {
-            dayPhase: null,
-            dayTimeLeft: 5,
+            dayPhase: isJudgeExtraVote ? "discussion" : null,
+            dayTimeLeft: isJudgeExtraVote ? 120 : 5,
+            activeJudgeExtraVote: isJudgeExtraVote ? false : state.activeJudgeExtraVote,
             actionLogs: newLogs,
           },
         });
@@ -794,8 +830,9 @@ export const useWerewolfActions = () => {
             type: "broadcast",
             event: "day-phase-change",
             payload: {
-              dayPhase: null,
-              dayTimeLeft: 5,
+              dayPhase: isJudgeExtraVote ? "discussion" : null,
+              dayTimeLeft: isJudgeExtraVote ? 120 : 5,
+              activeJudgeExtraVote: isJudgeExtraVote ? false : state.activeJudgeExtraVote,
               accusedPlayer: null,
               actionLogs: newLogs,
             },
@@ -818,7 +855,7 @@ export const useWerewolfActions = () => {
       let killVotes = 0;
       let saveVotes = 0;
       Object.entries(state.executionVotes).forEach(([voter, vote]) => {
-        const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
+        const weight = voter === state.currentMayor ? 2 : 1;
         if (vote === "kill") killVotes += weight;
         else if (vote === "save") saveVotes += weight;
       });
@@ -829,7 +866,7 @@ export const useWerewolfActions = () => {
         let killVotesCount = 0;
         let saveVotesCount = 0;
         Object.entries(state.executionVotes).forEach(([voter, vote]) => {
-          const weight = state.playerRoles[voter]?.id === "mayor" ? 2 : 1;
+          const weight = voter === state.currentMayor ? 2 : 1;
           if (vote === "kill") killVotesCount += weight;
           else if (vote === "save") saveVotesCount += weight;
         });
@@ -850,12 +887,23 @@ export const useWerewolfActions = () => {
           content: `${state.accusedPlayer} đã được tha bổng với ${saveVotes} phiếu cứu / ${killVotes} phiếu treo cổ.`,
         };
         const newLogs = [...state.actionLogs, execVoteLog, sysLog];
+        const isJudgeExtraVote = state.activeJudgeExtraVote;
+        if (isJudgeExtraVote) {
+          newLogs.push({
+            id: generateId(),
+            dayCount: state.dayCount,
+            roleId: "system",
+            playerName: "system",
+            content: "Thẩm phán đã ra lệnh mở thêm một cuộc bỏ phiếu! Làng tiếp tục thảo luận.",
+          });
+        }
 
         dispatch({
           type: "UPDATE",
           payload: {
-            dayPhase: null,
-            dayTimeLeft: 5,
+            dayPhase: isJudgeExtraVote ? "discussion" : null,
+            dayTimeLeft: isJudgeExtraVote ? 120 : 5,
+            activeJudgeExtraVote: isJudgeExtraVote ? false : state.activeJudgeExtraVote,
             actionLogs: newLogs,
           },
         });
@@ -864,7 +912,12 @@ export const useWerewolfActions = () => {
           channel.send({
             type: "broadcast",
             event: "day-phase-change",
-            payload: { dayPhase: null, dayTimeLeft: 5, actionLogs: newLogs },
+            payload: { 
+              dayPhase: isJudgeExtraVote ? "discussion" : null, 
+              dayTimeLeft: isJudgeExtraVote ? 120 : 5, 
+              activeJudgeExtraVote: isJudgeExtraVote ? false : state.activeJudgeExtraVote,
+              actionLogs: newLogs 
+            },
           });
         }
       }
@@ -1117,9 +1170,15 @@ export const useWerewolfActions = () => {
       });
 
       let initialHeadhunterTarget: string | null = null;
+      let initialMayor: string | null = null;
       const headhunterPlayer = players.find(
         (p) => newPlayerRoles[p]?.id === "headhunter",
       );
+      players.forEach((p) => {
+        if (newPlayerRoles[p]?.id === "mayor") {
+          initialMayor = p;
+        }
+      });
       if (headhunterPlayer) {
         const villagers = players.filter((p) => {
           const rId = newPlayerRoles[p]?.id;
@@ -1206,6 +1265,9 @@ export const useWerewolfActions = () => {
           extraWolfKill: false,
           activeExtraWolfKill: false,
           elderDied: false,
+          currentMayor: initialMayor,
+          pendingMayorTransfer: null,
+          nextPhaseAfterMayorTransfer: null,
         },
       });
 
@@ -1314,6 +1376,112 @@ export const useWerewolfActions = () => {
     }
   };
 
+  const handleTransferMayor = (targetPlayer: string) => {
+    const state = stateRef.current;
+    if (state.dayPhase !== "mayor_transfer" || state.pendingMayorTransfer !== playerName) return;
+
+    const newLogs = [...state.actionLogs, {
+      id: generateId(),
+      dayCount: state.dayCount,
+      roleId: "system",
+      playerName: "system",
+      content: `Chức Trưởng Làng đã được trao lại một cách bí mật.`
+    }];
+
+    const nextPhase = state.nextPhaseAfterMayorTransfer;
+    
+    if (nextPhase === "night") {
+      dispatch({
+        type: "UPDATE",
+        payload: {
+          currentMayor: targetPlayer,
+          pendingMayorTransfer: null,
+          nextPhaseAfterMayorTransfer: null,
+          dayPhase: null,
+          dayTimeLeft: 5,
+          actionLogs: newLogs,
+        }
+      });
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "day-phase-change",
+          payload: {
+            currentMayor: targetPlayer,
+            pendingMayorTransfer: null,
+            nextPhaseAfterMayorTransfer: null,
+            dayPhase: null,
+            dayTimeLeft: 5,
+            actionLogs: newLogs,
+          }
+        });
+      }
+    } else {
+      dispatch({
+        type: "UPDATE",
+        payload: {
+          currentMayor: targetPlayer,
+          pendingMayorTransfer: null,
+          nextPhaseAfterMayorTransfer: null,
+          dayPhase: "discussion",
+          dayTimeLeft: state.timeSettings.discussion,
+          actionLogs: newLogs,
+        }
+      });
+      if (channel) {
+        channel.send({
+          type: "broadcast",
+          event: "day-phase-change",
+          payload: {
+            currentMayor: targetPlayer,
+            pendingMayorTransfer: null,
+            nextPhaseAfterMayorTransfer: null,
+            dayPhase: "discussion",
+            dayTimeLeft: state.timeSettings.discussion,
+            actionLogs: newLogs,
+          }
+        });
+      }
+    }
+  };
+
+  const activateJudgeVote = () => {
+    const state = stateRef.current;
+    if (state.judgeAbilityUsed) return;
+    
+    const newLogs = [...state.actionLogs, {
+      id: generateId(),
+      dayCount: state.dayCount,
+      roleId: "system",
+      playerName: "system",
+      content: "Thẩm phán đã ra lệnh mở thêm một cuộc bỏ phiếu! Làng tiếp tục thảo luận.",
+    }];
+
+    const updates = {
+      judgeAbilityUsed: true,
+      activeJudgeExtraVote: false,
+      dayPhase: "discussion" as const,
+      dayTimeLeft: 120,
+      dayVotes: {},
+      accusedPlayer: null,
+      executionVotes: {},
+      actionLogs: newLogs,
+    };
+
+    dispatch({
+      type: "UPDATE",
+      payload: updates
+    });
+
+    if (channel) {
+      channel.send({
+        type: "broadcast",
+        event: "day-phase-change",
+        payload: updates
+      });
+    }
+  };
+
   return {
     handleJoinRoom,
     handleKickPlayer,
@@ -1327,6 +1495,8 @@ export const useWerewolfActions = () => {
     
     
     handleStartGame,
-    handleResetGame
+    handleResetGame,
+    handleTransferMayor,
+    activateJudgeVote
   };
 };

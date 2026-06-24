@@ -998,7 +998,7 @@ const WhiteWolfNightUI = ({
   const otherWolves = alivePlayers.filter(
     (p: any) =>
       p !== playerName &&
-      ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(
+      ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan"].includes(
         playerRoles[p]?.id || "",
       ),
   );

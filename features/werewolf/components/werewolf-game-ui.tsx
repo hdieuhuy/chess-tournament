@@ -64,6 +64,8 @@ function WerewolfGameUI() {
     handleResetGame,
     handleKickPlayer,
     handleNextPhase,
+    handleTransferMayor,
+    activateJudgeVote,
   } = useWerewolfActions();
 
   const {
@@ -288,7 +290,7 @@ function WerewolfGameUI() {
       const isMyTurn = nightPhase === myRole || isActAnytimeRole;
 
       // Werewolf selection
-      const isWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(myRole || "");
+      const isWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan"].includes(myRole || "");
       if (nightPhase === "werewolf" && isWolf && alivePlayers.includes(targetPlayerName)) {
         const currentVotes = wolfVotes[playerName] || [];
         const maxTargets = activeExtraWolfKill ? 2 : 1;
@@ -418,7 +420,7 @@ function WerewolfGameUI() {
       if (isMyTurn && myRole === "white_wolf") {
         if (!alivePlayers.includes(targetPlayerName) || targetPlayerName === playerName) return;
         const targetRole = playerRoles[targetPlayerName]?.id;
-        const isTargetWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "white_wolf"].includes(targetRole || "");
+        const isTargetWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan", "white_wolf"].includes(targetRole || "");
         if (!isTargetWolf) return; // Only target other wolves
         const newSelection = nightSelection === targetPlayerName ? null : targetPlayerName;
         dispatch({ type: "UPDATE", payload: { nightSelection: newSelection } });
@@ -444,7 +446,7 @@ function WerewolfGameUI() {
       const myRole = playerRoles[playerName]?.id;
       const isActAnytimeRole = ["hunter", "medium", "pied_piper", "seer"].includes(myRole || "");
       const isMyTurn = nightPhase === myRole || isActAnytimeRole;
-      const isWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(myRole || "");
+      const isWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan"].includes(myRole || "");
 
       if (isWolf && nightPhase === "werewolf") {
         return "🐺 Phe Sói hành động. Đồng lòng chọn cắn 1 người bằng cách click trực tiếp vào thẻ của họ.";
@@ -853,6 +855,7 @@ function WerewolfGameUI() {
                     isNight={isNight}
                     onKickPlayer={handleKickPlayer}
                     nightSelection={nightSelection}
+                    currentMayor={gameState.currentMayor}
                     dayVotes={dayVotes}
                     wolfVotes={wolfVotes}
                     witchAction={witchAction}
@@ -891,6 +894,8 @@ function WerewolfGameUI() {
                             dispatch={dispatch}
                             channel={channel}
                             playerName={playerName}
+                            handleTransferMayor={handleTransferMayor}
+                            activateJudgeVote={activateJudgeVote}
                           />
                         )}
                       </>
@@ -906,7 +911,7 @@ function WerewolfGameUI() {
                     loversChat={loversChat}
                     generalChat={generalChat}
                     isWolf={
-                      ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "white_wolf"].includes(playerRoles[playerName]?.id || "")
+                      ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan", "white_wolf"].includes(playerRoles[playerName]?.id || "")
                     }
                     isLover={!!(cupidTargets && cupidTargets.includes(playerName))}
 

@@ -11,6 +11,8 @@ type DayActionControllerProps = {
   dispatch: React.Dispatch<GameAction>;
   channel: RealtimeChannel | null;
   playerName: string;
+  handleTransferMayor?: (target: string) => void;
+  activateJudgeVote?: () => void;
 };
 
 export default function DayActionController({
@@ -18,6 +20,8 @@ export default function DayActionController({
   dispatch,
   channel,
   playerName,
+  handleTransferMayor,
+  activateJudgeVote,
 }: DayActionControllerProps) {
   const {
     hostName,
@@ -29,13 +33,16 @@ export default function DayActionController({
     dayVotes = {},
     executionVotes = {},
     accusedPlayer,
+    currentMayor,
   } = gameState;
 
   const isHost = hostName === playerName;
   const isAlive = alivePlayers.includes(playerName);
   const myRole = playerRoles[playerName]?.id;
   const isFogWolf = myRole === "fog_wolf" && isAlive;
+  const isJudge = myRole === "judge" && isAlive;
   const fogWolfUsed = gameState.fogWolfUsed;
+  const judgeAbilityUsed = gameState.judgeAbilityUsed;
 
   return (
     <div className="flex flex-col items-center p-4 w-full md:items-start">
@@ -47,6 +54,25 @@ export default function DayActionController({
       {/* Discussion Phase */}
       {dayPhase === "discussion" && (
         <div className="w-full text-center md:text-left space-y-4">
+
+          {/* Judge Extra Vote ability */}
+          {isJudge && !judgeAbilityUsed && (
+            <div className="w-full rounded-xl border border-blue-200 bg-white p-4 text-left shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xl">⚖️</span>
+                <span className="text-sm font-extrabold text-blue-900 uppercase tracking-wider">Năng Lực Thẩm Phán</span>
+              </div>
+              <p className="text-xs text-zinc-600 mb-3 leading-relaxed">
+                Bạn có thể ra hiệu bí mật để mở thêm một cuộc bỏ phiếu thứ hai trong ngày hôm nay. Chỉ dùng được <span className="font-bold text-blue-600">1 lần</span>.
+              </p>
+              <button
+                onClick={() => activateJudgeVote && activateJudgeVote()}
+                className="w-full cursor-pointer rounded-xl bg-blue-700 hover:bg-blue-600 border border-blue-600 py-2.5 text-xs font-extrabold text-white transition-colors shadow-sm"
+              >
+                ⚖️ Kích hoạt Phiên toà kép
+              </button>
+            </div>
+          )}
 
           {/* Fog Wolf special morning ability */}
           {isFogWolf && !fogWolfUsed && (
@@ -100,6 +126,25 @@ export default function DayActionController({
       {/* Target Voting Phase */}
       {dayPhase === "voting" && (
         <div className="w-full">
+          {/* Judge Extra Vote ability */}
+          {isJudge && !judgeAbilityUsed && (
+            <div className="w-full rounded-xl border border-blue-200 bg-white p-4 text-left shadow-sm mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xl">⚖️</span>
+                <span className="text-sm font-extrabold text-blue-900 uppercase tracking-wider">Năng Lực Thẩm Phán</span>
+              </div>
+              <p className="text-xs text-zinc-600 mb-3 leading-relaxed">
+                Bạn có thể ra hiệu bí mật để mở thêm một cuộc bỏ phiếu thứ hai trong ngày hôm nay. Chỉ dùng được <span className="font-bold text-blue-600">1 lần</span>.
+              </p>
+              <button
+                onClick={() => activateJudgeVote && activateJudgeVote()}
+                className="w-full cursor-pointer rounded-xl bg-blue-700 hover:bg-blue-600 border border-blue-600 py-2.5 text-xs font-extrabold text-white transition-colors shadow-sm"
+              >
+                ⚖️ Kích hoạt Phiên toà kép
+              </button>
+            </div>
+          )}
+
           <p className="mb-5 text-sm font-bold text-center text-amber-800 md:text-left">
             Chọn người nghi ngờ là Sói để đưa lên giàn treo cổ:
           </p>
@@ -109,7 +154,7 @@ export default function DayActionController({
               {alivePlayers.map((p) => {
                 const votesForPWeight = alivePlayers.reduce((acc, voter) => {
                   if (dayVotes[voter] === p) {
-                    return acc + (playerRoles[voter]?.id === "mayor" ? 2 : 1);
+                    return acc + (voter === currentMayor ? 2 : 1);
                   }
                   return acc;
                 }, 0);
@@ -188,7 +233,7 @@ export default function DayActionController({
                 {(() => {
                   const skipVotesWeight = alivePlayers.reduce((acc, voter) => {
                     if (dayVotes[voter] === "skip") {
-                      return acc + (playerRoles[voter]?.id === "mayor" ? 2 : 1);
+                      return acc + (voter === currentMayor ? 2 : 1);
                     }
                     return acc;
                   }, 0);
@@ -222,6 +267,25 @@ export default function DayActionController({
       {/* Defense Phase */}
       {dayPhase === "defense" && (
         <div className="w-full text-center md:text-left">
+          {/* Judge Extra Vote ability */}
+          {isJudge && !judgeAbilityUsed && (
+            <div className="w-full rounded-xl border border-blue-200 bg-white p-4 text-left shadow-sm mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xl">⚖️</span>
+                <span className="text-sm font-extrabold text-blue-900 uppercase tracking-wider">Năng Lực Thẩm Phán</span>
+              </div>
+              <p className="text-xs text-zinc-600 mb-3 leading-relaxed">
+                Bạn có thể ra hiệu bí mật để mở thêm một cuộc bỏ phiếu thứ hai trong ngày hôm nay. Chỉ dùng được <span className="font-bold text-blue-600">1 lần</span>.
+              </p>
+              <button
+                onClick={() => activateJudgeVote && activateJudgeVote()}
+                className="w-full cursor-pointer rounded-xl bg-blue-700 hover:bg-blue-600 border border-blue-600 py-2.5 text-xs font-extrabold text-white transition-colors shadow-sm"
+              >
+                ⚖️ Kích hoạt Phiên toà kép
+              </button>
+            </div>
+          )}
+
           <p className="mb-2 text-md font-extrabold text-purple-700">
             ⚖️ {accusedPlayer} đang bị tố giác và chuẩn bị lên giàn treo cổ!
           </p>
@@ -242,6 +306,25 @@ export default function DayActionController({
       {/* Trial Execution Phase */}
       {dayPhase === "execution" && (
         <div className="w-full">
+          {/* Judge Extra Vote ability */}
+          {isJudge && !judgeAbilityUsed && (
+            <div className="w-full rounded-xl border border-blue-200 bg-white p-4 text-left shadow-sm mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xl">⚖️</span>
+                <span className="text-sm font-extrabold text-blue-900 uppercase tracking-wider">Năng Lực Thẩm Phán</span>
+              </div>
+              <p className="text-xs text-zinc-600 mb-3 leading-relaxed">
+                Bạn có thể ra hiệu bí mật để mở thêm một cuộc bỏ phiếu thứ hai trong ngày hôm nay. Chỉ dùng được <span className="font-bold text-blue-600">1 lần</span>.
+              </p>
+              <button
+                onClick={() => activateJudgeVote && activateJudgeVote()}
+                className="w-full cursor-pointer rounded-xl bg-blue-700 hover:bg-blue-600 border border-blue-600 py-2.5 text-xs font-extrabold text-white transition-colors shadow-sm"
+              >
+                ⚖️ Kích hoạt Phiên toà kép
+              </button>
+            </div>
+          )}
+
           <p className="mb-5 text-sm font-bold text-amber-800">
             Biểu quyết sinh tử cho {accusedPlayer}:
           </p>
@@ -251,7 +334,7 @@ export default function DayActionController({
             let killVotes = 0;
             let saveVotes = 0;
             Object.entries(executionVotes).forEach(([voter, vote]) => {
-              const weight = playerRoles[voter]?.id === "mayor" ? 2 : 1;
+              const weight = voter === currentMayor ? 2 : 1;
               if (vote === "kill") killVotes += weight;
               else if (vote === "save") saveVotes += weight;
             });
@@ -349,6 +432,29 @@ export default function DayActionController({
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Mayor Transfer Phase */}
+      {dayPhase === "mayor_transfer" && playerName === gameState.pendingMayorTransfer && (
+        <div className="w-full text-center md:text-left space-y-4">
+          <div className="rounded-xl border border-amber-500 bg-amber-50 p-4 shadow-sm text-center">
+            <h4 className="text-sm font-bold text-amber-900 mb-2">Trao Lại Chức Trưởng Làng</h4>
+            <p className="text-xs text-amber-800 mb-4">
+              Bạn đã hy sinh, nhưng bạn có quyền trao lại chức Trưởng Làng cho một người còn sống trước khi nhắm mắt!
+            </p>
+            <div className="grid grid-cols-2 gap-3 w-full">
+              {alivePlayers.filter(p => p !== playerName).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => handleTransferMayor && handleTransferMayor(p)}
+                  className="cursor-pointer rounded-xl border border-amber-300 bg-white py-3 text-xs font-bold text-amber-900 hover:bg-amber-100 shadow-sm"
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

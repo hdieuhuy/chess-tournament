@@ -32,7 +32,7 @@ export default function NightSequenceTracker() {
 
     if (roleId === "werewolf") {
       return roleConfig.some(
-        (rc) => rc.count > 0 && ["werewolf", "fog_wolf", "wolf_cub", "cursed_wolf", "white_wolf"].includes(rc.id)
+        (rc) => rc.count > 0 && ["werewolf", "fog_wolf", "wolf_cub", "lycan", "cursed_wolf", "white_wolf"].includes(rc.id)
       );
     }
     return roleConfig.some((rc) => rc.count > 0 && rc.id === roleId);

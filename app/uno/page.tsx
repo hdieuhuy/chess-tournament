@@ -95,7 +95,7 @@ function UnoLayout({
         <div className="w-full h-full overflow-y-auto no-scrollbar">
           <UnoSidebar />
         </div>
-        <div className="flex items-center justify-center w-full h-full overflow-hidden relative">
+        <div className="flex items-center justify-center w-full h-full min-h-0 overflow-hidden relative">
           <UnoBoard />
         </div>
       </div>

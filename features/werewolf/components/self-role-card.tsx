@@ -23,7 +23,7 @@ export default function SelfRoleCard({
 
   // Determine Faction and color
   const getFactionInfo = (roleId: string) => {
-    const wolves = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"];
+    const wolves = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan"];
     const thirdParties = ["fool", "headhunter", "assassin", "thief", "tanner", "pied_piper", "white_wolf"];
     
     if (wolves.includes(roleId)) {

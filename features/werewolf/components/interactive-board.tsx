@@ -29,6 +29,7 @@ type InteractiveBoardProps = {
   activeExtraWolfKill?: boolean;
   lastProtected?: string | null;
   wolfVictim?: string[];
+  currentMayor?: string | null;
   // Interaction handler
   onPlayerClick?: (name: string) => void;
 };
@@ -56,6 +57,7 @@ export default function InteractiveBoard({
   activeExtraWolfKill,
   lastProtected,
   wolfVictim = [],
+  currentMayor,
   onPlayerClick,
 }: InteractiveBoardProps) {
   
@@ -73,7 +75,7 @@ export default function InteractiveBoard({
 
     // Night action selections
     if (phase === "night") {
-      const isWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(myRole || "");
+      const isWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan"].includes(myRole || "");
       if (nightPhase === "werewolf" && isWolf) {
         return (wolfVotes[playerName] || []).includes(pName) ? "wolf-vote" : null;
       }
@@ -143,11 +145,11 @@ export default function InteractiveBoard({
     // Night werewolf votes count
     if (phase === "night" && nightPhase === "werewolf") {
       const myRole = playerRoles[playerName]?.id;
-      const isWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "white_wolf"].includes(myRole || "");
+      const isWolf = ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan", "white_wolf"].includes(myRole || "");
       if (!isWolf) return [];
 
       const aliveWolves = alivePlayers.filter((w) =>
-        ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(playerRoles[w]?.id || "")
+        ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan"].includes(playerRoles[w]?.id || "")
       );
       const voters = aliveWolves.filter((w) => (wolfVotes[w] || []).includes(pName));
       return voters;
@@ -226,7 +228,7 @@ export default function InteractiveBoard({
               (phase === "night" &&
                 (isActAnytimeRole || nightPhase === myRole?.id ||
                   (nightPhase === "werewolf" &&
-                    ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(myRole?.id || "")))));
+                    ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan"].includes(myRole?.id || "")))));
 
           return (
             <div
@@ -256,6 +258,15 @@ export default function InteractiveBoard({
                     <FaCrown />
                     <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-950 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100">
                       Chủ phòng
+                      <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-950 -translate-x-1/2"></div>
+                    </div>
+                  </div>
+                )}
+                {p === currentMayor && p === playerName && (
+                  <div className="group relative cursor-help text-sm text-yellow-400">
+                    <RoleIcon id="mayor" />
+                    <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max -translate-x-1/2 rounded bg-zinc-950 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                      Trưởng Làng
                       <div className="absolute left-1/2 top-full -mt-px border-4 border-transparent border-t-zinc-950 -translate-x-1/2"></div>
                     </div>
                   </div>

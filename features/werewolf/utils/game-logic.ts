@@ -50,7 +50,7 @@ export const checkWinCondition = (
 ): GameState["winner"] => {
   const getFaction = (p: string) => {
     const rId = playerRoles[p]?.id || "";
-    if (["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub"].includes(rId))
+    if (["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan"].includes(rId))
       return "wolf";
     if (
       ["assassin", "fool", "headhunter", "pied_piper", "white_wolf"].includes(

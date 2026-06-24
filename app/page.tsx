@@ -325,7 +325,7 @@ export default function LandingPage() {
               <Swords className="w-8 h-8" />
             </div>
             <h2 className="text-4xl font-black text-slate-900 mb-4">Kho Trò Chơi</h2>
-            <p className="text-lg text-slate-600 max-w-2xl">Lựa chọn trò chơi bạn yêu thích và bắt đầu so tài cùng hàng ngàn kỳ thủ khác.</p>
+            <p className="text-lg text-slate-600 max-w-2xl">Lựa chọn trò chơi bạn yêu thích và bắt đầu so tài cùng bạn bè.</p>
           </div>
 
           {/* Cờ Truyền Thống */}

@@ -40,7 +40,7 @@ export default function NightActionController() {
   const isActive = (role: string, currentPhase: string | null): boolean => {
     if (!currentPhase) return false;
     if (currentPhase === "werewolf") {
-      return ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "white_wolf"].includes(role);
+      return ["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan", "white_wolf"].includes(role);
     }
     if (currentPhase === "cursed_wolf") {
       return role === "cursed_wolf";
@@ -70,7 +70,7 @@ export default function NightActionController() {
 
     // Phases this player is supposed to act in
     const myPhases: string[] = [];
-    if (["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "white_wolf"].includes(myRole)) {
+    if (["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan", "white_wolf"].includes(myRole)) {
       myPhases.push("werewolf");
     }
     if (myRole === "cursed_wolf") {
@@ -79,7 +79,7 @@ export default function NightActionController() {
     if (myRole === "white_wolf" && dayCount >= 2 && dayCount % 2 === 0) {
       myPhases.push("white_wolf");
     }
-    if (!["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "white_wolf"].includes(myRole)) {
+    if (!["werewolf", "cursed_wolf", "fog_wolf", "wolf_cub", "lycan", "white_wolf"].includes(myRole)) {
       myPhases.push(myRole);
     }
 

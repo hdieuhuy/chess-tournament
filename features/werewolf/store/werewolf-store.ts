@@ -22,6 +22,9 @@ export const initialGameState: GameState = {
   wolfVotes: {},
   wolfVictim: [],
   hunterTarget: null,
+  currentMayor: null,
+  pendingMayorTransfer: null,
+  nextPhaseAfterMayorTransfer: null,
   witchAction: { heal: [], poison: null },
   deadThisNight: [],
   nightSelection: null,
@@ -49,6 +52,8 @@ export const initialGameState: GameState = {
   extraWolfKill: false,
   activeExtraWolfKill: false,
   elderDied: false,
+  judgeAbilityUsed: false,
+  activeJudgeExtraVote: false,
   timeSettings: {
     discussion: 480,
     voting: 45,

@@ -35,16 +35,7 @@ function WerewolfGameContent() {
       hasInitialized={hasInitialized}
       isCreator={isCreator}
     >
-      <WerewolfGameUI
-        showNameModal={showNameModal}
-        setShowNameModal={setShowNameModal}
-        hasInitialized={hasInitialized}
-        roomId={roomId}
-        requestedRole={requestedRole}
-        setRequestedRole={setRequestedRole}
-        handleJoinRoom={handleJoinRoom}
-        playerName={playerName}
-      />
+      <WerewolfGameUI />
     </WerewolfProvider>
   );
 }

@@ -122,7 +122,7 @@ export function UnoBoard() {
   const myHand = hands[playerName] || [];
 
   return (
-    <div className={`flex w-full h-full flex-col items-center justify-between py-2 sm:py-4 transition-opacity duration-300 ${!gameStarted ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
+    <div className={`flex w-full h-full min-h-0 flex-col items-center justify-between py-2 sm:py-4 transition-opacity duration-300 ${!gameStarted ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
       <Modal isOpen={showColorPicker} title="Chọn màu cho lượt tiếp theo">
         <div className="flex justify-around py-4">
           {["red", "blue", "green", "yellow"].map((c) => (
@@ -167,21 +167,7 @@ export function UnoBoard() {
           </div>
         )}
 
-        {stackPending && (
-          <div className="absolute bottom-6 left-6 flex flex-col items-start bg-black/60 px-5 py-3 rounded-2xl backdrop-blur-sm z-50 shadow-2xl border border-white/20">
-            <span className="text-white font-black text-lg sm:text-xl mb-1 drop-shadow-md text-left">
-              ĐANG BỊ PHẠT +{drawStack} LÁ!
-            </span>
-            <span className="text-zinc-300 font-medium text-[10px] sm:text-xs mb-2">Đánh lá phạt tương ứng để cộng dồn!</span>
-            <div className="w-full h-2 sm:h-3 bg-zinc-700/80 rounded-full overflow-hidden mt-1 shadow-inner">
-              <div
-                className="h-full bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-75"
-                style={{ width: `${(stackTimeLeft / 5000) * 100}%` }}
-              />
-            </div>
-            <span className="text-white font-bold text-xs sm:text-sm mt-1">{(stackTimeLeft / 1000).toFixed(1)}s</span>
-          </div>
-        )}
+        
 
         {renderOpponent(topP, "top")}
         {renderOpponent(leftP, "left")}
@@ -231,8 +217,22 @@ export function UnoBoard() {
       {/* Player Hand */}
       <div className="relative flex w-full flex-col items-center justify-end z-20 shrink-0">
         <div className="flex items-center justify-between w-full max-w-4xl px-4 mb-4 h-12">
-          {myHand.length > 0 ? (
+                    {myHand.length > 0 ? (
             <div className="flex items-center gap-3">
+              {stackPending && (
+                <div className="flex flex-col items-start bg-zinc-900 px-4 py-2 rounded-xl backdrop-blur-sm z-50 shadow-md border border-red-500/50">
+                  <span className="text-red-400 font-black text-sm sm:text-base mb-0.5">
+                    ĐANG BỊ PHẠT +{drawStack} LÁ!
+                  </span>
+                  <div className="w-full h-1.5 bg-zinc-700/80 rounded-full overflow-hidden mt-0.5 shadow-inner">
+                    <div
+                      className="h-full bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-75"
+                      style={{ width: `${(stackTimeLeft / 5000) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-zinc-400 font-bold text-[10px] mt-1">{(stackTimeLeft / 1000).toFixed(1)}s - Đánh +2/+4 để cộng dồn!</span>
+                </div>
+              )}
               <div className="flex flex-col text-left">
                 {myHand.length === 1 && (
                   <span className="text-lg font-black text-red-500 animate-bounce">
@@ -242,7 +242,22 @@ export function UnoBoard() {
               </div>
             </div>
           ) : (
-            <div />
+            <div className="flex items-center gap-3">
+              {stackPending && (
+                <div className="flex flex-col items-start bg-zinc-900 px-4 py-2 rounded-xl backdrop-blur-sm z-50 shadow-md border border-red-500/50">
+                  <span className="text-red-400 font-black text-sm sm:text-base mb-0.5">
+                    ĐANG BỊ PHẠT +{drawStack} LÁ!
+                  </span>
+                  <div className="w-full h-1.5 bg-zinc-700/80 rounded-full overflow-hidden mt-0.5 shadow-inner">
+                    <div
+                      className="h-full bg-gradient-to-r from-red-500 to-orange-500 transition-all duration-75"
+                      style={{ width: `${(stackTimeLeft / 5000) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-zinc-400 font-bold text-[10px] mt-1">{(stackTimeLeft / 1000).toFixed(1)}s - Đánh +2/+4 để cộng dồn!</span>
+                </div>
+              )}
+            </div>
           )}
           {isMyTurn && stackPending && !winner && (
             <motion.button

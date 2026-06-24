@@ -28,7 +28,7 @@ export type GameState = {
   playerRoles: Record<string, RoleConfig>;
   originalRoles: Record<string, RoleConfig>;
   phase: "lobby" | "role_reveal" | "night" | "day" | "game_over";
-  dayPhase: "discussion" | "voting" | "defense" | "execution" | null;
+  dayPhase: "discussion" | "voting" | "defense" | "execution" | "mayor_transfer" | null;
   dayTimeLeft: number;
   dayVotes: Record<string, string>;
   accusedPlayer: string | null;
@@ -40,6 +40,9 @@ export type GameState = {
   wolfVotes: Record<string, string[]>;
   wolfVictim: string[];
   hunterTarget: string | null;
+  currentMayor: string | null;
+  pendingMayorTransfer: string | null;
+  nextPhaseAfterMayorTransfer: "discussion" | "night" | null;
   witchAction: { heal: string[]; poison: string | null };
   deadThisNight: string[];
   nightSelection: string | null;
@@ -76,6 +79,8 @@ export type GameState = {
   extraWolfKill: boolean;
   activeExtraWolfKill: boolean;
   elderDied: boolean;
+  judgeAbilityUsed: boolean;
+  activeJudgeExtraVote: boolean;
   timeSettings: {
     discussion: number;
     voting: number;

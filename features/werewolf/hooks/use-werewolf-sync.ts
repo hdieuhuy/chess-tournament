@@ -252,6 +252,16 @@ export const useWerewolfSync = () => {
         if (data.extraWolfKill !== undefined) updates.extraWolfKill = data.extraWolfKill;
         if (data.activeExtraWolfKill !== undefined) updates.activeExtraWolfKill = data.activeExtraWolfKill;
         if (data.elderDied !== undefined) updates.elderDied = data.elderDied;
+        if (data.currentMayor !== undefined) {
+          if (data.currentMayor === playerName && stateRef.current.currentMayor !== playerName) {
+            toast.success("Bạn đã được trao lại chức Trưởng Làng một cách âm thầm! 👑");
+          }
+          updates.currentMayor = data.currentMayor;
+        }
+        if (data.pendingMayorTransfer !== undefined) updates.pendingMayorTransfer = data.pendingMayorTransfer;
+        if (data.nextPhaseAfterMayorTransfer !== undefined) updates.nextPhaseAfterMayorTransfer = data.nextPhaseAfterMayorTransfer;
+        if (data.activeJudgeExtraVote !== undefined) updates.activeJudgeExtraVote = data.activeJudgeExtraVote;
+        if (data.judgeAbilityUsed !== undefined) updates.judgeAbilityUsed = data.judgeAbilityUsed;
         dispatch({ type: "UPDATE", payload: updates });
       })
       .on("broadcast", { event: "day-phase-change" }, (payload) => {
@@ -263,6 +273,17 @@ export const useWerewolfSync = () => {
         if (data.accusedPlayer !== undefined) updates.accusedPlayer = data.accusedPlayer;
         if (data.executionVotes !== undefined) updates.executionVotes = data.executionVotes;
         if (data.actionLogs !== undefined) updates.actionLogs = data.actionLogs;
+        if (data.currentMayor !== undefined) {
+          if (data.currentMayor === playerName && stateRef.current.currentMayor !== playerName) {
+            toast.success("Bạn đã được trao lại chức Trưởng Làng một cách âm thầm! 👑");
+          }
+          updates.currentMayor = data.currentMayor;
+        }
+        if (data.pendingMayorTransfer !== undefined) updates.pendingMayorTransfer = data.pendingMayorTransfer;
+        if (data.nextPhaseAfterMayorTransfer !== undefined) updates.nextPhaseAfterMayorTransfer = data.nextPhaseAfterMayorTransfer;
+        if (data.activeJudgeExtraVote !== undefined) updates.activeJudgeExtraVote = data.activeJudgeExtraVote;
+        if (data.judgeAbilityUsed !== undefined) updates.judgeAbilityUsed = data.judgeAbilityUsed;
+        if (data.elderDied !== undefined) updates.elderDied = data.elderDied;
         dispatch({ type: "UPDATE", payload: updates });
       })
       .on("broadcast", { event: "sync-day-time" }, (payload) => {
@@ -303,6 +324,17 @@ export const useWerewolfSync = () => {
         if (data.dayPhase !== undefined) updates.dayPhase = data.dayPhase;
         if (data.dayTimeLeft !== undefined) updates.dayTimeLeft = data.dayTimeLeft;
         if (data.actionLogs) updates.actionLogs = data.actionLogs;
+        if (data.currentMayor !== undefined) {
+          if (data.currentMayor === playerName && stateRef.current.currentMayor !== playerName) {
+            toast.success("Bạn đã được trao lại chức Trưởng Làng một cách âm thầm! 👑");
+          }
+          updates.currentMayor = data.currentMayor;
+        }
+        if (data.pendingMayorTransfer !== undefined) updates.pendingMayorTransfer = data.pendingMayorTransfer;
+        if (data.nextPhaseAfterMayorTransfer !== undefined) updates.nextPhaseAfterMayorTransfer = data.nextPhaseAfterMayorTransfer;
+        if (data.activeJudgeExtraVote !== undefined) updates.activeJudgeExtraVote = data.activeJudgeExtraVote;
+        if (data.judgeAbilityUsed !== undefined) updates.judgeAbilityUsed = data.judgeAbilityUsed;
+        if (data.elderDied !== undefined) updates.elderDied = data.elderDied;
         dispatch({ type: "UPDATE", payload: updates });
       })
       .on("broadcast", { event: "night-phase-change" }, (payload) => {
@@ -460,6 +492,16 @@ export const useWerewolfSync = () => {
             });
           }
         }
+      })
+      .on("broadcast", { event: "activate-judge-vote" }, (payload) => {
+        const data = payload.payload;
+        dispatch({
+          type: "UPDATE",
+          payload: {
+            judgeAbilityUsed: data.judgeAbilityUsed,
+            activeJudgeExtraVote: data.activeJudgeExtraVote,
+          },
+        });
       })
       .on("broadcast", { event: "kick-player" }, (payload) => {
         if (payload.payload.playerName === playerName) {

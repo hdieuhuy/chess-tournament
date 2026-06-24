@@ -1,4 +1,4 @@
-import { FaEye, FaUserTie, FaHeart } from "react-icons/fa";
+import { FaEye, FaUserTie, FaHeart, FaBalanceScale } from "react-icons/fa";
 import {
   GiWolfHead,
   GiFarmer,
@@ -39,6 +39,8 @@ export const RoleIcon = ({
       return <GiMusket className={className} />;
     case "mayor":
       return <FaUserTie className={className} />;
+    case "judge":
+      return <FaBalanceScale className={className} />;
     case "elder":
       return <GiOldKing className={className} />;
     case "cursed_wolf":
@@ -50,6 +52,7 @@ export const RoleIcon = ({
     case "half_wolf":
       return <GiWolfHead className={className} />;
     case "wolf_cub":
+    case "lycan":
       return <GiWolfHead className={className} />;
     case "fool":
       return <GiJesterHat className={className} />;
@@ -96,6 +99,8 @@ export const getRoleColor = (id?: string) => {
       return "text-amber-700";
     case "wolf_cub":
       return "text-red-500";
+    case "lycan":
+      return "text-indigo-600";
     case "fool":
       return "text-pink-600";
     case "headhunter":
@@ -128,7 +133,9 @@ export const getRoleDescription = (id?: string) => {
     case "hunter":
       return "Mỗi đêm sẽ được chọn 1 người để ghim. nếu Thợ Sơn chết sẽ kéo theo người đó chết";
     case "mayor":
-      return "Ban ngày phiếu biểu quyết của Trưởng Làng được tính bằng 2.";
+      return "Ban ngày phiếu biểu quyết của Trưởng Làng được tính bằng 2. Khi chết, Trưởng Làng có 10 giây để chỉ định người kế nhiệm. Nếu không, hệ thống sẽ chọn ngẫu nhiên.";
+    case "judge":
+      return "Một lần duy nhất trong game, Thẩm Phán có quyền ra lệnh mở thêm một cuộc bỏ phiếu thứ hai trong ngày hôm đó (Làng phải treo cổ thêm 1 người).";
     case "elder":
       return "Già làng có 2 mạng (sống sót 1 lần bị giết). Khi già làng chết thì tất cả người chơi thuộc phe dân làng đều bị mất hết chức năng của vai trò.";
     case "cursed_wolf":
@@ -141,6 +148,8 @@ export const getRoleDescription = (id?: string) => {
       return "Phe Dân Làng. Nếu bị Sói cắn, không chết mà sẽ trở thành Sói vào đêm tiếp theo.";
     case "wolf_cub":
       return "Phe Sói. Thức dậy và cắn người cùng Sói. Nếu Sói Con chết, đêm tiếp theo bầy Sói được phép cắn 2 người.";
+    case "lycan":
+      return "Phe Sói. Thức dậy cắn người cùng đàn. Nếu bị Tiên Tri soi, quản trò sẽ báo kết quả là Dân Làng (người tốt).";
     case "fool":
       return "Chỉ chiến thắng 1 mình. Không có kỹ năng, nhưng nếu bị làng biểu quyết treo cổ vào ban ngày, Kẻ Ngốc sẽ lập tức giành chiến thắng.";
     case "headhunter":
@@ -166,12 +175,14 @@ export const defaultRoles: RoleConfig[] = [
   { id: "witch", name: "Phù Thủy", count: 0 },
   { id: "hunter", name: "Thợ Săn", count: 0 },
   { id: "mayor", name: "Trưởng Làng", count: 0 },
+  { id: "judge", name: "Thẩm Phán", count: 0 },
   { id: "elder", name: "Già Làng", count: 0 },
   { id: "cursed_wolf", name: "Sói Nguyền", count: 0 },
   { id: "white_wolf", name: "Sói Trắng", count: 0 },
   { id: "fog_wolf", name: "Sói Sương Mù", count: 0 },
   { id: "half_wolf", name: "Bán Sói", count: 0 },
   { id: "wolf_cub", name: "Sói Con", count: 0 },
+  { id: "lycan", name: "Sói Lai", count: 0 },
   { id: "fool", name: "Kẻ Ngốc", count: 0 },
   { id: "headhunter", name: "Thợ Săn Người", count: 0 },
   { id: "assassin", name: "Sát Thủ", count: 0 },
