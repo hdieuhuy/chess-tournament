@@ -308,7 +308,7 @@ function XiangqiGameContent({ isDarkMode, toggleTheme }: { isDarkMode: boolean, 
       {/* Mobile Drawer (Sidebar) */}
       <Sheet isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} title="Menu & Phòng chơi">
         <div className="h-full w-full p-4 overflow-hidden">
-          <XiangqiSidebar isDarkMode={isDarkMode} />
+          <XiangqiSidebar isDarkMode={isDarkMode} onReady={() => setIsSidebarOpen(false)} />
         </div>
       </Sheet>
     </main>

@@ -5,9 +5,10 @@ import { Crown, Gamepad2, Eye, Users, PartyPopper, Undo2, Flag, RotateCcw, Link 
 
 interface ChessSidebarProps {
   isDarkMode: boolean;
+  onReady?: () => void;
 }
 
-export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
+export function ChessSidebar({ isDarkMode, onReady }: ChessSidebarProps) {
   const [activeTab, setActiveTab] = useState<"players" | "spectators">("players");
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -42,6 +43,11 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
     handleSlotClick,
     handleBecomeSpectator,
   } = useChess();
+
+  const handleStartReady = () => {
+    handleStartClick();
+    onReady?.();
+  };
 
   const playersCount = gameMode === "1v1"
     ? [player1Name, player2Name].filter(Boolean).length
@@ -283,7 +289,7 @@ export function ChessSidebar({ isDarkMode }: ChessSidebarProps) {
                   <span className={`text-xs font-medium ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}>{readyPlayers.length}/{maxPlayers} sẵn sàng</span>
                 </div>
                 <button
-                  onClick={handleStartClick}
+                  onClick={handleStartReady}
                   disabled={readyPlayers.includes(playerName || "") || isSpectator}
                   className="w-full cursor-pointer rounded-lg bg-green-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
                 >

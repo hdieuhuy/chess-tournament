@@ -9,6 +9,8 @@ import { GoBoard } from "@/features/go/components/go-board";
 import { GameRulesModal } from "@/components/game-rules-modal";
 import confetti from "canvas-confetti";
 import { GlobalActionMenu } from "@/components/global-action-menu";
+import { Menu } from "lucide-react";
+import { Sheet } from "@/components/Sheet";
 
 export default function GoPage() {
   return (
@@ -125,6 +127,7 @@ function GoGameContent({
   } = useGo();
   
   const [showRulesModal, setShowRulesModal] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (winner && winner !== "Draw" && winner !== "End") {
@@ -198,15 +201,50 @@ function GoGameContent({
         onSubmit={handleJoinRoom}
       />
 
-      <div className="grid w-full h-full max-h-full max-w-[1600px] flex-1 grid-cols-1 lg:grid-cols-[380px_1fr] gap-4 lg:gap-8 overflow-hidden pt-14 lg:pt-0">
-        <div className="w-full h-full overflow-hidden">
+      <div className="flex flex-col lg:grid w-full h-full max-h-full max-w-[1600px] flex-1 lg:grid-cols-[380px_1fr] gap-4 lg:gap-8 overflow-hidden pt-14 lg:pt-0">
+        {/* Mobile Header (Hidden on Desktop) */}
+        <div className="lg:hidden w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-colors bg-white dark:bg-slate-800 border-zinc-200 dark:border-slate-700 shadow-sm shrink-0">
+          <div className="flex flex-col min-w-0">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}>
+              Phòng: {roomId}
+            </span>
+            <span className={`text-xs font-semibold mt-0.5 truncate ${winner ? "text-green-500" : isDarkMode ? "text-slate-200" : "text-zinc-800"}`}>
+              {winner === "Draw"
+                ? "🤝 Hòa cờ!"
+                : winner === "End"
+                ? "🏁 Kết thúc ván đấu!"
+                : winner
+                ? `Thắng: ${winner === "B" ? player1Name : player2Name}`
+                : gameStarted
+                ? `Lượt đi: ${isBlackNext ? `Đen (${player1Name || "..."})` : `Trắng (${player2Name || "..."})`}`
+                : "Chờ bắt đầu..."}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {gameStarted && (
+              <span className={`font-mono text-sm font-bold ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
+                {isBlackNext ? formatTime(player1Time) : formatTime(player2Time)}
+              </span>
+            )}
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className={`p-2 rounded-lg border transition-colors ${isDarkMode ? "bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600" : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"}`}
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Desktop Sidebar (Hidden on Mobile) */}
+        <div className="hidden lg:block w-full h-full overflow-hidden">
           <GoSidebar isDarkMode={isDarkMode} />
         </div>
         
-        <div className="flex w-full h-full overflow-y-auto overflow-x-hidden p-4">
-          <div className="flex flex-col items-center justify-center relative w-full min-h-full max-w-[600px] mx-auto pb-10">
+        {/* Main Board Container */}
+        <div className="flex-1 w-full h-full overflow-hidden p-4">
+          <div className="flex flex-col items-center justify-center relative w-full h-full max-w-[600px] mx-auto pb-10">
             {/* Player 2 (Trắng - Đi sau) - Phía trên */}
-            <div className={`flex w-full justify-between items-end mb-4 transition-opacity ${!player2Name ? "opacity-50" : "opacity-100"}`}>
+            <div className={`flex w-full justify-between items-end mb-4 transition-opacity shrink-0 ${!player2Name ? "opacity-50" : "opacity-100"}`}>
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 border-2 rounded-lg flex items-center justify-center text-xl font-bold shadow-sm ${isDarkMode ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-zinc-200 text-zinc-800"}`}>
                   {player2Name?.charAt(0).toUpperCase() || "?"}
@@ -232,7 +270,7 @@ function GoGameContent({
             <GoBoard isDarkMode={isDarkMode} />
 
             {/* Player 1 (Đen - Đi trước) - Phía dưới */}
-            <div className={`flex w-full justify-between items-start mt-4 transition-opacity ${!player1Name ? "opacity-50" : "opacity-100"}`}>
+            <div className={`flex w-full justify-between items-start mt-4 transition-opacity shrink-0 ${!player1Name ? "opacity-50" : "opacity-100"}`}>
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-xl font-bold shadow-md bg-zinc-900 text-white`}>
                   {player1Name?.charAt(0).toUpperCase() || "?"}
@@ -283,6 +321,13 @@ function GoGameContent({
           </div>
         </div>
       </div>
+
+      {/* Mobile Drawer (Sidebar) */}
+      <Sheet isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} title="Menu & Phòng chơi">
+        <div className="h-full w-full p-4 overflow-hidden">
+          <GoSidebar isDarkMode={isDarkMode} onReady={() => setIsSidebarOpen(false)} />
+        </div>
+      </Sheet>
     </main>
   );
 }

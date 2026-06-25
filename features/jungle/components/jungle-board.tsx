@@ -90,10 +90,10 @@ export function JungleBoard() {
     : (gameMode === "2v2" ? (turnIndex === 0 ? player1Name : player3Name) : player1Name);
 
   return (
-    <div className="flex w-full flex-col items-center justify-center h-full pb-4 sm:pb-10">
+    <div className="flex w-full flex-col items-center justify-center h-full max-h-full overflow-hidden">
       
       {/* Top Team (Opponent) */}
-      <div className={`flex w-full max-w-[400px] justify-between items-end mb-3 transition-opacity ${gamePhase === "waiting" ? "opacity-50" : "opacity-100"}`}>
+      <div className={`flex w-full max-w-[400px] justify-between items-end mb-3 transition-opacity shrink-0 ${gamePhase === "waiting" ? "opacity-50" : "opacity-100"}`}>
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <span className={`text-xs sm:text-sm font-semibold opacity-80 ${isViewInverted ? "text-red-600" : "text-blue-600"}`}>
@@ -105,10 +105,10 @@ export function JungleBoard() {
               const isActive = isTopPlayerTurn && gamePhase === "playing" && activeTopPlayerName === name;
               return (
                 <div key={i} className="flex items-center gap-2">
-                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center text-sm sm:text-base font-bold shadow-md text-white ${isViewInverted ? "bg-red-600" : "bg-blue-600"} ${isActive ? "ring-2 ring-yellow-400 shadow-yellow-400/50 scale-110 transition-transform" : ""}`}>
+                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center text-xs sm:text-sm font-bold shadow-md text-white ${isViewInverted ? "bg-red-600" : "bg-blue-600"} ${isActive ? "ring-2 ring-yellow-400 shadow-yellow-400/50 scale-110 transition-transform" : ""}`}>
                     {name?.charAt(0).toUpperCase() || "?"}
                   </div>
-                  <span className={`font-bold text-sm sm:text-base text-zinc-900 ${isActive ? "text-yellow-600" : ""}`}>
+                  <span className={`font-bold text-xs sm:text-sm text-zinc-900 ${isActive ? "text-yellow-600" : ""}`}>
                     {name || "Đang chờ..."}
                   </span>
                 </div>
@@ -126,12 +126,13 @@ export function JungleBoard() {
 
       {/* Jungle Board */}
       <div
-        className={`p-1.5 sm:p-2 md:p-3 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] border-4 sm:border-[6px] border-[#3E2723] bg-[#5D4037] transition-all duration-500 ${
+        className={`p-1.5 sm:p-2 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] border-4 border-[#3E2723] bg-[#5D4037] flex items-center justify-center transition-all duration-500 flex-1 min-h-0 ${
           gamePhase === "waiting" ? "opacity-70 grayscale-[0.2]" : "opacity-100"
         }`}
+        style={{ maxHeight: "min(100%, 55vh)", maxWidth: "min(95vw, 400px)" }}
       >
         <div
-          className="grid w-[95vw] max-w-[400px] aspect-[7/9] gap-[2px] bg-[#3E2723] rounded-md overflow-hidden"
+          className="grid w-full h-full aspect-[7/9] gap-[2px] bg-[#3E2723] rounded-md overflow-hidden"
           style={{
             gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
             gridTemplateRows: "repeat(9, minmax(0, 1fr))",

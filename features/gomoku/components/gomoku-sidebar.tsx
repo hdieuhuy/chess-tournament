@@ -5,9 +5,10 @@ import { Crown, Gamepad2, Eye, Users, PartyPopper, Undo2, Flag, RotateCcw, Link 
 
 interface GomokuSidebarProps {
   isDarkMode: boolean;
+  onReady?: () => void;
 }
 
-export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
+export function GomokuSidebar({ isDarkMode, onReady }: GomokuSidebarProps) {
   const [activeTab, setActiveTab] = useState<"players" | "spectators" | "controls">("players");
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -51,6 +52,11 @@ export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
     const m = Math.floor(seconds / 60).toString().padStart(2, "0");
     const s = (seconds % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
+  };
+
+  const handleStartReady = () => {
+    handleStartClick();
+    onReady?.();
   };
 
   const canUndo = () => {
@@ -248,7 +254,7 @@ export function GomokuSidebar({ isDarkMode }: GomokuSidebarProps) {
                   <span className={`text-xs font-medium ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}>{readyPlayers.length}/{maxPlayers} sẵn sàng</span>
                 </div>
                 <button
-                  onClick={handleStartClick}
+                  onClick={handleStartReady}
                   disabled={readyPlayers.includes(playerName || "") || isSpectator}
                   className="w-full cursor-pointer rounded-lg bg-green-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
                 >

@@ -7,9 +7,10 @@ import { Gamepad2, Eye, Users, DoorOpen, RotateCcw, Link as LinkIcon, PartyPoppe
 
 interface OAnQuanSidebarProps {
   isDarkMode: boolean;
+  onReady?: () => void;
 }
 
-export function OAnQuanSidebar({ isDarkMode }: OAnQuanSidebarProps) {
+export function OAnQuanSidebar({ isDarkMode, onReady }: OAnQuanSidebarProps) {
   const [activeTab, setActiveTab] = useState<"players" | "spectators">("players");
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -33,6 +34,11 @@ export function OAnQuanSidebar({ isDarkMode }: OAnQuanSidebarProps) {
     handleSlotClick,
     handleBecomeSpectator,
   } = useOAnQuan();
+
+  const handleStartReady = () => {
+    handleReady();
+    onReady?.();
+  };
 
   const playersCount = [player1Name, player2Name].filter(Boolean).length;
   const maxPlayers = 2;
@@ -273,7 +279,7 @@ export function OAnQuanSidebar({ isDarkMode }: OAnQuanSidebarProps) {
             <div className="mt-auto flex flex-col gap-2 pt-4">
               {gamePhase === "waiting" && !isSpectator && !readyPlayers.includes(playerName) && (
                 <button
-                  onClick={handleReady}
+                  onClick={handleStartReady}
                   className="w-full flex items-center justify-center gap-2 bg-amber-700 text-white font-semibold py-3 rounded-xl hover:bg-amber-800 transition-colors shadow-md cursor-pointer"
                 >
                   <Gamepad2 className="w-5 h-5" /> Sẵn sàng

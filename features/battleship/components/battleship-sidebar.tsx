@@ -5,9 +5,10 @@ import { Gamepad2, Eye, Users, DoorOpen, RotateCcw, Link as LinkIcon, PartyPoppe
 
 interface BattleshipSidebarProps {
   isDarkMode: boolean;
+  onReady?: () => void;
 }
 
-export function BattleshipSidebar({ isDarkMode }: BattleshipSidebarProps) {
+export function BattleshipSidebar({ isDarkMode, onReady }: BattleshipSidebarProps) {
   const [activeTab, setActiveTab] = useState<"players" | "spectators">("players");
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -38,6 +39,11 @@ export function BattleshipSidebar({ isDarkMode }: BattleshipSidebarProps) {
     handleRandomPlacement,
     handleClearBoard,
   } = useBattleship();
+
+  const handleStartReady = () => {
+    handleReady();
+    onReady?.();
+  };
 
   const playersCount = [player1Name, player2Name].filter(Boolean).length;
   const maxPlayers = 2;
@@ -322,7 +328,7 @@ export function BattleshipSidebar({ isDarkMode }: BattleshipSidebarProps) {
             <div className="mt-auto flex flex-col gap-2 pt-4">
               {gamePhase === "waiting" && !isSpectator && !readyPlayers.includes(playerName) && (
                 <button
-                  onClick={handleReady}
+                  onClick={handleStartReady}
                   className="w-full flex items-center justify-center gap-2 bg-zinc-900 text-white font-semibold py-3 rounded-xl hover:bg-zinc-800 transition-colors shadow-md cursor-pointer"
                 >
                   <Gamepad2 className="w-5 h-5" /> Sẵn sàng

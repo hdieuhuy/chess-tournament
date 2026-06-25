@@ -8,6 +8,8 @@ import { OAnQuanBoard } from "@/features/oanquan/components/oanquan-board";
 import { OAnQuanSidebar } from "@/features/oanquan/components/oanquan-sidebar";
 import { GlobalActionMenu } from "@/components/global-action-menu";
 import { GameRulesModal } from "@/components/game-rules-modal";
+import { Menu } from "lucide-react";
+import { Sheet } from "@/components/Sheet";
 
 function OAnQuanGameContent() {
   const {
@@ -81,23 +83,68 @@ function OAnQuanGameContent() {
         onClose={() => setShowRulesModal(false)}
         gameId="oanquan"
       />
-      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 w-full max-w-7xl mx-auto h-full p-4 lg:p-6">
-        {/* Cột trái: Sidebar Lobby */}
-        <div className="w-full lg:w-80 xl:w-96 shrink-0 h-[500px] lg:h-auto">
-          <OAnQuanSidebar isDarkMode={isDarkMode} />
-        </div>
-
-        {/* Cột phải: Bàn cờ */}
-        <div className="flex-1 flex items-center justify-center min-h-[500px] lg:min-h-0 bg-white/50 dark:bg-slate-800/50 rounded-2xl border shadow-sm p-4 relative overflow-hidden">
-          <OAnQuanBoard />
-        </div>
-      </div>
+      <OAnQuanGameLayout
+        roomId={roomId}
+        isDarkMode={isDarkMode}
+        showRulesModal={showRulesModal}
+        setShowRulesModal={setShowRulesModal}
+        setShowNameModal={setShowNameModal}
+      />
     </OAnQuanProvider>
   );
 }
 
+function OAnQuanGameLayout({ roomId, isDarkMode, showRulesModal, setShowRulesModal, setShowNameModal }: any) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { winner, gamePhase, isP1Turn, player1Name, player2Name } = useOAnQuan();
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 w-full max-w-7xl mx-auto h-full p-4 lg:p-6 overflow-hidden">
+      {/* Mobile Header (Hidden on Desktop) */}
+      <div className="lg:hidden w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-colors bg-white dark:bg-slate-800 border-zinc-200 dark:border-slate-700 shadow-sm shrink-0">
+        <div className="flex flex-col min-w-0">
+          <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}>
+            Phòng: {roomId}
+          </span>
+          <span className="text-xs font-semibold mt-0.5 truncate text-zinc-800 dark:text-slate-200">
+            {winner
+              ? `Thắng: ${winner === "Draw" ? "Hòa cờ" : winner === "P1" ? (player1Name || "Người 1") : (player2Name || "Người 2")}`
+              : gamePhase === "playing"
+              ? `Lượt đi: ${isP1Turn ? `Người 1 (${player1Name || "..."})` : `Người 2 (${player2Name || "..."})`}`
+              : "Chờ bắt đầu..."}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="p-2 rounded-lg border transition-colors bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Cột trái: Sidebar Lobby (Hidden on Mobile) */}
+      <div className="hidden lg:block w-full lg:w-80 xl:w-96 shrink-0 h-auto overflow-hidden">
+        <OAnQuanSidebar isDarkMode={isDarkMode} />
+      </div>
+
+      {/* Cột phải: Bàn cờ */}
+      <div className="flex-1 flex items-center justify-center bg-white/50 dark:bg-slate-800/50 rounded-2xl border shadow-sm p-4 relative overflow-hidden h-full max-h-full">
+        <OAnQuanBoard />
+      </div>
+
+      {/* Mobile Drawer (Sidebar) */}
+      <Sheet isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} title="Menu & Phòng chơi">
+        <div className="h-full w-full p-4 overflow-hidden">
+          <OAnQuanSidebar isDarkMode={isDarkMode} onReady={() => setIsSidebarOpen(false)} />
+        </div>
+      </Sheet>
+    </div>
+  );
+}
+
 export default function OAnQuanPage() {
-  // Use bg-zinc-50 to match Gomoku, Chess, Xiangqi
   return (
     <main className="flex h-[100dvh] flex-col items-center justify-center transition-colors duration-300 overflow-hidden bg-zinc-50">
       <Suspense

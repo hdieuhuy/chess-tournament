@@ -216,7 +216,7 @@ function GomokuLayout({
       {/* Mobile Drawer (Sidebar) */}
       <Sheet isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} title="Menu & Phòng chơi">
         <div className="h-full w-full p-4 overflow-hidden">
-          <GomokuSidebar isDarkMode={isDarkMode} />
+          <GomokuSidebar isDarkMode={isDarkMode} onReady={() => setIsSidebarOpen(false)} />
         </div>
       </Sheet>
     </main>

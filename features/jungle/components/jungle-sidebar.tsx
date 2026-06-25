@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useJungle } from "../contexts/jungle-context";
 import { Crown, Gamepad2, Eye, PartyPopper, Undo2, Flag, RotateCcw, Link as LinkIcon, DoorOpen, Users } from "lucide-react";
 
-export function JungleSidebar({ isDarkMode }: { isDarkMode: boolean }) {
+export function JungleSidebar({ isDarkMode, onReady }: { isDarkMode: boolean; onReady?: () => void }) {
   const [activeTab, setActiveTab] = useState<"players" | "spectators">("players");
   const [linkCopied, setLinkCopied] = useState(false);
 
@@ -37,6 +37,11 @@ export function JungleSidebar({ isDarkMode }: { isDarkMode: boolean }) {
     handleTimeChange,
     turnIndex,
   } = useJungle();
+
+  const handleStartReady = () => {
+    handleReady();
+    onReady?.();
+  };
 
   const isGameStarted = gamePhase !== "waiting";
 
@@ -266,7 +271,7 @@ export function JungleSidebar({ isDarkMode }: { isDarkMode: boolean }) {
                   <span className={`text-xs font-medium ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}>{readyPlayers.length}/{maxPlayers} sẵn sàng</span>
                 </div>
                 <button
-                  onClick={handleReady}
+                  onClick={handleStartReady}
                   disabled={readyPlayers.includes(playerName || "") || isSpectator}
                   className="w-full cursor-pointer rounded-lg bg-green-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-zinc-400"
                 >

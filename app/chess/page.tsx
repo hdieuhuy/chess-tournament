@@ -367,7 +367,7 @@ function ChessGameContent() {
       {/* Mobile Drawer (Sidebar) */}
       <Sheet isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} title="Menu & Phòng chơi">
         <div className="h-full w-full p-4 overflow-hidden">
-          <ChessSidebar isDarkMode={isDarkMode} />
+          <ChessSidebar isDarkMode={isDarkMode} onReady={() => setIsSidebarOpen(false)} />
         </div>
       </Sheet>
     </main>

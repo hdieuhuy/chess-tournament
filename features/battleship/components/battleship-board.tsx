@@ -36,17 +36,17 @@ export const Board: React.FC<BoardProps> = ({
   draggedShipRef,
 }) => {
   return (
-    <div className="flex flex-col items-center">
-      <h3 className="text-lg font-semibold text-zinc-800 mb-4">{title}</h3>
-      <div className="relative pl-6 pb-6">
-        <div className="absolute top-0 bottom-6 left-0 flex w-6 flex-col text-sm font-bold text-zinc-500 select-none">
+    <div className="flex flex-col items-center max-h-full">
+      <h3 className="text-sm md:text-lg font-semibold text-zinc-800 dark:text-slate-200 mb-2 md:mb-4 shrink-0">{title}</h3>
+      <div className="relative pl-5 pb-5 sm:pl-6 sm:pb-6 max-h-full">
+        <div className="absolute top-0 bottom-5 sm:bottom-6 left-0 flex w-5 sm:w-6 flex-col text-[10px] md:text-sm font-bold text-zinc-500 select-none">
           {ROWS.map((n) => (
             <div key={n} className="flex flex-1 items-center justify-center">
               {n}
             </div>
           ))}
         </div>
-        <div className="absolute bottom-0 left-6 right-0 flex h-6 text-sm font-bold text-zinc-500 select-none">
+        <div className="absolute bottom-0 left-5 sm:left-6 right-0 flex h-5 sm:h-6 text-[10px] md:text-sm font-bold text-zinc-500 select-none">
           {COLS.map((l) => (
             <div key={l} className="flex flex-1 items-center justify-center">
               {l}
@@ -55,7 +55,7 @@ export const Board: React.FC<BoardProps> = ({
         </div>
 
         <div
-          className={`relative grid grid-cols-10 grid-rows-10 w-[95vw] sm:w-[90vw] md:w-[50vh] md:max-w-[504px] aspect-square border-2 border-zinc-800 bg-[#E3F2FD] ${interactive ? "" : "pointer-events-none"}`}
+          className={`relative grid grid-cols-10 grid-rows-10 aspect-square border-2 border-zinc-800 bg-[#E3F2FD] dark:bg-slate-900 ${interactive ? "" : "pointer-events-none"} w-[95vw] sm:w-[90vw] md:w-[40vw] lg:w-[32vh] xl:w-[40vh] max-w-[44vh] max-h-[44vh] md:max-w-none md:max-h-none lg:max-w-[504px] lg:max-h-[504px]`}
         >
           {Array.from({ length: BOARD_SIZE * BOARD_SIZE }).map((_, i) => {
             const r = Math.floor(i / BOARD_SIZE);

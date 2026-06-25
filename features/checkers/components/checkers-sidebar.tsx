@@ -6,7 +6,7 @@ import { useCheckers } from "../contexts/checkers-context";
 import { Users, UserPlus, Gamepad2, Eye, Flag, RotateCcw, Undo2, DoorOpen, Link as LinkIcon } from "lucide-react";
 import { FaCrown } from "react-icons/fa";
 
-export function CheckersSidebar({ isDarkMode }: { isDarkMode: boolean }) {
+export function CheckersSidebar({ isDarkMode, onReady }: { isDarkMode: boolean; onReady?: () => void }) {
   const {
     playerName,
     hostName,
@@ -32,6 +32,11 @@ export function CheckersSidebar({ isDarkMode }: { isDarkMode: boolean }) {
     resetGame,
     handleResign,
   } = useCheckers();
+
+  const handleStartReady = () => {
+    handleStartClick();
+    onReady?.();
+  };
 
   const [activeTab, setActiveTab] = useState<"players" | "spectators">("players");
   const [linkCopied, setLinkCopied] = useState(false);
@@ -224,7 +229,7 @@ export function CheckersSidebar({ isDarkMode }: { isDarkMode: boolean }) {
                   <span className={`text-xs font-medium ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}>{readyPlayers.length}/{maxPlayers} sẵn sàng</span>
                 </div>
                 <button
-                  onClick={handleStartClick}
+                  onClick={handleStartReady}
                   disabled={readyPlayers.includes(playerName || "") || isSpectator || playersCount < 2}
                   className={`w-full py-2.5 rounded-lg text-sm font-medium transition-all ${
                     readyPlayers.includes(playerName || "")

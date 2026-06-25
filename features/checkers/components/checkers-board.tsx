@@ -28,40 +28,40 @@ export function CheckersBoard({ isDarkMode, isDisabled }: CheckersBoardProps) {
   const shouldFlip = isPlayer2; // Flips board if playing as Red
 
   return (
-    <div className="flex w-full flex-col items-center justify-center p-2 sm:p-4 h-full relative">
-      <div
-        className={`transition-opacity ${isDisabled ? "opacity-50 pointer-events-none" : "opacity-100"}`}
-      >
-        <div className="relative pl-5 pb-5 sm:pl-6 sm:pb-6">
-          <div className="absolute top-0 bottom-5 sm:bottom-6 left-0 flex w-5 sm:w-6 flex-col text-xs sm:text-sm font-bold text-zinc-500 select-none">
-            {(shouldFlip
-              ? [1, 2, 3, 4, 5, 6, 7, 8]
-              : [8, 7, 6, 5, 4, 3, 2, 1]
-            ).map((n) => (
-              <div
-                key={n}
-                className="flex flex-1 items-center justify-center"
-              >
-                {n}
-              </div>
-            ))}
-          </div>
+    <div
+      className={`transition-opacity flex items-center justify-center w-full max-h-full ${isDisabled ? "opacity-50 pointer-events-none" : "opacity-100"}`}
+      style={{ maxHeight: "min(100%, 60vh)" }}
+    >
+      <div className="relative pl-5 pb-5 sm:pl-6 sm:pb-6 aspect-square w-full max-h-full" style={{ maxWidth: "min(88vw, 600px)" }}>
+        <div className="absolute top-0 bottom-5 sm:bottom-6 left-0 flex w-5 sm:w-6 flex-col text-xs sm:text-sm font-bold text-zinc-500 select-none">
+          {(shouldFlip
+            ? [1, 2, 3, 4, 5, 6, 7, 8]
+            : [8, 7, 6, 5, 4, 3, 2, 1]
+          ).map((n) => (
+            <div
+              key={n}
+              className="flex flex-1 items-center justify-center"
+            >
+              {n}
+            </div>
+          ))}
+        </div>
 
-          <div className="absolute bottom-0 left-5 sm:left-6 right-0 flex h-5 sm:h-6 text-xs sm:text-sm font-bold text-zinc-500 select-none">
-            {(shouldFlip
-              ? ["H", "G", "F", "E", "D", "C", "B", "A"]
-              : ["A", "B", "C", "D", "E", "F", "G", "H"]
-            ).map((l) => (
-              <div
-                key={l}
-                className="flex flex-1 items-center justify-center"
-              >
-                {l}
-              </div>
-            ))}
-          </div>
+        <div className="absolute bottom-0 left-5 sm:left-6 right-0 flex h-5 sm:h-6 text-xs sm:text-sm font-bold text-zinc-500 select-none">
+          {(shouldFlip
+            ? ["H", "G", "F", "E", "D", "C", "B", "A"]
+            : ["A", "B", "C", "D", "E", "F", "G", "H"]
+          ).map((l) => (
+            <div
+              key={l}
+              className="flex flex-1 items-center justify-center"
+            >
+              {l}
+            </div>
+          ))}
+        </div>
 
-          <div className="relative grid grid-cols-8 grid-rows-8 w-[88vw] sm:w-[80vw] md:w-[70vh] max-w-[720px] aspect-square border-4 border-[#8B5A2B] shadow-2xl">
+        <div className="relative grid grid-cols-8 grid-rows-8 w-full h-full border-4 border-[#8B5A2B] shadow-2xl">
             {(shouldFlip ? [...board].reverse() : board).map((row, mappedR) => {
               const r = shouldFlip ? 7 - mappedR : mappedR;
               return (shouldFlip ? [...row].reverse() : row).map((piece, mappedC) => {
@@ -170,6 +170,5 @@ export function CheckersBoard({ isDarkMode, isDisabled }: CheckersBoardProps) {
           </div>
         </div>
       </div>
-    </div>
   );
 }

@@ -317,10 +317,10 @@ export function OAnQuanBoard() {
   const isBottomPlayerTurn = isViewInverted ? !isP1Turn : isP1Turn;
 
   return (
-    <div className="flex w-full flex-col items-center justify-center h-full pb-4 sm:pb-10">
+    <div className="flex w-full flex-col items-center justify-center h-full max-h-full overflow-hidden">
       
       {/* Top Player (Opponent) */}
-      <div className={`flex w-full max-w-[1200px] justify-between items-end mb-4 transition-opacity ${gamePhase === "waiting" ? "opacity-50" : "opacity-100"}`}>
+      <div className={`flex w-full max-w-[1200px] justify-between items-end mb-4 shrink-0 transition-opacity ${gamePhase === "waiting" ? "opacity-50" : "opacity-100"}`}>
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center text-xl font-bold shadow-md bg-zinc-800 text-white ${isTopPlayerTurn && gamePhase === "playing" ? "ring-2 ring-blue-500 shadow-blue-500/50" : ""}`}>
             {(topPlayerName)?.charAt(0).toUpperCase() || "?"}
@@ -343,12 +343,13 @@ export function OAnQuanBoard() {
 
       {/* Outer Wooden Board */}
       <div
-        className={`relative w-full max-w-[1200px] aspect-[7/2] min-h-[160px] sm:min-h-[200px] md:min-h-[250px] lg:min-h-[300px] 
+        className={`relative w-full max-w-[1200px] aspect-[7/2] 
           rounded-full shadow-[0_30px_60px_rgba(0,0,0,0.2),inset_0_5px_15px_rgba(255,255,255,0.4)] 
           bg-gradient-to-br from-[#e0b07c] via-[#c48d56] to-[#a36831] 
           border-[8px] sm:border-[12px] md:border-[16px] border-[#6b4226] p-2 sm:p-3 md:p-4
           ${gamePhase === "waiting" ? "opacity-70 grayscale-[0.2]" : "opacity-100"}
           transition-all duration-500`}
+        style={{ maxHeight: "min(100%, 50vh)" }}
       >
         {/* Inner Board Area */}
         <div className="w-full h-full flex flex-row rounded-full border-[3px] sm:border-[4px] border-amber-950 bg-[#e8cdab] shadow-[inset_0_10px_30px_rgba(0,0,0,0.3)] overflow-hidden">
