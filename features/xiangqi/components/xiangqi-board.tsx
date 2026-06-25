@@ -31,10 +31,12 @@ export function XiangqiBoard({
 
   return (
     <div
-      className={`transition-opacity ${isDisabled ? "opacity-50 pointer-events-none" : "opacity-100"}`}
+      className={`transition-opacity flex items-center justify-center w-full max-h-full ${isDisabled ? "opacity-50 pointer-events-none" : "opacity-100"}`}
+      style={{ maxHeight: "min(100%, 60vh)" }}
     >
       <div
-        className="relative mx-auto max-w-[540px] w-[90vw] aspect-[9/10] bg-[#e3c498] border-2 sm:border-4 border-[#8B4513] shadow-xl p-1 sm:p-2 select-none overflow-hidden"
+        className="relative mx-auto aspect-[9/10] w-full max-h-full bg-[#e3c498] border-2 sm:border-4 border-[#8B4513] shadow-xl p-1 sm:p-2 select-none overflow-hidden"
+        style={{ maxWidth: "min(90vw, 540px)" }}
       >
         <div className="absolute inset-1 sm:inset-2 border-2 border-[#8B4513]">
           <svg className="w-full h-full block" xmlns="http://www.w3.org/2000/svg">
