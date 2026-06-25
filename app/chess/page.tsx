@@ -12,6 +12,8 @@ import { GlobalActionMenu } from "@/components/global-action-menu";
 import { FaChevronLeft, FaChevronRight, FaTimes } from "react-icons/fa";
 import confetti from "canvas-confetti";
 import { PIECE_IMAGES } from "@/features/chess/constants";
+import { Menu } from "lucide-react";
+import { Sheet } from "@/components/Sheet";
 
 export default function ChessPage() {
   return (
@@ -106,6 +108,7 @@ function ChessGameContent() {
   } = useChess();
 
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const {
     showNameModal,
     setShowNameModal,
@@ -195,14 +198,68 @@ function ChessGameContent() {
         onSubmit={handleJoinRoom}
       />
 
-      <div className="grid w-full h-full max-h-full max-w-[1600px] flex-1 grid-cols-1 lg:grid-cols-[380px_1fr] gap-4 lg:gap-8 overflow-hidden pt-14 lg:pt-0">
-        <div className="w-full h-full overflow-hidden">
+      <div className="flex flex-col lg:grid w-full h-full max-h-full max-w-[1600px] flex-1 lg:grid-cols-[380px_1fr] gap-4 lg:gap-8 overflow-hidden pt-14 lg:pt-0">
+        {/* Mobile Header (Hidden on Desktop) */}
+        <div className="lg:hidden w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-colors bg-white dark:bg-slate-800 border-zinc-200 dark:border-slate-700 shadow-sm shrink-0">
+          <div className="flex flex-col min-w-0">
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? "text-slate-400" : "text-zinc-500"}`}>
+              Phòng: {roomId} ({gameMode})
+            </span>
+            <span className={`text-xs font-semibold mt-0.5 truncate ${winner ? "text-green-500" : isDarkMode ? "text-slate-200" : "text-zinc-800"}`}>
+              {winner === "Draw"
+                ? "🤝 Hòa cờ!"
+                : winner
+                ? `Thắng: ${
+                    winner === "W"
+                      ? gameMode === "2v2"
+                        ? "Đội Trắng"
+                        : player1Name
+                      : gameMode === "2v2"
+                      ? "Đội Đen"
+                      : player2Name
+                  }`
+                : gameStarted
+                ? `Lượt đi: ${
+                    gameMode === "2v2"
+                      ? turnIndex === 0
+                        ? player1Name
+                        : turnIndex === 1
+                        ? player2Name
+                        : turnIndex === 2
+                        ? player3Name
+                        : player4Name
+                      : displayState.isWhiteTurn
+                      ? `Trắng (${player1Name || "..."})`
+                      : `Đen (${player2Name || "..."})`
+                  }`
+                : "Chờ bắt đầu..."}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {gameStarted && (
+              <span className={`font-mono text-sm font-bold ${isDarkMode ? "text-slate-300" : "text-zinc-700"}`}>
+                {displayState.isWhiteTurn ? formatTime(player1Time) : formatTime(player2Time)}
+              </span>
+            )}
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className={`p-2 rounded-lg border transition-colors ${isDarkMode ? "bg-slate-700 border-slate-600 text-slate-200 hover:bg-slate-600" : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50"}`}
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Desktop Sidebar (Hidden on Mobile) */}
+        <div className="hidden lg:block w-full h-full overflow-hidden">
           <ChessSidebar isDarkMode={isDarkMode} />
         </div>
-        <div className="flex w-full h-full overflow-y-auto overflow-x-hidden p-4">
-          <div className="flex flex-col items-center justify-center relative w-full min-h-full max-w-[600px] mx-auto">
+
+        {/* Main Board Container */}
+        <div className="flex-1 w-full h-full overflow-hidden p-4">
+          <div className="flex flex-col items-center justify-center relative w-full h-full max-w-[600px] mx-auto">
             {/* Player 2 (Top) */}
-            <div className={`flex w-full justify-between items-end mb-4 transition-opacity ${!player2Name ? "opacity-50" : "opacity-100"}`}>
+            <div className={`flex w-full justify-between items-end mb-4 transition-opacity shrink-0 ${!player2Name ? "opacity-50" : "opacity-100"}`}>
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-xl font-bold shadow-md ${isDarkMode ? "bg-slate-800 text-white" : "bg-zinc-800 text-white"}`}>
                   {player2Name ? player2Name.charAt(0).toUpperCase() : "?"}
@@ -235,7 +292,7 @@ function ChessGameContent() {
             />
 
             {/* Player 1 (Bottom) */}
-            <div className={`flex w-full justify-between items-start mt-4 transition-opacity ${!player1Name ? "opacity-50" : "opacity-100"}`}>
+            <div className={`flex w-full justify-between items-start mt-4 transition-opacity shrink-0 ${!player1Name ? "opacity-50" : "opacity-100"}`}>
               <div className="flex items-center gap-3">
                 <div className={`w-12 h-12 border-2 rounded-lg flex items-center justify-center text-xl font-bold shadow-sm ${isDarkMode ? "bg-slate-800 border-slate-600 text-white" : "bg-white border-zinc-200 text-zinc-800"}`}>
                   {player1Name ? player1Name.charAt(0).toUpperCase() : "?"}
@@ -305,7 +362,7 @@ function ChessGameContent() {
                 </button>
               </div>
             ) : (
-              <div className="text-center mt-6 flex flex-col justify-center">
+              <div className="text-center mt-4 flex flex-col justify-center shrink-0">
                 <p className={`text-lg font-medium ${isDarkMode ? "text-white" : "text-zinc-800"}`}>
                   {winner === "Draw"
                     ? "🤝 Hòa cờ!"
@@ -338,6 +395,13 @@ function ChessGameContent() {
           </div>
         </div>
       </div>
+
+      {/* Mobile Drawer (Sidebar) */}
+      <Sheet isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} title="Menu & Phòng chơi">
+        <div className="h-full w-full p-4 overflow-hidden">
+          <ChessSidebar isDarkMode={isDarkMode} />
+        </div>
+      </Sheet>
     </main>
   );
 }

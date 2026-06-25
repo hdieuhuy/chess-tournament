@@ -32,7 +32,8 @@ export function ChessBoard({
 
   return (
     <div
-      className={`transition-opacity ${isDisabled ? "opacity-50 pointer-events-none" : "opacity-100"}`}
+      className={`transition-opacity flex items-center justify-center w-full max-h-full ${isDisabled ? "opacity-50 pointer-events-none" : "opacity-100"}`}
+      style={{ maxHeight: "min(100%, 60vh)" }}
     >
       <style>{`
         @keyframes slidePiece {
@@ -43,7 +44,7 @@ export function ChessBoard({
           animation: slidePiece 0.25s cubic-bezier(0.25, 1, 0.5, 1) forwards;
         }
       `}</style>
-      <div className="relative pl-5 pb-5 sm:pl-6 sm:pb-6">
+      <div className="relative pl-5 pb-5 sm:pl-6 sm:pb-6 aspect-square w-full max-h-full" style={{ maxWidth: "min(88vw, 600px)" }}>
         {/* Tọa độ hàng dọc (1-8) */}
         <div className="absolute top-0 bottom-5 sm:bottom-6 left-0 flex w-5 sm:w-6 flex-col text-xs sm:text-sm font-bold text-zinc-500 select-none">
           {(shouldFlip
@@ -68,7 +69,7 @@ export function ChessBoard({
           ))}
         </div>
 
-        <div className="relative grid grid-cols-8 grid-rows-8 w-[88vw] max-w-[600px] aspect-square border-4 border-[#8B5A2B] shadow-2xl">
+        <div className="relative grid grid-cols-8 grid-rows-8 w-full h-full border-4 border-[#8B5A2B] shadow-2xl">
           {/* Promotion Modal Overlay */}
           {promotionPending && (
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
