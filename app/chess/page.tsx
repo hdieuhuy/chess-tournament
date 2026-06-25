@@ -209,30 +209,28 @@ function ChessGameContent() {
               {winner === "Draw"
                 ? "🤝 Hòa cờ!"
                 : winner
-                ? `Thắng: ${
-                    winner === "W"
-                      ? gameMode === "2v2"
-                        ? "Đội Trắng"
-                        : player1Name
-                      : gameMode === "2v2"
+                  ? `Thắng: ${winner === "W"
+                    ? gameMode === "2v2"
+                      ? "Đội Trắng"
+                      : player1Name
+                    : gameMode === "2v2"
                       ? "Đội Đen"
                       : player2Name
                   }`
-                : gameStarted
-                ? `Lượt đi: ${
-                    gameMode === "2v2"
+                  : gameStarted
+                    ? `Lượt đi: ${gameMode === "2v2"
                       ? turnIndex === 0
                         ? player1Name
                         : turnIndex === 1
-                        ? player2Name
-                        : turnIndex === 2
-                        ? player3Name
-                        : player4Name
+                          ? player2Name
+                          : turnIndex === 2
+                            ? player3Name
+                            : player4Name
                       : displayState.isWhiteTurn
-                      ? `Trắng (${player1Name || "..."})`
-                      : `Đen (${player2Name || "..."})`
-                  }`
-                : "Chờ bắt đầu..."}
+                        ? `Trắng (${player1Name || "..."})`
+                        : `Đen (${player2Name || "..."})`
+                    }`
+                    : "Chờ bắt đầu..."}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -319,7 +317,7 @@ function ChessGameContent() {
             </div>
 
             {/* Status Text & Review Controls */}
-            {isInReview ? (
+            {isInReview && (
               <div className="fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center justify-center gap-4 px-4 py-2 rounded-full shadow-2xl border z-[100] bg-slate-900/95 border-slate-700 backdrop-blur-md">
                 <button
                   onClick={() =>
@@ -360,24 +358,6 @@ function ChessGameContent() {
                 >
                   <FaTimes className="w-4 h-4" />
                 </button>
-              </div>
-            ) : (
-              <div className="text-center mt-4 flex flex-col justify-center shrink-0">
-                <p className={`text-lg font-medium ${isDarkMode ? "text-white" : "text-zinc-800"}`}>
-                  {winner === "Draw"
-                    ? "🤝 Hòa cờ!"
-                    : winner
-                    ? `🎉 Chiến thắng: ${
-                        winner === "W"
-                          ? gameMode === "2v2"
-                            ? "Đội Trắng"
-                            : player1Name
-                          : gameMode === "2v2"
-                          ? "Đội Đen"
-                          : player2Name
-                      }!`
-                    : ""}
-                </p>
               </div>
             )}
           </div>
