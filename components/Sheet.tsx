@@ -41,21 +41,21 @@ export function Sheet({ isOpen, onClose, title, children }: SheetProps) {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white shadow-2xl sm:w-[600px]"
+            className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col bg-white dark:bg-slate-800 shadow-2xl sm:w-[600px] border-l border-zinc-200 dark:border-slate-700"
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
-              <h2 className="text-lg font-bold text-zinc-800">{title}</h2>
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-slate-700 px-6 py-4">
+              <h2 className="text-lg font-bold text-zinc-800 dark:text-slate-100">{title}</h2>
               <button
                 onClick={onClose}
-                className="rounded-full p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition-colors"
+                className="rounded-full p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-slate-700 hover:text-zinc-600 dark:hover:text-slate-200 transition-colors"
               >
                 <FaTimes />
               </button>
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
+            <div className="flex-1 overflow-y-auto p-0 bg-white dark:bg-slate-800">{children}</div>
           </motion.div>
         </>
       )}
