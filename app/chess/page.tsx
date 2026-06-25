@@ -376,19 +376,7 @@ function ChessGameContent() {
                           ? "Đội Đen"
                           : player2Name
                       }!`
-                    : gameStarted ? `Lượt đi: ${
-                        gameMode === "2v2"
-                          ? turnIndex === 0
-                            ? player1Name
-                            : turnIndex === 1
-                            ? player2Name
-                            : turnIndex === 2
-                            ? player3Name
-                            : player4Name
-                          : displayState.isWhiteTurn
-                          ? "Trắng"
-                          : "Đen"
-                      }` : ""}
+                    : ""}
                 </p>
               </div>
             )}
